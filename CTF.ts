@@ -687,10 +687,13 @@ export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
         let team2Players = GetPlayersInTeam(team2);
         let team1PlayerCount = team1Players.length;
         let team2PlayerCount = team2Players.length;
+        let shouldBalance:boolean = mod.AbsoluteValue(team1PlayerCount - team2PlayerCount) > 1;
         let smallerTeam: mod.Team = team1PlayerCount < team2PlayerCount ? team1 : team2;
-        if(playerTeamId != mod.GetObjId(smallerTeam)){
-            mod.SetTeam(eventPlayer, smallerTeam);
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_team_autoswitch, eventPlayer, GetTeamName(smallerTeam)));
+        if(shouldBalance){
+            if(playerTeamId != mod.GetObjId(smallerTeam)){
+                mod.SetTeam(eventPlayer, smallerTeam);
+                mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_team_autoswitch, eventPlayer, GetTeamName(smallerTeam)));
+            }
         }
 
         if(DEBUG_MODE){
