@@ -3,6 +3,7 @@
         {
             "name": "TEAM_1_HQ",
             "AltTeam": "TeamNeutral",
+            "VehicleSpawnersEnabled": true,
             "ObjId": 1,
             "InfantrySpawns": [
                 "TEAM_1_HQ/SpawnPoint_1_1",
@@ -28,9 +29,9 @@
                 "z": 1
             },
             "position": {
-                "x": -378.402,
+                "x": -401.206,
                 "y": 134.103,
-                "z": -48.5098
+                "z": -54.4335
             },
             "id": "TEAM_1_HQ",
             "linked": [
@@ -45,24 +46,24 @@
             "height": 0,
             "points": [
                 {
-                    "x": -373.402,
+                    "x": -396.206,
                     "y": 136.603,
-                    "z": -43.5098
+                    "z": -49.4335
                 },
                 {
-                    "x": -373.402,
+                    "x": -396.206,
                     "y": 136.603,
-                    "z": -53.5098
+                    "z": -59.4335
                 },
                 {
-                    "x": -383.402,
+                    "x": -406.206,
                     "y": 136.603,
-                    "z": -53.5098
+                    "z": -59.4335
                 },
                 {
-                    "x": -383.402,
+                    "x": -406.206,
                     "y": 136.603,
-                    "z": -43.5098
+                    "z": -49.4335
                 }
             ]
         },
@@ -70,9 +71,9 @@
             "name": "SpawnPoint_1_1",
             "type": "SpawnPoint",
             "right": {
-                "x": 0.999884,
+                "x": -0.039382,
                 "y": 0,
-                "z": 0.0152535
+                "z": -0.999225
             },
             "up": {
                 "x": 0,
@@ -80,14 +81,14 @@
                 "z": 0
             },
             "front": {
-                "x": -0.0152535,
+                "x": 0.999225,
                 "y": 0,
-                "z": 0.999884
+                "z": -0.039382
             },
             "position": {
-                "x": -378.402,
+                "x": -401.206,
                 "y": 134.103,
-                "z": -51.5098
+                "z": -57.4335
             },
             "id": "TEAM_1_HQ/SpawnPoint_1_1"
         },
@@ -95,9 +96,9 @@
             "name": "SpawnPoint_1_2",
             "type": "SpawnPoint",
             "right": {
-                "x": -0.9995,
+                "x": 0.0752749,
                 "y": 0,
-                "z": 0.0316198
+                "z": -0.997163
             },
             "up": {
                 "x": 0,
@@ -105,14 +106,14 @@
                 "z": 0
             },
             "front": {
-                "x": -0.0316198,
+                "x": 0.997163,
                 "y": 0,
-                "z": -0.9995
+                "z": 0.0752749
             },
             "position": {
-                "x": -375.402,
+                "x": -398.206,
                 "y": 134.103,
-                "z": -48.5098
+                "z": -54.4335
             },
             "id": "TEAM_1_HQ/SpawnPoint_1_2"
         },
@@ -135,9 +136,9 @@
                 "z": -0.0428871
             },
             "position": {
-                "x": -381.402,
+                "x": -404.206,
                 "y": 134.103,
-                "z": -48.5098
+                "z": -54.4335
             },
             "id": "TEAM_1_HQ/SpawnPoint_1_3"
         },
@@ -145,9 +146,9 @@
             "name": "SpawnPoint_1_4",
             "type": "SpawnPoint",
             "right": {
-                "x": 0.0841819,
+                "x": 0.051116,
                 "y": 0,
-                "z": 0.99645
+                "z": -0.998692
             },
             "up": {
                 "x": 0,
@@ -155,21 +156,109 @@
                 "z": 0
             },
             "front": {
-                "x": -0.99645,
+                "x": 0.998692,
                 "y": 0,
-                "z": 0.0841819
+                "z": 0.051116
             },
             "position": {
-                "x": -378.402,
+                "x": -401.206,
                 "y": 134.103,
-                "z": -45.5098
+                "z": -51.4335
             },
             "id": "TEAM_1_HQ/SpawnPoint_1_4"
+        },
+        {
+            "name": "TEAM_1_ATV_Spawn1",
+            "type": "VehicleSpawner",
+            "ObjId": 501,
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "metadata/_custom_type_script": "uid://7ev6y57fe5tq",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 0,
+                "z": -1
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 1,
+                "y": 0,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": -381.2955,
+                "y": 135.135,
+                "z": -30.2199
+            },
+            "id": "TEAM_1_HQ/TEAM_1_ATV_Spawn1"
+        },
+        {
+            "name": "TEAM_1_ATV_Spawn2",
+            "type": "VehicleSpawner",
+            "ObjId": 501,
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "metadata/_custom_type_script": "uid://7ev6y57fe5tq",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 0,
+                "z": -1
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 1,
+                "y": 0,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": -381.2955,
+                "y": 135.135,
+                "z": -77.0465
+            },
+            "id": "TEAM_1_HQ/TEAM_1_ATV_Spawn2"
+        },
+        {
+            "name": "TEAM_1_Jeep_Spawn1",
+            "type": "VehicleSpawner",
+            "ObjId": 501,
+            "VehicleType": "Vector",
+            "P_AutoSpawnEnabled": true,
+            "metadata/_custom_type_script": "uid://7ev6y57fe5tq",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 0,
+                "z": -1
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 1,
+                "y": 0,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": -387.3896,
+                "y": 134.507175,
+                "z": -62.10519
+            },
+            "id": "TEAM_1_HQ/TEAM_1_Jeep_Spawn1"
         },
         {
             "name": "TEAM_2_HQ",
             "Team": "Team2",
             "AltTeam": "TeamNeutral",
+            "VehicleSpawnersEnabled": true,
             "ObjId": 2,
             "InfantrySpawns": [
                 "TEAM_2_HQ/SpawnPoint_2_1",
@@ -195,9 +284,9 @@
                 "z": 1
             },
             "position": {
-                "x": 255.981,
-                "y": 115.371,
-                "z": -61.2613
+                "x": 345.237,
+                "y": 113.193,
+                "z": -121.008
             },
             "id": "TEAM_2_HQ",
             "linked": [
@@ -212,24 +301,24 @@
             "height": 0,
             "points": [
                 {
-                    "x": 260.981,
-                    "y": 117.871,
-                    "z": -56.2613
+                    "x": 350.237,
+                    "y": 115.693,
+                    "z": -116.008
                 },
                 {
-                    "x": 260.981,
-                    "y": 117.871,
-                    "z": -66.2613
+                    "x": 350.237,
+                    "y": 115.693,
+                    "z": -126.008
                 },
                 {
-                    "x": 250.981,
-                    "y": 117.871,
-                    "z": -66.2613
+                    "x": 340.237,
+                    "y": 115.693,
+                    "z": -126.008
                 },
                 {
-                    "x": 250.981,
-                    "y": 117.871,
-                    "z": -56.2613
+                    "x": 340.237,
+                    "y": 115.693,
+                    "z": -116.008
                 }
             ]
         },
@@ -237,9 +326,9 @@
             "name": "SpawnPoint_2_1",
             "type": "SpawnPoint",
             "right": {
-                "x": 0.87795,
+                "x": 0.0110472,
                 "y": 0,
-                "z": 0.478754
+                "z": 0.99994
             },
             "up": {
                 "x": 0,
@@ -247,14 +336,14 @@
                 "z": 0
             },
             "front": {
-                "x": -0.478754,
+                "x": -0.99994,
                 "y": 0,
-                "z": 0.87795
+                "z": 0.0110472
             },
             "position": {
-                "x": 255.981,
-                "y": 115.371,
-                "z": -64.2613
+                "x": 345.237,
+                "y": 113.193,
+                "z": -124.008
             },
             "id": "TEAM_2_HQ/SpawnPoint_2_1"
         },
@@ -262,9 +351,9 @@
             "name": "SpawnPoint_2_2",
             "type": "SpawnPoint",
             "right": {
-                "x": -0.997604,
+                "x": 0.0350911,
                 "y": 0,
-                "z": -0.0691822
+                "z": 0.999384
             },
             "up": {
                 "x": 0,
@@ -272,14 +361,14 @@
                 "z": 0
             },
             "front": {
-                "x": 0.0691822,
+                "x": -0.999384,
                 "y": 0,
-                "z": -0.997604
+                "z": 0.0350911
             },
             "position": {
-                "x": 258.981,
-                "y": 115.371,
-                "z": -61.2613
+                "x": 348.237,
+                "y": 113.193,
+                "z": -121.008
             },
             "id": "TEAM_2_HQ/SpawnPoint_2_2"
         },
@@ -287,9 +376,9 @@
             "name": "SpawnPoint_2_3",
             "type": "SpawnPoint",
             "right": {
-                "x": 0.162758,
+                "x": 0.0949941,
                 "y": 0,
-                "z": -0.986666
+                "z": 0.995478
             },
             "up": {
                 "x": 0,
@@ -297,14 +386,14 @@
                 "z": 0
             },
             "front": {
-                "x": 0.986666,
+                "x": -0.995478,
                 "y": 0,
-                "z": 0.162758
+                "z": 0.0949941
             },
             "position": {
-                "x": 252.981,
-                "y": 115.371,
-                "z": -61.2613
+                "x": 342.237,
+                "y": 113.193,
+                "z": -121.008
             },
             "id": "TEAM_2_HQ/SpawnPoint_2_3"
         },
@@ -327,11 +416,98 @@
                 "z": -0.165771
             },
             "position": {
-                "x": 255.981,
-                "y": 115.371,
-                "z": -58.2613
+                "x": 345.237,
+                "y": 113.193,
+                "z": -118.008
             },
             "id": "TEAM_2_HQ/SpawnPoint_2_4"
+        },
+        {
+            "name": "TEAM_2_ATV_Spawn1",
+            "type": "VehicleSpawner",
+            "ObjId": 501,
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "metadata/_custom_type_script": "uid://7ev6y57fe5tq",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 0,
+                "z": 1
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -1,
+                "y": 0,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": 332.4363,
+                "y": 115.05928,
+                "z": -83.3929
+            },
+            "id": "TEAM_2_HQ/TEAM_2_ATV_Spawn1"
+        },
+        {
+            "name": "TEAM_2_ATV_Spawn2",
+            "type": "VehicleSpawner",
+            "ObjId": 501,
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "metadata/_custom_type_script": "uid://7ev6y57fe5tq",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 0,
+                "z": 1
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -1,
+                "y": 0,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": 333.6979,
+                "y": 115.56291,
+                "z": -131.3039
+            },
+            "id": "TEAM_2_HQ/TEAM_2_ATV_Spawn2"
+        },
+        {
+            "name": "TEAM_2_Jeep_Spawn1",
+            "type": "VehicleSpawner",
+            "ObjId": 501,
+            "VehicleType": "Vector",
+            "P_AutoSpawnEnabled": true,
+            "metadata/_custom_type_script": "uid://7ev6y57fe5tq",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 0,
+                "z": 1
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -1,
+                "y": 0,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": 341.18695,
+                "y": 115.40406,
+                "z": -93.4832
+            },
+            "id": "TEAM_2_HQ/TEAM_2_Jeep_Spawn1"
         },
         {
             "name": "CombatArea",
@@ -466,6 +642,31 @@
             ]
         },
         {
+            "name": "DeployCam",
+            "type": "DeployCam",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": -4.37114e-08,
+                "z": -1
+            },
+            "front": {
+                "x": 0,
+                "y": 1,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": 0,
+                "y": 500,
+                "z": -92.3955
+            },
+            "id": "DeployCam"
+        },
+        {
             "name": "TEAM_1_flag_interact",
             "type": "InteractPoint",
             "ObjId": 3,
@@ -486,9 +687,9 @@
                 "z": 1
             },
             "position": {
-                "x": -339.421,
-                "y": 133.935,
-                "z": -48.5098
+                "x": -371.293,
+                "y": 133.978,
+                "z": -43.0148
             },
             "id": "TEAM_1_flag_interact"
         },
@@ -514,9 +715,9 @@
                 "z": 1
             },
             "position": {
-                "x": -339.421,
-                "y": 133.935,
-                "z": -48.5098
+                "x": -371.293,
+                "y": 133.978,
+                "z": -43.0148
             },
             "id": "TEAM_1_flag_interact/TEAM_1_flag_capture",
             "linked": [
@@ -537,52 +738,26 @@
             "height": 0,
             "points": [
                 {
-                    "x": -341.2039,
-                    "y": 133.935,
-                    "z": -50.13362
+                    "x": -373.0759,
+                    "y": 133.978,
+                    "z": -44.63862
                 },
                 {
-                    "x": -341.25599,
-                    "y": 133.935,
-                    "z": -45.93084
+                    "x": -373.12799,
+                    "y": 133.978,
+                    "z": -40.43584
                 },
                 {
-                    "x": -337.13621,
-                    "y": 133.935,
-                    "z": -46.05266
+                    "x": -369.00821,
+                    "y": 133.978,
+                    "z": -40.55766
                 },
                 {
-                    "x": -336.99845,
-                    "y": 133.935,
-                    "z": -49.95351
+                    "x": -368.87045,
+                    "y": 133.978,
+                    "z": -44.45851
                 }
             ]
-        },
-        {
-            "name": "BarrelOilFire_01",
-            "ObjId": 200,
-            "type": "BarrelOilFire_01",
-            "right": {
-                "x": 1,
-                "y": 0,
-                "z": 0
-            },
-            "up": {
-                "x": 0,
-                "y": 1,
-                "z": 0
-            },
-            "front": {
-                "x": 0,
-                "y": 0,
-                "z": 1
-            },
-            "position": {
-                "x": -339.421,
-                "y": 133.935,
-                "z": -48.5098
-            },
-            "id": "TEAM_1_flag_interact/BarrelOilFire_01"
         },
         {
             "name": "TEAM_1_flag_icon",
@@ -614,16 +789,16 @@
                 "z": 1
             },
             "position": {
-                "x": -339.421,
-                "y": 136.935,
-                "z": -48.5098
+                "x": -371.293,
+                "y": 136.978,
+                "z": -43.0148
             },
             "id": "TEAM_1_flag_interact/TEAM_1_flag_icon"
         },
         {
-            "name": "TEAM_1_flag_model",
-            "ObjId": 300,
-            "type": "BreachingSledgeHammer_01",
+            "name": "TEAM_1_flagPlaceholder",
+            "ObjId": 200,
+            "type": "FireAlarmButton_01",
             "right": {
                 "x": 1,
                 "y": 0,
@@ -631,20 +806,20 @@
             },
             "up": {
                 "x": 0,
-                "y": 1,
-                "z": 0
+                "y": -4.37114e-08,
+                "z": -1
             },
             "front": {
                 "x": 0,
-                "y": 0,
-                "z": 1
+                "y": 1,
+                "z": -4.37114e-08
             },
             "position": {
-                "x": -339.4038491,
-                "y": 135.55036,
-                "z": -48.50363926
+                "x": -371.739,
+                "y": 133.978,
+                "z": -42.8318
             },
-            "id": "TEAM_1_flag_interact/TEAM_1_flag_model"
+            "id": "TEAM_1_flag_interact/TEAM_1_flagPlaceholder"
         },
         {
             "name": "TEAM_2_flag_interact",
@@ -652,9 +827,9 @@
             "ObjId": 4,
             "metadata/_custom_type_script": "uid://b2obgkcb2kwsc",
             "right": {
-                "x": 1,
+                "x": -0.216235,
                 "y": 0,
-                "z": 0
+                "z": -0.976341
             },
             "up": {
                 "x": 0,
@@ -662,14 +837,14 @@
                 "z": 0
             },
             "front": {
-                "x": 0,
+                "x": 0.976341,
                 "y": 0,
-                "z": 1
+                "z": -0.216235
             },
             "position": {
-                "x": -317.022,
-                "y": 133.945,
-                "z": -48.3692
+                "x": 312.098,
+                "y": 116.961,
+                "z": -118.465
             },
             "id": "TEAM_2_flag_interact"
         },
@@ -680,9 +855,9 @@
             "metadata/_custom_type_script": "uid://li0wi6akn80t",
             "Area": "TEAM_2_flag_interact/TEAM_2_flag_capture/TEAM_2_flag_capture_zone",
             "right": {
-                "x": 1,
+                "x": -0.216235,
                 "y": 0,
-                "z": 0
+                "z": -0.976341
             },
             "up": {
                 "x": 0,
@@ -690,14 +865,14 @@
                 "z": 0
             },
             "front": {
-                "x": 0,
+                "x": 0.976341,
                 "y": 0,
-                "z": 1
+                "z": -0.216235
             },
             "position": {
-                "x": -317.022,
-                "y": 133.945,
-                "z": -48.3692
+                "x": 312.098,
+                "y": 116.961,
+                "z": -118.465
             },
             "id": "TEAM_2_flag_interact/TEAM_2_flag_capture",
             "linked": [
@@ -718,52 +893,26 @@
             "height": 0,
             "points": [
                 {
-                    "x": -318.8049,
-                    "y": 133.945,
-                    "z": -49.99302
+                    "x": 310.3151,
+                    "y": 116.961,
+                    "z": -120.08882
                 },
                 {
-                    "x": -318.85699,
-                    "y": 133.945,
-                    "z": -45.79024
+                    "x": 310.26301,
+                    "y": 116.961,
+                    "z": -115.88604
                 },
                 {
-                    "x": -314.73721,
-                    "y": 133.945,
-                    "z": -45.91206
+                    "x": 314.38279,
+                    "y": 116.961,
+                    "z": -116.00786
                 },
                 {
-                    "x": -314.59945,
-                    "y": 133.945,
-                    "z": -49.81291
+                    "x": 314.52055,
+                    "y": 116.961,
+                    "z": -119.90871
                 }
             ]
-        },
-        {
-            "name": "BarrelOilFire_01",
-            "ObjId": 201,
-            "type": "BarrelOilFire_01",
-            "right": {
-                "x": 1,
-                "y": 0,
-                "z": 0
-            },
-            "up": {
-                "x": 0,
-                "y": 1,
-                "z": 0
-            },
-            "front": {
-                "x": 0,
-                "y": 0,
-                "z": 1
-            },
-            "position": {
-                "x": -317.022,
-                "y": 133.945,
-                "z": -48.3692
-            },
-            "id": "TEAM_2_flag_interact/BarrelOilFire_01"
         },
         {
             "name": "TEAM_2_flag_icon",
@@ -780,9 +929,9 @@
             "iconImageVisible": true,
             "metadata/_custom_type_script": "uid://k7ivvn7ghpr2",
             "right": {
-                "x": 1,
+                "x": -0.216235,
                 "y": 0,
-                "z": 0
+                "z": -0.976341
             },
             "up": {
                 "x": 0,
@@ -790,42 +939,42 @@
                 "z": 0
             },
             "front": {
-                "x": 0,
+                "x": 0.976341,
                 "y": 0,
-                "z": 1
+                "z": -0.216235
             },
             "position": {
-                "x": -317.022,
-                "y": 136.945,
-                "z": -48.3692
+                "x": 312.098,
+                "y": 119.961,
+                "z": -118.465
             },
             "id": "TEAM_2_flag_interact/TEAM_2_flag_icon"
         },
         {
-            "name": "TEAM_2_flag_model",
-            "ObjId": 301,
-            "type": "BreachingSledgeHammer_01",
+            "name": "TEAM_2_flagPlaceholder",
+            "ObjId": 201,
+            "type": "FireAlarmButton_01",
             "right": {
-                "x": 1,
+                "x": -0.216235,
                 "y": 0,
-                "z": 0
+                "z": -0.976341
             },
             "up": {
-                "x": 0,
-                "y": 1,
-                "z": 0
+                "x": -0.976341,
+                "y": -4.37114e-08,
+                "z": 0.216235
             },
             "front": {
-                "x": 0,
-                "y": 0,
-                "z": 1
+                "x": -4.26772319874e-08,
+                "y": 1,
+                "z": 9.451934579e-09
             },
             "position": {
-                "x": -317.022,
-                "y": 135.43754,
-                "z": -48.3692
+                "x": 312.098,
+                "y": 116.961,
+                "z": -118.465
             },
-            "id": "TEAM_2_flag_interact/TEAM_2_flag_model"
+            "id": "TEAM_2_flag_interact/TEAM_2_flagPlaceholder"
         }
     ],
     "Static": [

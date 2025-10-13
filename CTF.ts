@@ -3,7 +3,7 @@
  * 
  * Two teams compete to capture the enemy flag and return it to their base.
  * First team to reach the target score wins.
- * Author: Claude Sonnet 4.5 (20250929). Prompted by Mystfit.
+ * Author: Mystfit and Claude Sonnet 4.5 (20250929).
  */
 
 //==============================================================================================
@@ -14,11 +14,12 @@ const VERSION = [1, 0, 0];
 const DEBUG_MODE = true;
 
 // Game Settings
-const TARGET_SCORE = 3; // Points needed to win
+const TARGET_SCORE = 5; // Points needed to win
 const MATCH_TIME_LIMIT = 1200; // 20 minutes in seconds
 const FLAG_PICKUP_DELAY = 3; // Seconds before dropped flag can be picked up
 const FLAG_AUTO_RETURN_TIME = 30; // Seconds before dropped flag auto-returns to base
 const FLAG_INTERACT_DISTANCE = 3.0; // Distance to interact with flag
+const AUTO_TEAM_BALANCE: boolean = true;
 
 // Object IDs (these need to be set in Godot)
 const TEAM1_FLAG_INTERACT_ID = 3;
@@ -37,6 +38,9 @@ const TEAM1_COLOR = mod.CreateVector(0, 0.4, 1); // Blue
 const TEAM2_COLOR = mod.CreateVector(1, 0, 0); // Red
 const NEUTRAL_COLOR = mod.CreateVector(1, 1, 1); // White
 const DROPPED_FLAG_COLOR = mod.CreateVector(1, 1, 0); // Yellow
+
+// Runtime models
+const FLAG_PROP = mod.RuntimeSpawn_Common.ServerRack_01;
 
 // Utility
 const ZERO_VEC = mod.CreateVector(0, 0, 0);
@@ -99,11 +103,15 @@ class FlagData {
     
     // Game objects
     flagHomeWorldIcon: mod.WorldIcon;
-    flagInteractPoint: mod.InteractPoint;
+    flagRecoverIcon: mod.WorldIcon;
+    flagCarriedIcon: mod.WorldIcon;
+    flagHomeInteractPoint: mod.InteractPoint;
+    flagRoamingInteractPoint: mod.InteractPoint | null = null;
     captureZoneTrigger: mod.AreaTrigger;
     flagProp: mod.SpatialObject | null = null;
     flagHomeVFX: mod.VFX;
     carrierIcon: mod.WorldIcon | null = null;
+    alarmSFX : mod.SFX | null = null;
     
     constructor(
         team: mod.Team, 
@@ -117,28 +125,27 @@ class FlagData {
         this.teamId = mod.GetObjId(team);
         this.homePosition = homePosition;
         this.currentPosition = homePosition;
-        this.flagInteractPoint = mod.GetInteractPoint(flagInteractId);
+        this.flagHomeInteractPoint = mod.GetInteractPoint(flagInteractId);
+        this.flagRoamingInteractPoint = null;
         this.captureZoneTrigger = mod.GetAreaTrigger(captureZoneId);
         this.flagHomeWorldIcon = mod.GetWorldIcon(flagIconId);
+        this.flagRecoverIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, ZERO_VEC, ZERO_VEC);
+        this.flagCarriedIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, ZERO_VEC, ZERO_VEC);
         this.flagProp = null;
         this.flagHomeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
         this.Initialize();
     }
     
     Initialize(): void {
+        // Set up initial properties for capture icons
+        mod.SetWorldIconOwner(this.flagRecoverIcon, this.team);
+        
+        let enemyTeam = GetEnemyTeam(this.team);
+        if(enemyTeam)
+            mod.SetWorldIconOwner(this.flagCarriedIcon, enemyTeam);
+
         // Set up flag at home position
         this.SpawnFlagAtHome();
-        
-        // Configure world icon
-        let flag_text = this.teamId === 1 ? mod.stringkeys.blue_flag_label : mod.stringkeys.red_flag_label
-        mod.SetWorldIconText(this.flagHomeWorldIcon, mod.Message(flag_text));
-        mod.SetWorldIconPosition(this.flagHomeWorldIcon, this.homePosition);
-        mod.SetWorldIconColor(this.flagHomeWorldIcon, this.GetTeamColor());
-        mod.EnableWorldIconImage(this.flagHomeWorldIcon, true);
-        mod.EnableWorldIconText(this.flagHomeWorldIcon, true);
-        
-        // Enable flag interact point
-        mod.EnableInteractPoint(this.flagInteractPoint, true);
         
         if (DEBUG_MODE) {
             console.log(`Flag initialized for team ${this.teamId} at position: ${VectorToString(this.homePosition)}`);
@@ -159,12 +166,12 @@ class FlagData {
         }
         
         // Enable flag VFX
-        mod.SetVFXColor(this.flagHomeVFX, this.GetTeamColor());
+        mod.SetVFXColor(this.flagHomeVFX, GetTeamColor(this.team));
         mod.EnableVFX(this.flagHomeVFX, true);
         mod.MoveVFX(this.flagHomeVFX, this.currentPosition, ZERO_VEC);
 
         this.flagProp = mod.SpawnObject(
-            mod.RuntimeSpawn_Common.MCOM, 
+            FLAG_PROP, 
             this.homePosition, 
             ZERO_VEC
         );
@@ -175,10 +182,38 @@ class FlagData {
         }
         
         // Update world icon
-        mod.SetWorldIconPosition(this.flagHomeWorldIcon, this.homePosition);
-        mod.SetWorldIconColor(this.flagHomeWorldIcon, this.GetTeamColor());
+        let flag_text = this.teamId === 1 ? mod.stringkeys.blue_flag_label : mod.stringkeys.red_flag_label;
+        let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2,0));
+        mod.SetWorldIconPosition(this.flagHomeWorldIcon, flagIconOffset);
+        mod.SetWorldIconColor(this.flagHomeWorldIcon, GetTeamColor(this.team));
+        mod.SetWorldIconText(this.flagHomeWorldIcon, mod.Message(flag_text));
         mod.EnableWorldIconImage(this.flagHomeWorldIcon, true);
         mod.EnableWorldIconText(this.flagHomeWorldIcon, true);
+
+        // Update defend icon
+        mod.SetWorldIconColor(this.flagCarriedIcon, GetTeamColor(this.team));
+        mod.EnableWorldIconImage(this.flagCarriedIcon, false);
+        mod.SetWorldIconImage(this.flagCarriedIcon, mod.WorldIconImages.Flag);
+        mod.EnableWorldIconText(this.flagCarriedIcon, false);
+        mod.SetWorldIconText(this.flagCarriedIcon, mod.Message(mod.stringkeys.defend_flag_label));
+
+        // Update recover icon
+        let enemyTeam = GetEnemyTeam(this.team);
+        if(enemyTeam)
+            mod.SetWorldIconColor(this.flagRecoverIcon, GetTeamColor(enemyTeam));
+        mod.EnableWorldIconImage(this.flagRecoverIcon, false);
+        mod.EnableWorldIconText(this.flagRecoverIcon, false);
+        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Alert);
+        mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.recover_flag_label));
+
+        // Update interaction point
+        mod.SetObjectTransform(this.flagHomeInteractPoint, mod.CreateTransform(this.currentPosition, ZERO_VEC));
+        mod.EnableInteractPoint(this.flagHomeInteractPoint, true);
+
+        // Make sure we clean up the roaming interaction point
+        if(this.flagRoamingInteractPoint){
+            mod.UnspawnObject(this.flagRoamingInteractPoint);
+        }
     }
     
     PickupFlag(player: mod.Player): void {
@@ -188,6 +223,11 @@ class FlagData {
                 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.flag_pickup_delay));
             }
             return;
+        }
+
+        // Play sound effect to let team know the flag was taken
+        if(this.isAtHome){
+            this.PlayFlagAlarm();
         }
         
         this.isAtHome = false;
@@ -201,25 +241,23 @@ class FlagData {
             this.flagProp = null;
         }
 
-        // Disable VFX
-        //mod.EnableVFX(this.flagHomeVFX, false);
-
+        // Make flag non-interactable
+        mod.EnableInteractPoint(this.flagHomeInteractPoint, false);
         
         // Restrict carrier's weapons
         this.RestrictCarrierWeapons(player);
         
-        // Add UI icon above carrier
-        // mod.AddUIIcon(
-        //     player,
-        //     mod.WorldIconImages.Flag,
-        //     10,
-        //     this.GetTeamColor(),
-        //     mod.Message("FLAG CARRIER")
-        // );
-        
         // Hide flag position icon, we'll track carrier position
         mod.EnableWorldIconImage(this.flagHomeWorldIcon, false);
         mod.EnableWorldIconText(this.flagHomeWorldIcon, false);
+
+        mod.EnableWorldIconImage(this.flagCarriedIcon, true);
+        mod.EnableWorldIconText(this.flagCarriedIcon, true);
+        mod.EnableWorldIconImage(this.flagRecoverIcon, true);
+        mod.EnableWorldIconText(this.flagRecoverIcon, true);
+
+        // Set VFX properties
+        mod.SetVFXColor(this.flagHomeVFX, GetTeamColor(this.team));
         
         // Notify all players
         const carrierTeam = mod.GetTeam(this.carrierPlayer);
@@ -228,6 +266,11 @@ class FlagData {
             ? mod.Message(mod.stringkeys.blue_flag_taken) 
             : mod.Message(mod.stringkeys.red_flag_taken);
         mod.DisplayHighlightedWorldLogMessage(message);
+
+        // Remove roaming flag interaction point
+        if(this.flagRoamingInteractPoint){
+            mod.UnspawnObject(this.flagRoamingInteractPoint);
+        }
         
         if (DEBUG_MODE) {
             console.log(`Flag picked up by player on team ${carrierTeamId}`);
@@ -237,16 +280,25 @@ class FlagData {
     
     DropFlag(position?: mod.Vector): void {
         if (!this.isBeingCarried) return;
-        
-        const dropPos = position || (this.carrierPlayer 
-            ? mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetPosition)
-            : this.currentPosition);
-        
+
         this.isAtHome = false;
         this.isBeingCarried = false;
         this.isDropped = true;
-        this.carrierPlayer = null;
-        this.currentPosition = mod.Add(dropPos, mod.CreateVector(0, 1, 0));
+
+        // Set flag drop point
+        let dropPos: mod.Vector = position ? position : ZERO_VEC;
+        if(!position && this.carrierPlayer){
+            let soldierPos = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetPosition);
+            dropPos = soldierPos;
+        }
+        this.currentPosition = dropPos;
+
+        // Create roaming interaction point
+        let flagInteractOffset = mod.Add(this.currentPosition, mod.CreateVector(0, 1.3, 0));
+        this.flagRoamingInteractPoint = mod.SpawnObject(mod.RuntimeSpawn_Common.InteractPoint, flagInteractOffset, ZERO_VEC);
+        if(this.flagRoamingInteractPoint){
+            mod.EnableInteractPoint(this.flagRoamingInteractPoint, true);
+        }
         
         // Remove carrier restrictions
         if (this.carrierPlayer) {
@@ -260,7 +312,7 @@ class FlagData {
             mod.UnspawnObject(this.flagProp);
         }
         this.flagProp = mod.SpawnObject(
-            mod.RuntimeSpawn_Common.MCOM,
+            FLAG_PROP,
             this.currentPosition,
             ZERO_VEC
         );
@@ -270,30 +322,35 @@ class FlagData {
         this.canPickupTime = this.dropTime + FLAG_PICKUP_DELAY;
         this.autoReturnTime = this.dropTime + FLAG_AUTO_RETURN_TIME;
         this.canBePickedUp = false;
-        
-        // Update world icon
-        mod.SetWorldIconPosition(this.flagHomeWorldIcon, this.currentPosition);
-        mod.SetWorldIconColor(this.flagHomeWorldIcon, DROPPED_FLAG_COLOR);
-        mod.EnableWorldIconImage(this.flagHomeWorldIcon, true);
-        mod.EnableWorldIconText(this.flagHomeWorldIcon, true);
 
+        // Update capture icons
+        let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2,0));
+        mod.EnableWorldIconImage(this.flagCarriedIcon, true);
+        mod.EnableWorldIconText(this.flagCarriedIcon, true);
+        mod.SetWorldIconText(this.flagCarriedIcon, mod.Message(mod.stringkeys.pickup_flag_label));
+        mod.EnableWorldIconImage(this.flagRecoverIcon, true);
+        mod.EnableWorldIconText(this.flagRecoverIcon, true);
+        mod.SetWorldIconPosition(this.flagCarriedIcon, flagIconOffset);
+        mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
+        
         // Update VFX
-        mod.SetVFXColor(this.flagHomeVFX, NEUTRAL_COLOR);
+        mod.MoveVFX(this.flagHomeVFX, this.currentPosition, ZERO_VEC);
+        mod.SetVFXColor(this.flagHomeVFX, GetTeamDroppedColor(this.team));
         
         // Start pickup delay
         this.StartPickupDelay();
-        
-        // Notify players
-        const message = this.teamId === 1 
-            ? mod.Message(mod.stringkeys.blue_flag_dropped)
-            : mod.Message(mod.stringkeys.red_flag_dropped);
-        mod.DisplayHighlightedWorldLogMessage(message);
+
+        // Play audio
+        let friendlyVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
+        if(friendlyVO){
+            mod.PlayVO(friendlyVO, mod.VoiceOverEvents2D.ObjectiveContested, mod.VoiceOverFlags.Alpha, this.team);
+        }
         
         if (DEBUG_MODE) {
-            console.log(`Flag dropped at position: ${VectorToString(this.currentPosition)}`);
-            // mod.DisplayHighlightedWorldLogMessage(
-            //     mod.Message(mod.stringkeys.flag_dropped, VectorToString(this.currentPosition))
-            // );
+            console.log(`Flag dropped}`);
+            mod.DisplayHighlightedWorldLogMessage(
+                mod.Message(mod.stringkeys.flag_dropped, GetTeamName(this.team))
+            );
         }
     }
     
@@ -320,6 +377,7 @@ class FlagData {
         }
         
         this.SpawnFlagAtHome();
+        this.StopFlagAlarm();
         
         // Notify players
         const message = this.teamId === 1 
@@ -364,23 +422,19 @@ class FlagData {
         // Make smoke effect follow carrier
         mod.MoveVFX(this.flagHomeVFX, this.currentPosition, currentRotation);
 
+        // Move flag icons
+        let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2.5,0));
+        mod.SetWorldIconPosition(this.flagCarriedIcon, flagIconOffset);
+        mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
+
         // Force disable carrier weapons
-        this.RestrictCarrierWeapons(this.carrierPlayer);
+        this.CheckCarrierDroppedFlag(this.carrierPlayer);
     }
     
     RestrictCarrierWeapons(player: mod.Player): void {
-        // Remove all weapons
-        // mod.RemoveEquipment(player, mod.InventorySlots.PrimaryWeapon);
-        // mod.RemoveEquipment(player, mod.InventorySlots.SecondaryWeapon);
-        // mod.RemoveEquipment(player, mod.InventorySlots.ClassGadget);
-        // mod.RemoveEquipment(player, mod.InventorySlots.GadgetOne);
-        // mod.RemoveEquipment(player, mod.InventorySlots.GadgetTwo);
-        // mod.RemoveEquipment(player, mod.InventorySlots.MiscGadget);
-        // mod.RemoveEquipment(player, mod.InventorySlots.Throwable);
-
         // Force equip sledgehammer
+        mod.AddEquipment(player, mod.Gadgets.Melee_Sledgehammer);
         if(!mod.IsInventorySlotActive(player, mod.InventorySlots.MeleeWeapon)){
-            mod.AddEquipment(player, mod.Gadgets.Melee_Sledgehammer);
             mod.ForceSwitchInventory(player, mod.InventorySlots.MeleeWeapon);
         }
         
@@ -389,22 +443,72 @@ class FlagData {
             // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.carrier_weapons_restricted));
         }
     }
+
+    CheckCarrierDroppedFlag(player: mod.Player): void {
+        if(this.carrierPlayer){
+            if(mod.GetObjId(this.carrierPlayer) == mod.GetObjId(player)){
+                if(!mod.IsInventorySlotActive(player, mod.InventorySlots.MeleeWeapon)){
+                    if(this.carrierPlayer){
+                        let soldierPos = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetPosition);
+                        let facingDir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
+                        let flatFacingDir = mod.Normalize(mod.CreateVector(mod.XComponentOf(facingDir), 0, mod.ZComponentOf(facingDir)));
+                        let localDropOffset = mod.Multiply(flatFacingDir, 2.5);
+                        let dropPos = mod.Add(soldierPos, localDropOffset);
+                        this.DropFlag(dropPos);
+                    }
+                }
+            }
+        }
+    }
     
     RestoreCarrierWeapons(player: mod.Player): void {
         // Note: In a full implementation, you'd want to track and restore the player's original loadout
         // For now, we'll just remove the sledgehammer and let them pick up weapons
         if (DEBUG_MODE) {
             console.log("Carrier weapons restored");
+            mod.AddEquipment(player, mod.Gadgets.Melee_Combat_Knife);
+            mod.ForceSwitchInventory(player, mod.InventorySlots.PrimaryWeapon);
             // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.carrier_weapons_restored));
         }
     }
     
-    GetTeamColor(): mod.Vector {
-        return this.teamId === mod.GetObjId(team1) ? TEAM1_COLOR : TEAM2_COLOR;
-    }
-    
     IsPlayerOnThisTeam(player: mod.Player): boolean {
         return mod.GetObjId(mod.GetTeam(player)) === this.teamId;
+    }
+
+    PlayFlagAlarm(){
+        this.alarmSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Alarm, this.currentPosition, ZERO_VEC);
+
+        if(this.alarmSFX){
+            mod.EnableSFX(this.alarmSFX, true);
+            mod.PlaySound(this.alarmSFX, 50, this.currentPosition, 25);
+        }
+
+        let flagOwningTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
+        if(flagOwningTeamVO){
+            mod.PlayVO(flagOwningTeamVO, mod.VoiceOverEvents2D.ObjectiveLockdownEnemy, mod.VoiceOverFlags.Alpha, this.team);
+        }
+        let enemyTeam = GetEnemyTeam(this.team);
+        let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
+        if(capturingTeamVO && enemyTeam){
+            mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveLockdownFriendly, mod.VoiceOverFlags.Alpha, enemyTeam);
+        }
+    }
+
+    StopFlagAlarm(){
+        if(this.alarmSFX){
+            mod.StopSound(this.alarmSFX);
+        }
+
+        let flagOwningTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
+        if(flagOwningTeamVO){
+            mod.PlayVO(flagOwningTeamVO, mod.VoiceOverEvents2D.ObjectiveNeutralised, mod.VoiceOverFlags.Alpha, this.team);
+        }
+        let enemyTeam = GetEnemyTeam(this.team);
+        let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
+        if(capturingTeamVO && enemyTeam){
+            mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveNeutralised, mod.VoiceOverFlags.Alpha, enemyTeam);
+        }
     }
 }
 
@@ -430,7 +534,6 @@ export async function OnGameModeStarted() {
             playerScores.set(mod.GetObjId(loopPlayer), new PlayerScore());
         }
     }
-
 
     // Set scoreboard
     mod.SetScoreboardType(mod.ScoreboardType.CustomTwoTeams);
@@ -576,7 +679,26 @@ export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
     }
 
-    // Guarantee default player score
+    // Auto team balance
+    if(AUTO_TEAM_BALANCE){
+        let playerTeam = mod.GetTeam(eventPlayer);
+        let playerTeamId = mod.GetObjId(playerTeam);
+        let team1Players = GetPlayersInTeam(team1);
+        let team2Players = GetPlayersInTeam(team2);
+        let team1PlayerCount = team1Players.length;
+        let team2PlayerCount = team2Players.length;
+        let smallerTeam: mod.Team = team1PlayerCount < team2PlayerCount ? team1 : team2;
+        if(playerTeamId != mod.GetObjId(smallerTeam)){
+            mod.SetTeam(eventPlayer, smallerTeam);
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_team_autoswitch, eventPlayer, GetTeamName(smallerTeam)));
+        }
+
+        if(DEBUG_MODE){
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_team_player_counts, team1PlayerCount, team2PlayerCount));
+        }
+    }
+
+    // Setup default player score
     playerScores.set(mod.GetObjId(eventPlayer), new PlayerScore());
 }
 
@@ -614,14 +736,16 @@ export function OnPlayerDied(
     eventWeaponUnlock: mod.WeaponUnlock
 ): void {
     // If player was carrying a flag, drop it
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
+
     if(team1FlagData.carrierPlayer){
-        if (mod.GetObjId(team1FlagData.carrierPlayer) === mod.GetObjId(eventPlayer)) {
+        if (mod.GetObjId(team1FlagData.carrierPlayer) == mod.GetObjId(eventPlayer)) {
             team1FlagData.DropFlag();
         }
     }
     
     if(team2FlagData.carrierPlayer){
-        if (team2FlagData.carrierPlayer === eventPlayer) {
+        if (mod.GetObjId(team2FlagData.carrierPlayer) == mod.GetObjId(eventPlayer)) {
             team2FlagData.DropFlag();
         }
     }
@@ -635,15 +759,31 @@ export function OnPlayerInteract(
     const playerTeamId = mod.GetObjId(mod.GetTeam(eventPlayer));
     
     if (DEBUG_MODE) {
-        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_interact, eventPlayer, mod.GetObjId(eventInteractPoint)))
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_interact, eventPlayer, mod.GetObjId(eventInteractPoint)))
         console.log(mod.stringkeys.player_interact, eventPlayer, mod.GetObjId(eventInteractPoint));
     }
-    
-    // Check flag interactions
+
+    // Check home flag interactions
     if (interactId === TEAM1_FLAG_INTERACT_ID) {
         HandleFlagInteraction(eventPlayer, playerTeamId, team1FlagData);
     } else if (interactId === TEAM2_FLAG_INTERACT_ID) {
         HandleFlagInteraction(eventPlayer, playerTeamId, team2FlagData);
+    }
+
+    // Handle returning flags away from home base
+    let enemyTeam = GetEnemyTeam(mod.GetTeam(eventPlayer));
+    if(enemyTeam){
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_enemy_team, GetTeamName(enemyTeam)));
+        let enemyFlag = GetFlagForTeam(enemyTeam);
+        if(enemyFlag){
+            if(enemyFlag.flagRoamingInteractPoint){
+                mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_enemy_flag_interact_id, mod.GetObjId(enemyFlag.flagRoamingInteractPoint)));
+                if(mod.Equals(eventInteractPoint, enemyFlag.flagRoamingInteractPoint)){
+                    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_interact_enemy_flag, eventPlayer, mod.GetObjId(enemyFlag.flagRoamingInteractPoint)));
+                    HandleFlagInteraction(eventPlayer, playerTeamId, enemyFlag);
+                }
+            }
+        }
     }
 }
 
@@ -683,14 +823,16 @@ export function OnPlayerEnterVehicle(
     eventPlayer: mod.Player,
     eventVehicle: mod.Vehicle
 ): void {
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_player_enter_vehicle));
+
     // Check if player is carrying a flag
-    if (team1FlagData.carrierPlayer === eventPlayer || 
-        team2FlagData.carrierPlayer === eventPlayer) {
-        
+    if (IsCarryingAnyFlag(eventPlayer)) {
         if (DEBUG_MODE) {
             console.log("Flag carrier entered vehicle");
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.carrier_enter_vehicle))
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.carrier_enter_vehicle));
         }
+
+        ForceToPassengerSeat(eventPlayer, eventVehicle);
     }
 }
 
@@ -700,13 +842,8 @@ export function OnPlayerEnterVehicleSeat(
     eventSeat: mod.Object
 ): void {
     // If player is carrying flag and in driver seat, force to passenger
-    const isCarrier = team1FlagData.carrierPlayer === eventPlayer || 
-                      team2FlagData.carrierPlayer === eventPlayer;
-    
-    if (isCarrier) {
-        const seatIndex = mod.GetPlayerVehicleSeat(eventPlayer);
-        
-        if (seatIndex === 0) { // Driver seat
+    if (IsCarryingAnyFlag(eventPlayer)) {      
+        if (mod.GetPlayerVehicleSeat(eventPlayer) === 0) { // Driver seat
             if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
             mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat))
             ForceToPassengerSeat(eventPlayer, eventVehicle);
@@ -746,13 +883,13 @@ function HandleFlagInteraction(
         }
     }
     // Own team trying to return dropped flag
-    // else if (playerTeamId === flagData.teamId && flagData.isDropped) {
-    //     mod.DisplayHighlightedWorldLogMessage(
-    //         mod.Message(mod.stringkeys.own_team_interacting),
-    //         player
-    //     );
-    //     flagData.ReturnToBase();
-    // }
+    else if (playerTeamId === flagData.teamId && flagData.isDropped) {
+        mod.DisplayHighlightedWorldLogMessage(
+            mod.Message(mod.stringkeys.own_team_interacting),
+            player
+        );
+        flagData.ReturnToBase();
+    }
 }
 
 function HandleCaptureZoneEntry(
@@ -832,8 +969,20 @@ function ScoreCapture(scoringPlayer: mod.Player, scoringTeam: mod.Team): void {
     );
 
     // Play VFX
-    CaptureFeedback(mod.GetObjId(scoringTeam) === mod.GetObjId(team1) ? team1FlagData.homePosition : team2FlagData.homePosition);
+    let captureBasePosition = mod.GetObjId(scoringTeam) === mod.GetObjId(team1) ? team1FlagData.homePosition : team2FlagData.homePosition
+    CaptureFeedback(captureBasePosition);
     
+    // Play audio
+    let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, captureBasePosition, ZERO_VEC);
+    if(capturingTeamVO){
+        mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCapturedGeneric, mod.VoiceOverFlags.Alpha, scoringTeam);
+    }
+    let enemyTeam = GetEnemyTeam(scoringTeam);
+    let losingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, captureBasePosition, ZERO_VEC);
+    if(losingTeamVO && enemyTeam){
+        mod.PlayVO(losingTeamVO, mod.VoiceOverEvents2D.ObjectiveCapturedEnemyGeneric, mod.VoiceOverFlags.Alpha, enemyTeam);
+    }
+
     // Return both flags to base
     team1FlagData.ReturnToBase();
     team2FlagData.ReturnToBase();
@@ -849,7 +998,7 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     const seatCount = mod.GetVehicleSeatCount(vehicle);
     
     // Try to find an empty passenger seat
-    for (let i = 1; i < seatCount; i++) {
+    for (let i = seatCount-1; i >= 1; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
             mod.ForcePlayerToSeat(player, vehicle, i);
             if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
@@ -934,22 +1083,77 @@ function GetCarriedFlagFromPlayer(player: mod.Player): FlagData | null {
 
     return null;
 }
+
 function GetTeamName(team: mod.Team): string {
-    if(team == team1)
+    if(mod.GetObjId(team) == mod.GetObjId(team1))
         return mod.stringkeys.red_team_name;
-    if(team == team2)
+    if(mod.GetObjId(team) == mod.GetObjId(team2))
         return mod.stringkeys.blue_team_name;
     return mod.stringkeys.empty_team_name;
 }
 
+function GetFlagForTeam(team: mod.Team): FlagData | null {
+    if(mod.GetObjId(team) == mod.GetObjId(team1)){
+        return team1FlagData;
+    }
+    if(mod.GetObjId(team) == mod.GetObjId(team2)){
+        return team2FlagData;
+    }
+    return null;
+}
+
+function GetEnemyTeam(team: mod.Team): mod.Team | null{
+    if(mod.GetObjId(team) == mod.GetObjId(team1))
+        return team2;
+    if(mod.GetObjId(team) == mod.GetObjId(team2))
+        return team1
+    return null;
+}
+
+function GetTeamColor(team: mod.Team): mod.Vector {
+    return mod.GetObjId(team) === mod.GetObjId(team1) ? TEAM1_COLOR : TEAM2_COLOR;
+}
+
+function GetTeamDroppedColor(team: mod.Team): mod.Vector {
+    let color = mod.GetObjId(team) === mod.GetObjId(team1) ? TEAM1_COLOR : TEAM2_COLOR;
+    return mod.Add(color, mod.CreateVector(0.0, 0.5, 0.0));
+}
+
+function IsCarryingAnyFlag(player: mod.Player): boolean {
+    if(team1FlagData.carrierPlayer){
+        if(mod.Equals(team1FlagData.carrierPlayer, player)){
+            return true;
+        }
+    }
+    if(team2FlagData.carrierPlayer){
+        if(mod.Equals(team2FlagData.carrierPlayer, player)){
+            return true;
+        }
+    }
+    return false;
+}
+
+export function GetPlayersInTeam(team: mod.Team) {
+    const allPlayers = mod.AllPlayers();
+    const n = mod.CountOf(allPlayers);
+    let teamMembers = [];
+
+    for (let i = 0; i < n; i++) {
+        let player = mod.ValueInArray(allPlayers, i) as mod.Player;
+        if (mod.GetObjId(mod.GetTeam(player)) == mod.GetObjId(team)) {
+            teamMembers.push(player);
+        }
+    }
+    return teamMembers;
+}
+
 function CaptureFeedback(pos: mod.Vector): void {
-    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_ArtilleryStrike_Explosion_GS, pos, ZERO_VEC);
+    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
     mod.EnableVFX(vfx, true);
-    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Gadget_C4_Explosives_Detonation, pos, ZERO_VEC);
+    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
     mod.EnableSFX(sfx, true);
     mod.PlaySound(sfx, 100);
 }
-
 
 //-----------------------------------------------------------------------------------------------//
 //-----------------------------------------------------------------------------------------------//
