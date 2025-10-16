@@ -1,0 +1,43 @@
+[gd_scene load_steps=7 format=3 uid="uid://d087foe3x42c4"]
+
+[ext_resource type="Script" uid="uid://b2obgkcb2kwsc" path="res://scripts/Gameplay/Common/InteractPoint.gd" id="1_m0as7"]
+[ext_resource type="Script" uid="uid://cjwkcifp7rxfw" path="res://objects/Gameplay/CTF/FlagBase.gd" id="1_poyb2"]
+[ext_resource type="Script" uid="uid://li0wi6akn80t" path="res://scripts/Gameplay/Common/AreaTrigger.gd" id="2_poyb2"]
+[ext_resource type="Script" uid="uid://ck5uniw0pl6u8" path="res://addons/bf_portal/portal_tools/types/PolygonVolume/PolygonVolume.gd" id="3_cm306"]
+[ext_resource type="Script" uid="uid://k7ivvn7ghpr2" path="res://scripts/Gameplay/Common/WorldIcon.gd" id="4_q3stg"]
+[ext_resource type="PackedScene" path="res://objects/Global/Generic/Common/Props/FireAlarmButton_01.tscn" id="5_84h33"]
+
+[node name="TEAM_FlagSpawn" type="Node3D"]
+script = ExtResource("1_poyb2")
+
+[node name="TEAM_flag_interact" type="Node3D" parent="."]
+script = ExtResource("1_m0as7")
+ObjId = 3
+metadata/_custom_type_script = "uid://b2obgkcb2kwsc"
+
+[node name="TEAM_flag_capture" type="Node3D" parent="TEAM_flag_interact" node_paths=PackedStringArray("Area")]
+script = ExtResource("2_poyb2")
+ObjId = 11
+Area = NodePath("TEAM_flag_capture_zone")
+metadata/_custom_type_script = "uid://li0wi6akn80t"
+
+[node name="TEAM_flag_capture_zone" type="Node3D" parent="TEAM_flag_interact/TEAM_flag_capture"]
+script = ExtResource("3_cm306")
+points = PackedVector2Array(-2.4, -2.4, -2.4, 2.4, 2.4, 2.4, 2.4, -2.4)
+color = Color(0, 0.6, 0.7, 0.42)
+metadata/_custom_type_script = "uid://ck5uniw0pl6u8"
+
+[node name="TEAM_flag_icon" type="Node3D" parent="TEAM_flag_interact"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+script = ExtResource("4_q3stg")
+ObjId = 101
+IconStringKey = "Team 1 Flag"
+iconTextVisible = true
+iconColor = [0.0, 0.0, 1.0]
+iconImagePicker = 7
+iconImageVisible = true
+metadata/_custom_type_script = "uid://k7ivvn7ghpr2"
+
+[node name="TEAM_flagPlaceholder" parent="TEAM_flag_interact" instance=ExtResource("5_84h33")]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0.00592405, 0, -0.123844)
+ObjId = 200

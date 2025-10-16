@@ -1,0 +1,13 @@
+Notes
+=====
+
+- Disable alarm sound after 3 loops
+- Add markers for each base. Your base marker is ALWAYS visible. Enemy team base marker disappears when their flag is away.
+- Fix recover marker colour
+- Consistent icon & smoke colour
+- Change team colours to purple and orange
+- Flag dropping inside props
+- Drop icon update rate
+- Force 3D spot flag carrier
+- Option for flag carrier to have pistol
+- Custom UI for flag info

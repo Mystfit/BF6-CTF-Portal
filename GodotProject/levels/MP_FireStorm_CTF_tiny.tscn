@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3 uid="uid://7dfaofra33j6"]
+[gd_scene load_steps=15 format=3 uid="uid://c1clhim3ov0bi"]
 
 [ext_resource type="PackedScene" path="res://objects/Gameplay/Common/HQ_PlayerSpawner.tscn" id="1_usc1i"]
 [ext_resource type="PackedScene" uid="uid://jv31so3xcr7p" path="res://addons/bf_portal/portal_tools/types/PolygonVolume/PolygonVolume.tscn" id="2_nfh8o"]
@@ -9,11 +9,11 @@
 [ext_resource type="PackedScene" path="res://static/MP_FireStorm_Assets.tscn" id="6_hj1es"]
 [ext_resource type="Script" uid="uid://b2obgkcb2kwsc" path="res://scripts/Gameplay/Common/InteractPoint.gd" id="7_ghyf4"]
 [ext_resource type="Script" uid="uid://k7ivvn7ghpr2" path="res://scripts/Gameplay/Common/WorldIcon.gd" id="8_hj1es"]
-[ext_resource type="PackedScene" path="res://objects/Turkmenistan/MP_FireStorm/Generic/Common/Props/BreachingSledgeHammer_01.tscn" id="8_yf66d"]
+[ext_resource type="Script" uid="uid://cjwkcifp7rxfw" path="res://objects/Gameplay/CTF/FlagBase.gd" id="9_b6ijc"]
 [ext_resource type="Script" uid="uid://li0wi6akn80t" path="res://scripts/Gameplay/Common/AreaTrigger.gd" id="9_yf66d"]
 [ext_resource type="Script" uid="uid://ck5uniw0pl6u8" path="res://addons/bf_portal/portal_tools/types/PolygonVolume/PolygonVolume.gd" id="10_ktaa6"]
-[ext_resource type="PackedScene" path="res://objects/Shared/Generic/Common/Props/BarrelOilFire_01.tscn" id="11_hj1es"]
 [ext_resource type="Script" uid="uid://7ev6y57fe5tq" path="res://scripts/Gameplay/Common/VehicleSpawner.gd" id="13_ktaa6"]
+[ext_resource type="PackedScene" path="res://objects/Global/Generic/Common/Props/FireAlarmButton_01.tscn" id="14_qochn"]
 
 [node name="MP_FireStorm" type="Node3D"]
 
@@ -86,78 +86,6 @@ metadata/_custom_type_script = "uid://cmbyrgtuwd8s7"
 
 [node name="MP_FireStorm_Assets" parent="Static" instance=ExtResource("6_hj1es")]
 
-[node name="TEAM_1_flag_interact" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -339.421, 133.935, -48.5098)
-script = ExtResource("7_ghyf4")
-ObjId = 3
-metadata/_custom_type_script = "uid://b2obgkcb2kwsc"
-
-[node name="TEAM_1_flag_capture" type="Node3D" parent="TEAM_1_flag_interact" node_paths=PackedStringArray("Area")]
-script = ExtResource("9_yf66d")
-ObjId = 11
-Area = NodePath("TEAM_1_flag_capture_zone")
-metadata/_custom_type_script = "uid://li0wi6akn80t"
-
-[node name="TEAM_1_flag_capture_zone" type="Node3D" parent="TEAM_1_flag_interact/TEAM_1_flag_capture"]
-script = ExtResource("10_ktaa6")
-points = PackedVector2Array(-1.7829, -1.62382, -1.83499, 2.57896, 2.28479, 2.45714, 2.42255, -1.44371)
-color = Color(0, 0.6, 0.7, 0.42)
-metadata/_custom_type_script = "uid://ck5uniw0pl6u8"
-
-[node name="BarrelOilFire_01" parent="TEAM_1_flag_interact" instance=ExtResource("11_hj1es")]
-ObjId = 200
-
-[node name="TEAM_1_flag_icon" type="Node3D" parent="TEAM_1_flag_interact"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
-script = ExtResource("8_hj1es")
-ObjId = 101
-IconStringKey = "Team 1 Flag"
-iconTextVisible = true
-iconColor = [0.0, 0.0, 1.0]
-iconImagePicker = 7
-iconImageVisible = true
-metadata/_custom_type_script = "uid://k7ivvn7ghpr2"
-
-[node name="TEAM_1_flag_model" parent="TEAM_1_flag_interact" instance=ExtResource("8_yf66d")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0171509, 1.61536, 0.00616074)
-ObjId = 300
-
-[node name="TEAM_2_flag_interact" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -317.022, 133.945, -48.3692)
-script = ExtResource("7_ghyf4")
-ObjId = 4
-metadata/_custom_type_script = "uid://b2obgkcb2kwsc"
-
-[node name="TEAM_2_flag_capture" type="Node3D" parent="TEAM_2_flag_interact" node_paths=PackedStringArray("Area")]
-script = ExtResource("9_yf66d")
-ObjId = 12
-Area = NodePath("TEAM_2_flag_capture_zone")
-metadata/_custom_type_script = "uid://li0wi6akn80t"
-
-[node name="TEAM_2_flag_capture_zone" type="Node3D" parent="TEAM_2_flag_interact/TEAM_2_flag_capture"]
-script = ExtResource("10_ktaa6")
-points = PackedVector2Array(-1.7829, -1.62382, -1.83499, 2.57896, 2.28479, 2.45714, 2.42255, -1.44371)
-color = Color(0, 0.6, 0.7, 0.42)
-metadata/_custom_type_script = "uid://ck5uniw0pl6u8"
-
-[node name="BarrelOilFire_01" parent="TEAM_2_flag_interact" instance=ExtResource("11_hj1es")]
-ObjId = 201
-
-[node name="TEAM_2_flag_icon" type="Node3D" parent="TEAM_2_flag_interact"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
-script = ExtResource("8_hj1es")
-ObjId = 102
-IconStringKey = "Team 2 Flag"
-iconTextVisible = true
-iconColor = [1.0, 0.0, 0.0]
-iconImagePicker = 7
-iconImageVisible = true
-metadata/_custom_type_script = "uid://k7ivvn7ghpr2"
-
-[node name="TEAM_2_flag_model" parent="TEAM_2_flag_interact" instance=ExtResource("8_yf66d")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.49254, 0)
-ObjId = 301
-
 [node name="VehicleSpawner" type="Node3D" parent="."]
 transform = Transform3D(-4.37114e-08, 0, 1, 0, 1, 0, -1, 0, -4.37114e-08, -381.295, 135.135, -30.2199)
 script = ExtResource("13_ktaa6")
@@ -173,3 +101,78 @@ ObjId = 501
 VehicleType = 9
 P_AutoSpawnEnabled = true
 metadata/_custom_type_script = "uid://7ev6y57fe5tq"
+
+[node name="TEAM1_FlagSpawn" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -373.62, 133.965, -42.8964)
+script = ExtResource("9_b6ijc")
+ObjId = 110
+
+[node name="TEAM_flag_interact" type="Node3D" parent="TEAM1_FlagSpawn"]
+script = ExtResource("7_ghyf4")
+ObjId = 111
+metadata/_custom_type_script = "uid://b2obgkcb2kwsc"
+
+[node name="TEAM_flag_capture" type="Node3D" parent="TEAM1_FlagSpawn/TEAM_flag_interact" node_paths=PackedStringArray("Area")]
+script = ExtResource("9_yf66d")
+ObjId = 112
+Area = NodePath("TEAM_flag_capture_zone")
+metadata/_custom_type_script = "uid://li0wi6akn80t"
+
+[node name="TEAM_flag_capture_zone" type="Node3D" parent="TEAM1_FlagSpawn/TEAM_flag_interact/TEAM_flag_capture"]
+script = ExtResource("10_ktaa6")
+points = PackedVector2Array(-2.4, -2.4, -2.4, 2.4, 2.4, 2.4, 2.4, -2.4)
+color = Color(0, 0.6, 0.7, 0.42)
+metadata/_custom_type_script = "uid://ck5uniw0pl6u8"
+
+[node name="TEAM_flag_icon" type="Node3D" parent="TEAM1_FlagSpawn/TEAM_flag_interact"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+script = ExtResource("8_hj1es")
+ObjId = 113
+IconStringKey = "Team 1 Flag"
+iconTextVisible = true
+iconColor = [0.0, 0.0, 1.0]
+iconImagePicker = 7
+iconImageVisible = true
+metadata/_custom_type_script = "uid://k7ivvn7ghpr2"
+
+[node name="TEAM_flagPlaceholder" parent="TEAM1_FlagSpawn/TEAM_flag_interact" instance=ExtResource("14_qochn")]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0.00592405, 0, -0.123844)
+ObjId = 114
+
+[node name="TEAM2_FlagSpawn" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -339.493, 133.925, -50.0344)
+script = ExtResource("9_b6ijc")
+Team = 2
+ObjId = 120
+
+[node name="TEAM_flag_interact" type="Node3D" parent="TEAM2_FlagSpawn"]
+script = ExtResource("7_ghyf4")
+ObjId = 121
+metadata/_custom_type_script = "uid://b2obgkcb2kwsc"
+
+[node name="TEAM_flag_capture" type="Node3D" parent="TEAM2_FlagSpawn/TEAM_flag_interact" node_paths=PackedStringArray("Area")]
+script = ExtResource("9_yf66d")
+ObjId = 122
+Area = NodePath("TEAM_flag_capture_zone")
+metadata/_custom_type_script = "uid://li0wi6akn80t"
+
+[node name="TEAM_flag_capture_zone" type="Node3D" parent="TEAM2_FlagSpawn/TEAM_flag_interact/TEAM_flag_capture"]
+script = ExtResource("10_ktaa6")
+points = PackedVector2Array(-2.4, -2.4, -2.4, 2.4, 2.4, 2.4, 2.4, -2.4)
+color = Color(0, 0.6, 0.7, 0.42)
+metadata/_custom_type_script = "uid://ck5uniw0pl6u8"
+
+[node name="TEAM_flag_icon" type="Node3D" parent="TEAM2_FlagSpawn/TEAM_flag_interact"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+script = ExtResource("8_hj1es")
+ObjId = 123
+IconStringKey = "Team 1 Flag"
+iconTextVisible = true
+iconColor = [0.0, 0.0, 1.0]
+iconImagePicker = 7
+iconImageVisible = true
+metadata/_custom_type_script = "uid://k7ivvn7ghpr2"
+
+[node name="TEAM_flagPlaceholder" parent="TEAM2_FlagSpawn/TEAM_flag_interact" instance=ExtResource("14_qochn")]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0.00592405, 0, -0.123844)
+ObjId = 124

@@ -21,17 +21,28 @@ const FLAG_AUTO_RETURN_TIME = 30; // Seconds before dropped flag auto-returns to
 const FLAG_INTERACT_DISTANCE = 3.0; // Distance to interact with flag
 const AUTO_TEAM_BALANCE: boolean = true;
 
+enum Teams {
+    TEAM_NEUTRAL,
+    TEAM_1,
+    TEAM_2,
+    TEAM_3,
+    TEAM4
+}
+
+enum FlagIdOffsets{
+    FLAG_INTERACT_ID_OFFSET = 1,
+    FLAG_CAPTURE_ZONE_ID_OFFSET = 2,
+    FLAG_BASE_ID_ICON_OFFSET = 3,
+    FLAG_SPAWN_ID_OFFSET = 4,
+}
+
+
 // Object IDs (these need to be set in Godot)
-const TEAM1_FLAG_INTERACT_ID = 3;
-const TEAM2_FLAG_INTERACT_ID = 4;
-const TEAM1_CAPTURE_ZONE_ID = 11;
-const TEAM2_CAPTURE_ZONE_ID = 12;
+const TEAM_ID_START_OFFSET = 100;
+const TEAM_ID_STRIDE_OFFSET = 10;
+
 const TEAM1_HQ_ID = 1;
 const TEAM2_HQ_ID = 2;
-const TEAM1_FLAG_ICON_ID = 101;
-const TEAM2_FLAG_ICON_ID = 102;
-const TEAM1_FLAG_MODEL_ID = 200;
-const TEAM2_FLAG_MODEL_ID = 201;
 
 // Colors
 const TEAM1_COLOR = mod.CreateVector(0, 0.4, 1); // Blue
@@ -542,12 +553,12 @@ export async function OnGameModeStarted() {
     // mod.SetScoreboardSorting(1);
 
     // Get flag positions from InteractPoint objects
-    const team1FlagInteract = mod.GetInteractPoint(TEAM1_FLAG_INTERACT_ID);
-    const team2FlagInteract = mod.GetInteractPoint(TEAM2_FLAG_INTERACT_ID);
-    const team1WorldIcon = mod.GetWorldIcon(TEAM1_FLAG_ICON_ID);
-    const team2WorldIcon = mod.GetWorldIcon(TEAM2_FLAG_ICON_ID);
-    const team1WorldSpawn = mod.GetSpatialObject(TEAM1_FLAG_MODEL_ID);
-    const team2WorldSpawn = mod.GetSpatialObject(TEAM2_FLAG_MODEL_ID);
+    const team1FlagInteract = mod.GetInteractPoint(GetFlagInteractIdForTeam(team1));
+    const team2FlagInteract = mod.GetInteractPoint(GetFlagInteractIdForTeam(team2));
+    const team1WorldIcon = mod.GetWorldIcon(GetFlagBaseIconIdForTeam(team1));
+    const team2WorldIcon = mod.GetWorldIcon(GetFlagBaseIconIdForTeam(team2));
+    const team1WorldSpawn = mod.GetSpatialObject(GetFlagSpawnIdForTeam(team1));
+    const team2WorldSpawn = mod.GetSpatialObject(GetFlagSpawnIdForTeam(team2));
     const team1FlagPosition = mod.GetObjectPosition(team1WorldSpawn);
     const team2FlagPosition = mod.GetObjectPosition(team2WorldSpawn);
     
@@ -559,17 +570,17 @@ export async function OnGameModeStarted() {
     team1FlagData = new FlagData(
         team1,
         team1FlagPosition,
-        TEAM1_FLAG_INTERACT_ID,
-        TEAM1_CAPTURE_ZONE_ID,
-        TEAM1_FLAG_ICON_ID
+        GetFlagInteractIdForTeam(team1),
+        GetFlagCaptureZoneIdForTeam(team1),
+        GetFlagBaseIconIdForTeam(team1)
     );
     
     team2FlagData = new FlagData(
         team2,
         team2FlagPosition,
-        TEAM2_FLAG_INTERACT_ID,
-        TEAM2_CAPTURE_ZONE_ID,
-        TEAM2_FLAG_ICON_ID
+        GetFlagInteractIdForTeam(team2),
+        GetFlagCaptureZoneIdForTeam(team2),
+        GetFlagBaseIconIdForTeam(team2)
     );
     
     // Set game time limit
@@ -767,9 +778,9 @@ export function OnPlayerInteract(
     }
 
     // Check home flag interactions
-    if (interactId === TEAM1_FLAG_INTERACT_ID) {
+    if (interactId === GetFlagInteractIdForTeam(team1)) {
         HandleFlagInteraction(eventPlayer, playerTeamId, team1FlagData);
-    } else if (interactId === TEAM2_FLAG_INTERACT_ID) {
+    } else if (interactId === GetFlagInteractIdForTeam(team2)) {
         HandleFlagInteraction(eventPlayer, playerTeamId, team2FlagData);
     }
 
@@ -803,9 +814,9 @@ export function OnPlayerEnterAreaTrigger(
     }
     
     // Check if player entered their own capture zone
-    if (triggerId === TEAM1_CAPTURE_ZONE_ID && playerTeamId === mod.GetObjId(team1)) {
+    if (triggerId === GetFlagCaptureZoneIdForTeam(team1) && playerTeamId === mod.GetObjId(team1)) {
         HandleCaptureZoneEntry(eventPlayer, team1);
-    } else if (triggerId === TEAM2_CAPTURE_ZONE_ID && playerTeamId === mod.GetObjId(team2)) {
+    } else if (triggerId === GetFlagCaptureZoneIdForTeam(team2) && playerTeamId === mod.GetObjId(team2)) {
         HandleCaptureZoneEntry(eventPlayer, team2);
     }
 }
@@ -1150,12 +1161,45 @@ export function GetPlayersInTeam(team: mod.Team) {
     return teamMembers;
 }
 
+
+// Godot flag IDs
+// --------------
+
+function GetFlagTeamIdOffset(team: mod.Team): number {
+    let teamID = mod.GetObjId(team);
+    return TEAM_ID_START_OFFSET + (teamID * TEAM_ID_STRIDE_OFFSET);
+}
+
+function GetFlagInteractIdForTeam(team: mod.Team): number {
+    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_INTERACT_ID_OFFSET;
+}
+
+function GetFlagCaptureZoneIdForTeam(team: mod.Team): number {
+    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_CAPTURE_ZONE_ID_OFFSET;
+}
+
+function GetFlagBaseIconIdForTeam(team: mod.Team): number {
+    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_BASE_ID_ICON_OFFSET;
+}
+
+function GetFlagSpawnIdForTeam(team: mod.Team): number {
+    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_SPAWN_ID_OFFSET;
+}
+
 function CaptureFeedback(pos: mod.Vector): void {
     let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
     mod.EnableVFX(vfx, true);
     let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
     mod.EnableSFX(sfx, true);
     mod.PlaySound(sfx, 100);
+}
+
+// Helper function to parse JSON from in strings.json
+// Data in strings.json should look similar to "data": "{ \"test\": 20,\"notTest\": 30 }"
+function getStringValue(stringKey: string): any {
+    // @ts-ignore
+    const obj = mod?.strings;
+    return obj?.[stringKey];
 }
 
 //-----------------------------------------------------------------------------------------------//
