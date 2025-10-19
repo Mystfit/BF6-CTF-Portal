@@ -1,0 +1,27 @@
+[gd_scene load_steps=5 format=3 uid="uid://bx77dll50esvv"]
+
+[ext_resource type="Script" uid="uid://8ap2cthex8jq" path="res://objects/Gameplay/CTF/FlagSpawner.gd" id="1_5ek4j"]
+[ext_resource type="PackedScene" path="res://objects/Global/Generic/Common/Props/FireAlarmButton_01.tscn" id="1_j1k3p"]
+[ext_resource type="Script" uid="uid://li0wi6akn80t" path="res://scripts/Gameplay/Common/AreaTrigger.gd" id="2_xieoy"]
+[ext_resource type="Script" uid="uid://ck5uniw0pl6u8" path="res://addons/bf_portal/portal_tools/types/PolygonVolume/PolygonVolume.gd" id="3_5ek4j"]
+
+[node name="Flag_Spawner" type="Node3D"]
+script = ExtResource("1_5ek4j")
+Team = 0
+ObjId = 100
+
+[node name="TEAM_flag_spawn_location" parent="." instance=ExtResource("1_j1k3p")]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0.00592405, 0, -0.123844)
+ObjId = 104
+
+[node name="TEAM_flag_pickup" type="Node3D" parent="." node_paths=PackedStringArray("Area")]
+script = ExtResource("2_xieoy")
+ObjId = 105
+Area = NodePath("TEAM_flag_pickup_zone")
+metadata/_custom_type_script = "uid://li0wi6akn80t"
+
+[node name="TEAM_flag_pickup_zone" type="Node3D" parent="TEAM_flag_pickup"]
+script = ExtResource("3_5ek4j")
+points = PackedVector2Array(-2.4, -2.4, -2.4, 2.4, 2.4, 2.4, 2.4, -2.4)
+color = Color(0, 0.6, 0.7, 0.42)
+metadata/_custom_type_script = "uid://ck5uniw0pl6u8"
