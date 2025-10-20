@@ -737,7 +737,7 @@ class Flag {
             mod.EnableWorldIconText(carriedIcon, true);
         }
         mod.EnableWorldIconImage(this.flagRecoverIcon, true);
-        mod.EnableWorldIconText(this.flagRecoverIcon, true);
+        mod.EnableWorldIconText(this.flagRecoverIcon, false);
 
         // Set VFX properties
         mod.SetVFXColor(this.flagHomeVFX, GetTeamColor(this.team));
@@ -758,7 +758,7 @@ class Flag {
         }
     }
     
-    DropFlag(position?: mod.Vector): void {
+    async DropFlag(position?: mod.Vector, direction?: mod.Vector): Promise<void> {
         if (!this.isBeingCarried) return;
 
         if(position){
@@ -961,7 +961,7 @@ class Flag {
                     let flatFacingDir = mod.Normalize(mod.CreateVector(mod.XComponentOf(facingDir), 0, mod.ZComponentOf(facingDir)));
                     let localDropOffset = mod.Multiply(flatFacingDir, 2.5);
                     let dropPos = mod.Add(soldierPos, localDropOffset);
-                    this.DropFlag(dropPos);
+                    this.DropFlag(dropPos, flatFacingDir);
                 }
             }
         }
@@ -1265,11 +1265,13 @@ function LoadGameModeConfig(config: GameModeConfig): void {
                 mod.Message(GetTeamName(team2))
             );
             mod.SetScoreboardColumnNames(
-                mod.Message(mod.stringkeys.scoreboard_team_label),
                 mod.Message(mod.stringkeys.scoreboard_captures_label), 
                 mod.Message(mod.stringkeys.scoreboard_capture_assists_label),
                 mod.Message(mod.stringkeys.scoreboard_carrier_kills_label)
             );
+
+            // Sort by flag captures
+            mod.SetScoreboardSorting(0);
         }
     } else {
         console.log(`Using CustomFFA scoreboard`);
@@ -1282,6 +1284,9 @@ function LoadGameModeConfig(config: GameModeConfig): void {
             mod.Message(mod.stringkeys.scoreboard_carrier_kills_label)
         );
         mod.SetScoreboardColumnWidths(0.2, 0.2, 0.2, 0.4);
+
+        // Sort by teamID to group players
+        mod.SetScoreboardSorting(0);
     }
 
     // Initialize flags from config
@@ -1404,7 +1409,10 @@ async function SecondUpdate(): Promise<void> {
         if (AUTO_TEAM_BALANCE) {
             CheckAndBalanceTeams();
         }
-        
+
+        // Periodically update scoreboard for players
+        RefreshScoreboard();
+
         // Check time limit
         if (mod.GetMatchTimeRemaining() <= 0) {
             EndGameByTime();
