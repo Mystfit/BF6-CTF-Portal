@@ -49,21 +49,42 @@ const TEAM1_HQ_ID = 1;
 const TEAM2_HQ_ID = 2;
 const TEAM3_HQ_ID = 3;
 const TEAM4_HQ_ID = 4;
+const TEAM5_HQ_ID = 5;
+const TEAM6_HQ_ID = 6;
+const TEAM7_HQ_ID = 7;
 
 enum TeamID {
     TEAM_NEUTRAL = 0,
     TEAM_1,
     TEAM_2,
     TEAM_3,
-    TEAM_4
+    TEAM_4,
+    TEAM_5,
+    TEAM_6,
+    TEAM_7
 }
 const DEFAULT_TEAM_NAMES = new Map<number, string>([
     [TeamID.TEAM_NEUTRAL, mod.stringkeys.neutral_team_name],
     [TeamID.TEAM_1, mod.stringkeys.purple_team_name],
-    [TeamID.TEAM_2, mod.stringkeys.purple_team_name],
+    [TeamID.TEAM_2, mod.stringkeys.orange_team_name],
     [TeamID.TEAM_3, mod.stringkeys.green_team_name],
-    [TeamID.TEAM_4, mod.stringkeys.blue_team_name]
+    [TeamID.TEAM_4, mod.stringkeys.blue_team_name],
+    [TeamID.TEAM_5, mod.stringkeys.red_team_name],
+    [TeamID.TEAM_6, mod.stringkeys.cyan_team_name],
+    [TeamID.TEAM_7, mod.stringkeys.silver_team_name]
 ]);
+
+const DEFAULT_TEAM_VO_FLAGS = new Map<number, mod.VoiceOverFlags | undefined>([
+    [TeamID.TEAM_NEUTRAL, undefined],
+    [TeamID.TEAM_1, mod.VoiceOverFlags.Alpha],
+    [TeamID.TEAM_2, mod.VoiceOverFlags.Bravo],
+    [TeamID.TEAM_3, mod.VoiceOverFlags.Charlie],
+    [TeamID.TEAM_4, mod.VoiceOverFlags.Delta],
+    [TeamID.TEAM_5, mod.VoiceOverFlags.Echo],
+    [TeamID.TEAM_6, mod.VoiceOverFlags.Foxtrot],
+    [TeamID.TEAM_7, mod.VoiceOverFlags.Golf]
+]);
+
 
 enum FlagIdOffsets{
     FLAG_INTERACT_ID_OFFSET = 1,
@@ -75,6 +96,139 @@ enum FlagIdOffsets{
 // Object IDs offsets for flag spawners and capture zones added in Godot
 const TEAM_ID_START_OFFSET = 100;
 const TEAM_ID_STRIDE_OFFSET = 10;
+
+
+// ------------------------------------------
+// Raycast manager
+// Wraps RayCast, OnRayCastHit, OnRayCastMissed from index.d.ts so we can asyncronously/syncronously track multiple raycasts using a queue
+// ------------------------------------------
+
+interface RaycastResult {
+    hit: boolean;           // true if OnRayCastHit fired, false if OnRayCastMissed
+    player?: mod.Player;    // The player who cast the ray (may be undefined for non-player raycasts)
+    point?: mod.Vector;     // Hit point (only when hit=true)
+    normal?: mod.Vector;    // Surface normal (only when hit=true)
+}
+
+interface RaycastRequest {
+    player?: mod.Player;    // Player who initiated the raycast (may be undefined)
+    resolve: (result: RaycastResult) => void;  // Promise resolve function
+    reject: (error: any) => void;              // Promise reject function
+}
+
+class RaycastManager {
+    private queue: RaycastRequest[] = [];
+
+    /**
+     * Cast a ray from start to stop with a player context
+     * @param player The player casting the ray
+     * @param start Start position
+     * @param stop End position
+     * @returns Promise that resolves with raycast result
+     */
+    cast(player: mod.Player, start: mod.Vector, stop: mod.Vector): Promise<RaycastResult>;
+    
+    /**
+     * Cast a ray from start to stop without player context
+     * @param start Start position
+     * @param stop End position
+     * @returns Promise that resolves with raycast result
+     */
+    cast(start: mod.Vector, stop: mod.Vector): Promise<RaycastResult>;
+
+    // Implementation
+    cast(...args: any[]): Promise<RaycastResult> {
+        return new Promise<RaycastResult>((resolve, reject) => {
+            try {
+                // Determine which overload was called
+                if (args.length === 3) {
+                    // Cast with player: (player, start, stop)
+                    const player: mod.Player = args[0];
+                    const start: mod.Vector = args[1];
+                    const stop: mod.Vector = args[2];
+                    
+                    // Add request to queue
+                    this.queue.push({ player, resolve, reject });
+                    
+                    // Call the actual raycast function
+                    mod.RayCast(player, start, stop);
+                } else if (args.length === 2) {
+                    // Cast without player: (start, stop)
+                    const start: mod.Vector = args[0];
+                    const stop: mod.Vector = args[1];
+                    
+                    // Add request to queue
+                    this.queue.push({ player: undefined, resolve, reject });
+                    
+                    // Call the actual raycast function
+                    mod.RayCast(start, stop);
+                } else {
+                    reject(new Error('Invalid number of arguments for RaycastManager.cast()'));
+                }
+            } catch (error) {
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Handle a raycast hit event from OnRayCastHit
+     * @param player The player from the event
+     * @param point The hit point
+     * @param normal The surface normal
+     */
+    handleHit(player: mod.Player, point: mod.Vector, normal: mod.Vector): void {
+        if (this.queue.length === 0) {
+            if (DEBUG_MODE) {
+                console.log('Warning: Received OnRayCastHit but queue is empty');
+            }
+            return;
+        }
+
+        // Pop the first request from the queue (FIFO)
+        const request = this.queue.shift()!;
+        
+        // Resolve the promise with hit result
+        request.resolve({
+            hit: true,
+            player: player,
+            point: point,
+            normal: normal
+        });
+    }
+
+    /**
+     * Handle a raycast miss event from OnRayCastMissed
+     * @param player The player from the event
+     */
+    handleMiss(player: mod.Player): void {
+        if (this.queue.length === 0) {
+            if (DEBUG_MODE) {
+                console.log('Warning: Received OnRayCastMissed but queue is empty');
+            }
+            return;
+        }
+
+        // Pop the first request from the queue (FIFO)
+        const request = this.queue.shift()!;
+        
+        // Resolve the promise with miss result
+        request.resolve({
+            hit: false,
+            player: player
+        });
+    }
+
+    /**
+     * Get the current queue length (useful for debugging)
+     */
+    getQueueLength(): number {
+        return this.queue.length;
+    }
+}
+
+// Global raycast manager instance
+const raycastManager = new RaycastManager();
 
 // Wrapper class to handle colour conversions
 class rgba {
@@ -103,17 +257,16 @@ class rgba {
 }
 
 // Colors
-const TEAM1_COLOR = new rgba(216, 6, 249, 1).NormalizeToLinear().AsModVector3();
-const TEAM2_COLOR = new rgba(249, 95, 6, 1).NormalizeToLinear().AsModVector3();
-const TEAM3_COLOR = new rgba(39, 249, 6, 1).NormalizeToLinear().AsModVector3();
-const TEAM4_COLOR = new rgba(6, 160, 249, 1).NormalizeToLinear().AsModVector3();
-const NEUTRAL_COLOR = new rgba(255, 255, 255, 1).NormalizeToLinear().AsModVector3();
+const NEUTRAL_COLOR = new rgba(145, 145, 145, 1).NormalizeToLinear().AsModVector3();
 const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
     [TeamID.TEAM_NEUTRAL, NEUTRAL_COLOR],
-    [TeamID.TEAM_1, TEAM1_COLOR],
-    [TeamID.TEAM_2, TEAM2_COLOR],
-    [TeamID.TEAM_3, TEAM3_COLOR],
-    [TeamID.TEAM_4, TEAM4_COLOR]
+    [TeamID.TEAM_1, new rgba(216, 6, 249, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_2, new rgba(249, 95, 6, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_3, new rgba(39, 249, 6, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_4, new rgba(4, 103, 252, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_5, new rgba(249, 6, 6, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_6, new rgba(233, 249, 6, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_7, new rgba(255, 255, 255, 1).NormalizeToLinear().AsModVector3()]
 ]);
 
 // Utility
@@ -132,6 +285,7 @@ let lastBalanceCheckTime = 0;
 let balanceInProgress = false;
 
 // Team references
+let teamNeutral: mod.Team;
 let team1: mod.Team;
 let team2: mod.Team;
 let team3: mod.Team;
@@ -347,7 +501,7 @@ class CaptureZone {
                     // Icon is for opposing team
                 }
                 mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)));
-                mod.SetWorldIconImage(icon, mod.WorldIconImages.Flag);
+                mod.SetWorldIconImage(icon, mod.WorldIconImages.Triangle);
                 mod.SetWorldIconColor(icon, GetTeamColorById(this.teamId));
                 mod.SetWorldIconPosition(icon, this.iconPosition);
             }
@@ -441,7 +595,6 @@ class Flag {
     flagInteractionPoint: mod.InteractPoint | null = null;
     flagProp: mod.SpatialObject | null = null;
     flagHomeVFX: mod.VFX;
-    carrierIcon: mod.WorldIcon | null = null;
     alarmSFX : mod.SFX | null = null;
     
     constructor(
@@ -550,15 +703,24 @@ class Flag {
             return;
         }
 
-        // Play sound effect to let team know the flag was taken
+        // Play spawner sound alarm
         if(this.isAtHome){
             this.PlayFlagAlarm().then(() => console.log("Flag alarm stopped"));
         }
-        
+
+        // Set flag state
         this.isAtHome = false;
         this.isBeingCarried = true;
         this.isDropped = false;
         this.carrierPlayer = player;
+
+        // Play VO voice lines
+        this.PlayFlagTakenVO();
+
+        // Play pickup SFX
+        let pickupSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureStartedByFriendly_OneShot2D, this.homePosition, ZERO_VEC);
+        mod.EnableSFX(pickupSfx, true);
+        mod.PlaySound(pickupSfx, 100);
 
         // Remove flag prop
         if (this.flagProp) {
@@ -599,6 +761,10 @@ class Flag {
     DropFlag(position?: mod.Vector): void {
         if (!this.isBeingCarried) return;
 
+        if(position){
+            console.log(`Dropping flag at ${VectorToString(position)}`);
+        }
+
         this.isAtHome = false;
         this.isBeingCarried = false;
         this.isDropped = true;
@@ -610,6 +776,11 @@ class Flag {
             dropPos = soldierPos;
         }
         this.currentPosition = dropPos;
+
+        // Play pickup SFX
+        let dropSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureNeutralize_OneShot2D, this.homePosition, ZERO_VEC);
+        mod.EnableSFX(dropSfx, true);
+        mod.PlaySound(dropSfx, 100);
 
         // Update the position of the flag interaction point
         this.UpdateFlagInteractionPoint();
@@ -692,8 +863,14 @@ class Flag {
             }
         }
     }
+
+    ReturnFlag(): void {
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
+        this.PlayFlagReturnedSFX();
+        this.ResetFlag();
+    }
     
-    ReturnToBase(): void {
+    ResetFlag(): void {
         if (this.carrierPlayer) {
             this.RestoreCarrierWeapons(this.carrierPlayer);
             mod.RemoveUIIcon(this.carrierPlayer);
@@ -706,9 +883,6 @@ class Flag {
         
         this.SpawnFlagAtHome();
         this.StopFlagAlarm();
-        
-        // Notify players
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned, GetTeamName(this.team)));
         
         if (DEBUG_MODE) {
             console.log(`Team ${this.teamId} flag returned`);
@@ -725,7 +899,8 @@ class Flag {
                 console.log(`Flag ${this.team} auto-returning to base`);
                 //mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.flag_auto_return));
             }
-            this.ReturnToBase();
+            
+            this.ReturnFlag();
         }
     }
     
@@ -747,15 +922,20 @@ class Flag {
         // Make smoke effect follow carrier
         mod.MoveVFX(this.flagHomeVFX, this.currentPosition, currentRotation);
 
+        // Move carrier icons
+        this.UpdateCarrierIcon();
+
+        // Force disable carrier weapons
+        this.CheckCarrierDroppedFlag(this.carrierPlayer);
+    }
+
+    UpdateCarrierIcon(){
         // Move flag icons for all opposing teams
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2.5,0));
         for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
             mod.SetWorldIconPosition(carriedIcon, flagIconOffset);
         }
         mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
-
-        // Force disable carrier weapons
-        this.CheckCarrierDroppedFlag(this.carrierPlayer);
     }
     
     RestrictCarrierWeapons(player: mod.Player): void {
@@ -824,44 +1004,75 @@ class Flag {
 
     async PlayFlagAlarm(): Promise<void>{
         this.alarmSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Alarm, this.currentPosition, ZERO_VEC);
-
         if(this.alarmSFX){
             mod.EnableSFX(this.alarmSFX, true);
             mod.PlaySound(this.alarmSFX, 100, this.currentPosition, 100);
         }
-
-        // Play VO for flag owning team (defenders)
-        let flagOwningTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
-        if(flagOwningTeamVO){
-            mod.PlayVO(flagOwningTeamVO, mod.VoiceOverEvents2D.ObjectiveLockdownEnemy, mod.VoiceOverFlags.Alpha, this.team);
-        }
-        
-        // Play VO for all opposing teams (attackers)
-        const opposingTeams = GetOpposingTeams(this.owningTeamId);
-        for (const opposingTeamId of opposingTeams) {
-            const opposingTeam = teams.get(opposingTeamId);
-            if (opposingTeam) {
-                let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
-                if(capturingTeamVO){
-                    mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveLockdownFriendly, mod.VoiceOverFlags.Alpha, opposingTeam);
-                }
-            }
-        }
-        
         // Stop flag sound after a duration
         await mod.Wait(FLAG_SFX_DURATION);
         this.StopFlagAlarm();
+    }
+
+    PlayFlagTakenVO(){
+        let vo_flag = DEFAULT_TEAM_VO_FLAGS.get(this.teamId);
+
+        // Play VO for flag owning team
+        let flagOwningTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
+        if(flagOwningTeamVO && vo_flag){
+            mod.PlayVO(flagOwningTeamVO, mod.VoiceOverEvents2D.ObjectiveLost, vo_flag, this.team);
+        }
+        
+        // Play VO for all opposing teams
+        if(this.carrierPlayer && vo_flag){
+            let carrierTeam:mod.Team = mod.GetTeam(this.carrierPlayer);
+            if (carrierTeam) {
+                let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
+                if(capturingTeamVO && vo_flag){
+                    mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveLockdownFriendly, vo_flag, carrierTeam);
+                }
+            }
+        }
+        // let vo_flag = DEFAULT_TEAM_VO_FLAGS.get(this.teamId);
+        // console.log(`Flag VO team ID is ${this.teamId}`);
+
+        // // Play VO for flag owning team (defenders)
+        // let flagOwningTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
+        // if(flagOwningTeamVO){
+        //     if(vo_flag){
+        //         console.log(`Playing flag ${this.teamId} taken VO for flag owner team ${mod.GetObjId(this.team)}`);
+        //         mod.PlayVO(flagOwningTeamVO, mod.VoiceOverEvents2D.ObjectiveLockdownEnemy, vo_flag, this.team);
+        //     }
+        // }
+        
+        // // Play VO for all opposing teams (attackers)
+        // if(this.carrierPlayer && vo_flag){
+        //     let carrierTeam:mod.Team = mod.GetTeam(this.carrierPlayer);
+        //     let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
+        //     if(capturingTeamVO){
+        //         console.log(`Playing flag team ${this.teamId} taken VO for flag carrier team ${mod.GetObjId(carrierTeam)}`);
+        //         mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCapturing, vo_flag, carrierTeam);
+        //     }
+        // }
     }
 
     StopFlagAlarm(){
         if(this.alarmSFX){
             mod.StopSound(this.alarmSFX);
         }
+    }
+
+    PlayFlagReturnedSFX(){
+        let vo_flag = DEFAULT_TEAM_VO_FLAGS.get(this.teamId);
+
+        // Play returned SFX
+        let pickupSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_ObjetiveUnlockReveal_OneShot2D, this.homePosition, ZERO_VEC);
+        mod.EnableSFX(pickupSfx, true);
+        mod.PlaySound(pickupSfx, 100);
 
         // Play VO for flag owning team
         let flagOwningTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
-        if(flagOwningTeamVO){
-            mod.PlayVO(flagOwningTeamVO, mod.VoiceOverEvents2D.ObjectiveNeutralised, mod.VoiceOverFlags.Alpha, this.team);
+        if(flagOwningTeamVO && vo_flag){
+            mod.PlayVO(flagOwningTeamVO, mod.VoiceOverEvents2D.ObjectiveNeutralised, vo_flag, this.team);
         }
         
         // Play VO for all opposing teams
@@ -870,8 +1081,8 @@ class Flag {
             const opposingTeam = teams.get(opposingTeamId);
             if (opposingTeam) {
                 let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
-                if(capturingTeamVO){
-                    mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveNeutralised, mod.VoiceOverFlags.Alpha, opposingTeam);
+                if(capturingTeamVO && vo_flag){
+                    mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveNeutralised, vo_flag, opposingTeam);
                 }
             }
         }
@@ -889,7 +1100,7 @@ function CreateClassicCTFConfig(): GameModeConfig {
             { 
                 teamId: TeamID.TEAM_1, 
                 name: mod.stringkeys.purple_team_name, 
-                color: TEAM1_COLOR, 
+                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
                 hqId: TEAM1_HQ_ID, 
                 captureZones: [
                     {
@@ -900,7 +1111,7 @@ function CreateClassicCTFConfig(): GameModeConfig {
             { 
                 teamId: TeamID.TEAM_2, 
                 name: mod.stringkeys.orange_team_name, 
-                color: TEAM2_COLOR, 
+                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
                 hqId: TEAM2_HQ_ID,
                 captureZones: [
                     {
@@ -933,7 +1144,7 @@ function Create4TeamNeutralCTFConfig(): GameModeConfig {
             { 
                 teamId: 1, 
                 name: mod.stringkeys.purple_team_name, 
-                color: TEAM1_COLOR, 
+                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
                 hqId: TEAM1_HQ_ID,
                 captureZones: [
                     {
@@ -944,7 +1155,7 @@ function Create4TeamNeutralCTFConfig(): GameModeConfig {
             { 
                 teamId: 2, 
                 name: mod.stringkeys.orange_team_name, 
-                color: TEAM2_COLOR, 
+                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
                 hqId: TEAM2_HQ_ID,
                 captureZones: [
                     {
@@ -954,7 +1165,7 @@ function Create4TeamNeutralCTFConfig(): GameModeConfig {
             },
             { teamId: 3, 
                 name: mod.stringkeys.green_team_name, 
-                color: TEAM3_COLOR, 
+                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_3), 
                 hqId: TEAM3_HQ_ID,
                 captureZones: [
                     {
@@ -965,7 +1176,7 @@ function Create4TeamNeutralCTFConfig(): GameModeConfig {
             { 
                 teamId: 4, 
                 name: mod.stringkeys.blue_team_name, 
-                color: TEAM4_COLOR, 
+                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_4), 
                 hqId: TEAM4_HQ_ID,
                 captureZones: [
                     {
@@ -998,12 +1209,12 @@ function Create4TeamNeutralCTFConfig(): GameModeConfig {
                 owningTeamId: TeamID.TEAM_4,
                 allowedCapturingTeams: [], // Empty = all opposing teams
                 spawnObjectId: GetDefaultFlagSpawnIdForTeam(team4)
-            }
+            },
             // {
             //     flagId: 5,
             //     owningTeamId: TeamID.TEAM_NEUTRAL,
             //     allowedCapturingTeams: [], // Empty = all opposing teams
-            //     spawnObjectId: 104
+            //     spawnObjectId: GetDefaultFlagSpawnIdForTeam(teamNeutral)
             // }
         ]
     };
@@ -1117,10 +1328,11 @@ export async function OnGameModeStarted() {
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
 
     // Initialize legacy team references (still needed for backwards compatibility)
-    team1 = mod.GetTeam(1);
-    team2 = mod.GetTeam(2);
-    team3 = mod.GetTeam(3);
-    team4 = mod.GetTeam(4);
+    teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
+    team1 = mod.GetTeam(TeamID.TEAM_1);
+    team2 = mod.GetTeam(TeamID.TEAM_2);
+    team3 = mod.GetTeam(TeamID.TEAM_3);
+    team4 = mod.GetTeam(TeamID.TEAM_4);
 
     await mod.Wait(1);
 
@@ -1352,6 +1564,19 @@ export function OnGameModeEnding(): void {
     mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_ending))
 }
 
+export function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector): void {
+    raycastManager.handleHit(eventPlayer, eventPoint, eventNormal);
+}
+
+export function OnRayCastMissed(eventPlayer: mod.Player): void {
+    raycastManager.handleMiss(eventPlayer);
+}
+
+export function OngoingWorldIcon(eventWorldIcon: mod.WorldIcon): void {
+    
+}
+
+
 //==============================================================================================
 // GAME LOGIC FUNCTIONS
 //==============================================================================================
@@ -1359,7 +1584,7 @@ export function OnGameModeEnding(): void {
 function HandleFlagInteraction(
     player: mod.Player, 
     playerTeamId: number, 
-    flagData: Flag
+    flag: Flag
 ): void {
     
     if (DEBUG_MODE) {
@@ -1367,10 +1592,10 @@ function HandleFlagInteraction(
     }
 
     // Enemy team trying to take flag
-    if (playerTeamId !== flagData.teamId) {
-        if (flagData.isAtHome || (flagData.isDropped && flagData.canBePickedUp)) {
-            flagData.PickupFlag(player);
-        } else if (flagData.isDropped && !flagData.canBePickedUp) {
+    if (playerTeamId !== flag.teamId) {
+        if (flag.isAtHome || (flag.isDropped && flag.canBePickedUp)) {
+            flag.PickupFlag(player);
+        } else if (flag.isDropped && !flag.canBePickedUp) {
             if(DEBUG_MODE){
                 mod.DisplayHighlightedWorldLogMessage(
                     mod.Message(mod.stringkeys.waiting_to_take_flag),
@@ -1380,8 +1605,10 @@ function HandleFlagInteraction(
         }
     }
     // Own team trying to return dropped flag
-    else if (playerTeamId === flagData.teamId && flagData.isDropped) {
-        flagData.ReturnToBase();
+    else if (playerTeamId === flag.teamId && flag.isDropped) {
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
+        flag.PlayFlagReturnedSFX();
+        flag.ReturnFlag();
     }
 }
 
@@ -1434,14 +1661,13 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
         // Play audio
         let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
         if(capturingTeamVO){
-            mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCapturedGeneric, mod.VoiceOverFlags.Alpha, scoringTeam);
+            let vo_flag = DEFAULT_TEAM_VO_FLAGS.get(capturedFlag.teamId);
+            mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCaptured, vo_flag ?? mod.VoiceOverFlags.Alpha, scoringTeam);
         }
     }
 
-    // Return all flags to base
-    for (const [flagId, flagData] of flags.entries()) {
-        flagData.ReturnToBase();
-    }
+    // Return all captured flags to their home spawners
+    GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => flag.ResetFlag());
     
     // Check win condition
     if (currentScore >= TARGET_SCORE) {
