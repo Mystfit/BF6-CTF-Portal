@@ -40,7 +40,27 @@ const TEAM_BALANCE_CHECK_INTERVAL = 10;                             // Check bal
 
 
 //==============================================================================================
-// CONSTANTS - (you probably won't need to modify these)
+// ADDITIONAL CONSTANTS - Fine-tuning values
+//==============================================================================================
+
+// Flag placement and positioning
+const FLAG_DROP_DISTANCE = 2.5;                                     // Distance in front of player when dropping flag
+const FLAG_INTERACTION_HEIGHT_OFFSET = 1.3;                         // Height offset for flag interaction point
+const FLAG_SPAWN_HEIGHT_OFFSET = 0.5;                               // Height offset when spawning flag above ground
+const FLAG_COLLISION_RADIUS = 1.0;                                  // Safety radius to prevent spawning inside objects
+const FLAG_DROP_RAYCAST_DISTANCE = 1000;                            // Maximum distance for downward raycast when dropping
+const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
+const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
+
+// Vehicle seat indices
+const VEHICLE_DRIVER_SEAT = 0;                                      // Driver seat index in vehicles
+const VEHICLE_FIRST_PASSENGER_SEAT = 1;                             // First passenger seat index
+
+// Update rates
+const TICK_RATE = 0.032;                                            // ~30fps update rate for carrier position updates (portal server tickrate)
+
+//==============================================================================================
+// CONSTANTS - Team and object IDs (you probably won't need to modify these)
 //==============================================================================================
 
 // HQ ids
@@ -97,10 +117,68 @@ const TEAM_ID_START_OFFSET = 100;
 const TEAM_ID_STRIDE_OFFSET = 10;
 
 
-// ----------------------------------------------------------------
-// RGBA
-// A RGB/float colour data type with conversions into mod datatypes
-// ----------------------------------------------------------------
+//==============================================================================================
+// HOW IT WORKS - Understanding CTF Game Flow
+//==============================================================================================
+/*
+ * FLAG LIFECYCLE EXPLAINED:
+ * =========================
+ * 1. AT HOME (isAtHome=true)
+ *    - Flag sits at spawn point with interaction point
+ *    - Opposing teams can pick it up
+ *    - Own team sees "DEFEND" icons
+ *
+ * 2. BEING CARRIED (isBeingCarried=true)
+ *    - Player picked up flag -> becomes carrier
+ *    - Carrier forced to melee weapon (can't shoot)
+ *    - Carrier can't drive vehicles (forced to passenger seat)
+ *    - VFX smoke trail follows carrier
+ *    - Icons update to show "PICKUP" or "RECOVER" for different teams
+ *
+ * 3. DROPPED (isDropped=true)
+ *    - Carrier died or manually dropped flag
+ *    - 3-second delay before anyone can pick it up
+ *    - Auto-returns to base after 30 seconds if not picked up
+ *    - Own team can return it early by interacting
+ *
+ * 4. SCORING
+ *    - Carrier enters their team's capture zone with enemy flag
+ *    - Must have own flag at home to score
+ *    - Team gets 1 point, first to TARGET_SCORE wins
+ *
+ * MULTI-TEAM SUPPORT:
+ * ===================
+ * - Configurable 2-7 team gameplay via GameModeConfig
+ * - Each flag can restrict which teams can capture it
+ * - Dynamic scoreboard adapts to team count
+ * - Team balance system moves players between teams
+ *
+ * CONFIGURATION SYSTEM:
+ * =====================
+ * To create a custom game mode, define a GameModeConfig:
+ * 
+ * const config = {
+ *   teams: [
+ *     { teamId: 1, name: "Red", color: redVector, hqId: 1 },
+ *     { teamId: 2, name: "Blue", color: blueVector, hqId: 2 }
+ *   ],
+ *   flags: [
+ *     { flagId: 1, owningTeamId: 1 },  // Red flag
+ *     { flagId: 2, owningTeamId: 2 }   // Blue flag
+ *   ]
+ * };
+ * 
+ * Then call LoadGameModeConfig(config) to apply it.
+ */
+
+//==============================================================================================
+// COLOR & UTILITY CLASSES
+//==============================================================================================
+
+/**
+ * RGBA color class with conversion utilities for the mod API.
+ * Handles color normalization and conversion to mod.Vector format.
+ */
 class rgba {
     r: number;
     g: number;
@@ -127,7 +205,7 @@ class rgba {
 }
 
 // Colors
-const NEUTRAL_COLOR = new rgba(145, 145, 145, 1).NormalizeToLinear().AsModVector3();
+const NEUTRAL_COLOR = new rgba(255, 255, 255, 1).NormalizeToLinear().AsModVector3();
 const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
     [TeamID.TEAM_NEUTRAL, NEUTRAL_COLOR],
     [TeamID.TEAM_1, new rgba(216, 6, 249, 1).NormalizeToLinear().AsModVector3()],
@@ -140,17 +218,29 @@ const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
 ]);
 
 
-// ------------------------------------------
-// Raycast manager
-// Wraps RayCast, OnRayCastHit, OnRayCastMissed from index.d.ts so we can asyncronously/syncronously track multiple raycasts using a queue
-// ------------------------------------------
+//==============================================================================================
+// RAYCAST MANAGER
+//==============================================================================================
+/**
+ * RaycastManager - Asynchronous raycast queue system
+ * 
+ * Wraps mod.RayCast, OnRayCastHit, and OnRayCastMissed to enable Promise-based raycasts.
+ * Uses a FIFO queue to match raycast requests with their results, allowing multiple
+ * raycasts to be in-flight simultaneously.
+ * 
+ * Usage:
+ *   const result = await raycastManager.cast(startPos, endPos);
+ *   if (result.hit) {
+ *     console.log("Hit at:", result.point);
+ *   }
+ */
 
 interface RaycastResult {
     hit: boolean;           // true if OnRayCastHit fired, false if OnRayCastMissed
     player?: mod.Player;    // The player who cast the ray (may be undefined for non-player raycasts)
     point?: mod.Vector;     // Hit point (only when hit=true)
     normal?: mod.Vector;    // Surface normal (only when hit=true)
-    ID?: number
+    ID?: number             // Unique ID for this raycast result
 }
 
 interface RaycastRequest {
@@ -274,6 +364,63 @@ class RaycastManager {
     getQueueLength(): number {
         return this.queue.length;
     }
+
+    /**
+     * Find a valid position on the ground by casting rays forward and down
+     * 
+     * This utility method finds a safe position on the ground by:
+     * 1. Casting a ray forward from the starting position
+     * 2. If an obstacle is hit, backing up by the collision radius
+     * 3. Casting a ray downward to find the ground
+     * 
+     * @param startPosition The starting position for the raycast
+     * @param direction The direction to cast (normalized)
+     * @param forwardDistance How far to cast forward
+     * @param collisionRadius Safety radius to avoid spawning inside objects
+     * @param downwardDistance Maximum distance to cast downward
+     * @param heightOffset Height above ground to start the forward raycast
+     * @returns Promise resolving to the ground position, or the start position if no ground found
+     */
+    static async FindValidGroundPosition(
+        startPosition: mod.Vector,
+        direction: mod.Vector,
+        forwardDistance: number,
+        collisionRadius: number,
+        downwardDistance: number
+    ): Promise<mod.Vector> {
+        let highPosition = startPosition;
+        
+        // Cast forward to check for obstacles
+        let forwardHit: RaycastResult = {hit: false};
+        
+        if (direction) {
+            // Don't let ray start inside the starting object
+            let forwardRayStart = mod.Add(startPosition, mod.Multiply(direction, 1));
+            let forwardRayEnd = mod.Add(forwardRayStart, mod.Multiply(direction, forwardDistance));
+            forwardHit = await raycastManager.cast(forwardRayStart, forwardRayEnd);
+            highPosition = forwardHit.point ?? forwardRayEnd;
+            
+            if (DEBUG_MODE) {
+                console.log(`Forward raycast - Hit: ${forwardHit.hit}, Location: ${forwardHit.point ? VectorToString(forwardHit.point) : "none"}`);
+            }
+        }
+        
+        // If we hit something, back up by collision radius
+        let downwardRayStart = forwardHit.hit 
+            ? mod.Add(highPosition, mod.Multiply(direction, collisionRadius * -1)) 
+            : highPosition;
+        
+        // Cast downward to find ground
+        let downwardRayEnd = mod.Add(downwardRayStart, mod.Multiply(mod.DownVector(), downwardDistance));
+        let downHit = await raycastManager.cast(downwardRayStart, downwardRayEnd);
+        
+        if (DEBUG_MODE) {
+            console.log(`Downward raycast - Hit: ${downHit.hit}, Location: ${downHit.point ? VectorToString(downHit.point) : "none"}`);
+        }
+        
+        // Return ground position if found, otherwise return start position
+        return downHit.hit ? (downHit.point ?? startPosition) : startPosition;
+    }
 }
 
 // Global raycast manager instance
@@ -324,10 +471,10 @@ class PlayerScore {
 //==============================================================================================
 
 class JSPlayer {
-    player: mod.Player;
-    playerId: number;
+    readonly player: mod.Player;
+    readonly playerId: number;
     score: PlayerScore;
-    joinOrder: number; // Track join order for team balancing
+    readonly joinOrder: number; // Track join order for team balancing
     heldFlags: Flag[] = [];
 
     static playerInstances: mod.Player[] = [];
@@ -447,13 +594,13 @@ class CaptureZoneConfig {
 }
 
 class CaptureZone {
-    team: mod.Team;
-    teamId: number;
-    areaTrigger: mod.AreaTrigger | undefined;
-    captureZoneID?: number;
-    captureZoneSpatialObjId?: number;
-    iconPosition: mod.Vector;
-    baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
+    readonly team: mod.Team;
+    readonly teamId: number;
+    readonly areaTrigger: mod.AreaTrigger | undefined;
+    readonly captureZoneID?: number;
+    readonly captureZoneSpatialObjId?: number;
+    readonly iconPosition: mod.Vector;
+    readonly baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
 
     constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
         this.team = team;
@@ -573,15 +720,15 @@ class CaptureZone {
 //==============================================================================================
 
 class Flag {
-    flagId: number;
-    owningTeamId: number;
-    allowedCapturingTeams: number[];
+    readonly flagId: number;
+    readonly owningTeamId: number;
+    readonly allowedCapturingTeams: number[];
     customColor?: mod.Vector;
     
     // Legacy properties (kept for backwards compatibility during transition)
-    team: mod.Team;
-    teamId: number;
-    homePosition: mod.Vector;
+    readonly team: mod.Team;
+    readonly teamId: number;
+    readonly homePosition: mod.Vector;
     currentPosition: mod.Vector;
     
     // State
@@ -599,7 +746,6 @@ class Flag {
     autoReturnTime: number = 0;
     
     // Game objects
-    // flagHomeWorldIcon: mod.WorldIcon;
     flagRecoverIcon: mod.WorldIcon;
     flagCarriedIcons: Map<number, mod.WorldIcon> = new Map(); // One icon per opposing team
     flagInteractionPoint: mod.InteractPoint | null = null;
@@ -768,17 +914,14 @@ class Flag {
         }
     }
     
-    async DropFlag(position?: mod.Vector, direction?: mod.Vector, dropDistance: number = 2.5): Promise<void> {
+    async DropFlag(position?: mod.Vector, direction?: mod.Vector, dropDistance: number = FLAG_DROP_DISTANCE): Promise<void> {
         if (!this.isBeingCarried) return;
 
         this.isAtHome = false;
         this.isBeingCarried = false;
         this.isDropped = true;
 
-        const rayHeightOffGround = mod.CreateVector(0.0, 1.0, 0.0);     // How high from the ground should collision rays start from
-        const flagCollisionRadius = 1;                                  // Offset to make sure we don't spawn the flag inside an object
-
-        // Set flag drop point
+        // Determine drop position and direction
         if(this.carrierPlayer){
             let soldierPosition = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetPosition);
             let facingDir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
@@ -788,29 +931,17 @@ class Flag {
             direction = direction ?? mod.Normalize(mod.CreateVector(mod.XComponentOf(facingDir), 0, mod.ZComponentOf(facingDir)));
         } else {
             position = position ?? this.currentPosition;
+            direction = direction ?? mod.DownVector();
         }
 
-        // Find a valid flag location moving in the provided direction towards the offset and check for ray collisions so we don't spawn inside an object
-        let forwardHit: RaycastResult = {hit: false};
-        let flagSpawnPositionHigh: mod.Vector = mod.Add(position, rayHeightOffGround);
-        if(direction){
-            let forwardRayStart = mod.Add(mod.Add(position, mod.Multiply(direction, 1)), rayHeightOffGround); // Don't let ray start inside soldier
-            flagSpawnPositionHigh = mod.Add(forwardRayStart, mod.Multiply(direction, dropDistance));
-            forwardHit = await raycastManager.cast(forwardRayStart, flagSpawnPositionHigh);
-            flagSpawnPositionHigh = forwardHit.point ?? flagSpawnPositionHigh;
-            if(DEBUG_MODE)
-                console.log(`Checking for valid flag drop location forwards. Hit:${forwardHit.hit}, Location:${forwardHit.point ? VectorToString(forwardHit.point) : ""}`);
-        } else {
-            direction = mod.DownVector();
-        }
-
-        // Find a valid flag location looking downwards
-        let dropRayStart = forwardHit.hit ? mod.Add(flagSpawnPositionHigh, mod.Multiply(direction, flagCollisionRadius * -1)) : flagSpawnPositionHigh;
-        let dropRayEnd = mod.Add(dropRayStart, mod.Multiply(mod.DownVector(), 1000));
-        let dropHit = await raycastManager.cast(dropRayStart, dropRayEnd);
-        if(DEBUG_MODE)
-            console.log(`Checking for valid flag drop location downwards. Hit:${dropHit.hit}, Location:${dropHit.point ? VectorToString(dropHit.point) : ""}`);
-        this.currentPosition = dropHit.hit ? dropHit.point ?? ZERO_VEC : position;
+        // Use RaycastManager utility to find a valid ground position
+        this.currentPosition = await RaycastManager.FindValidGroundPosition(
+            mod.Add(position, mod.CreateVector(0.0, SOLDIER_HALF_HEIGHT, 0.0)),
+            direction,
+            dropDistance,
+            FLAG_COLLISION_RADIUS,
+            FLAG_DROP_RAYCAST_DISTANCE
+        );
         
         // Remove carrier restrictions
         if (this.carrierPlayer) {
@@ -823,13 +954,8 @@ class Flag {
         if (this.flagProp) {
             mod.UnspawnObject(this.flagProp);
         }
-        let flagSpawnHeight = mod.Add(this.currentPosition,  mod.CreateVector(0.0, 0.5, 0.0));
         let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
-        let flagPositionDelta = mod.Subtract(this.currentPosition, flagSpawnHeight);
         this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);
-        //this.flagProp = mod.SpawnObject(FLAG_PROP, flagSpawnHeight, flagRotation);
-        // if(this.flagProp)
-        //     mod.MoveObjectOverTime(this.flagProp, flagPositionDelta, ZERO_VEC, 0.2, false, false);
 
         // Update the position of the flag interaction point
         this.UpdateFlagInteractionPoint();
@@ -883,7 +1009,7 @@ class Flag {
             mod.UnspawnObject(this.flagInteractionPoint);
         }
 
-        let flagInteractOffset = mod.Add(this.currentPosition, mod.CreateVector(0, 1.3, 0));
+        let flagInteractOffset = mod.Add(this.currentPosition, mod.CreateVector(0, FLAG_INTERACTION_HEIGHT_OFFSET, 0));
         this.flagInteractionPoint = mod.SpawnObject(mod.RuntimeSpawn_Common.InteractPoint, flagInteractOffset, ZERO_VEC);
         if(this.flagInteractionPoint){
             mod.EnableInteractPoint(this.flagInteractionPoint, true);
@@ -894,10 +1020,6 @@ class Flag {
         await mod.Wait(FLAG_PICKUP_DELAY);
         if (this.isDropped) {
             this.canBePickedUp = true;
-            if (DEBUG_MODE) {
-                // console.log("Flag can now be picked up");
-                //mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.flag_can_pickup));
-            }
         }
     }
 
@@ -1408,10 +1530,8 @@ function RefreshScoreboard(){
 }
 
 async function TickUpdate(): Promise<void> {
-    const tickRate = 0.016; // ~60fps
-    
     while (gameStarted) {
-        await mod.Wait(tickRate);
+        await mod.Wait(TICK_RATE);
         
         // Update all flag carrier positions
         for (const [flagId, flagData] of flags.entries()) {
@@ -1585,7 +1705,7 @@ export function OnPlayerEnterVehicleSeat(
 ): void {
     // If player is carrying flag and in driver seat, force to passenger
     if (IsCarryingAnyFlag(eventPlayer)) {      
-        if (mod.GetPlayerVehicleSeat(eventPlayer) === 0) { // Driver seat
+        if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
             if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
             mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat))
             ForceToPassengerSeat(eventPlayer, eventVehicle);
@@ -1714,7 +1834,7 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     const seatCount = mod.GetVehicleSeatCount(vehicle);
     
     // Try to find an empty passenger seat
-    for (let i = seatCount-1; i >= 1; --i) {
+    for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
             mod.ForcePlayerToSeat(player, vehicle, i);
             if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
@@ -1915,7 +2035,7 @@ function DropAllFlags(player: mod.Player){
     let playerPosX = mod.XComponentOf(playerPos);
     let playerPosY = mod.YComponentOf(playerPos);
     let playerPosZ = mod.ZComponentOf(playerPos);
-    let flagDropRadius = 2.5;
+    let flagDropRadius = FLAG_DROP_RING_RADIUS;
 
     let carriedFlags = GetCarriedFlags(player);
     let angleInc = Math.PI * 2.0 / carriedFlags.length;
