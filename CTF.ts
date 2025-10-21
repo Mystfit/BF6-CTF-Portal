@@ -12,7 +12,6 @@ import * as modlib from 'modlib';
 
 const VERSION = [1, 1, 0];
 
-
 //==============================================================================================
 // CONFIGURATION
 //==============================================================================================
@@ -53,7 +52,7 @@ const TEAM5_HQ_ID = 5;
 const TEAM6_HQ_ID = 6;
 const TEAM7_HQ_ID = 7;
 
-enum TeamID {
+const enum TeamID {
     TEAM_NEUTRAL = 0,
     TEAM_1,
     TEAM_2,
@@ -86,7 +85,7 @@ const DEFAULT_TEAM_VO_FLAGS = new Map<number, mod.VoiceOverFlags | undefined>([
 ]);
 
 
-enum FlagIdOffsets{
+const enum FlagIdOffsets{
     FLAG_INTERACT_ID_OFFSET = 1,
     FLAG_CAPTURE_ZONE_ID_OFFSET = 2,
     FLAG_CAPTURE_ZONE_ICON_ID_OFFSET = 3,
@@ -96,6 +95,49 @@ enum FlagIdOffsets{
 // Object IDs offsets for flag spawners and capture zones added in Godot
 const TEAM_ID_START_OFFSET = 100;
 const TEAM_ID_STRIDE_OFFSET = 10;
+
+
+// ----------------------------------------------------------------
+// RGBA
+// A RGB/float colour data type with conversions into mod datatypes
+// ----------------------------------------------------------------
+class rgba {
+    r: number;
+    g: number;
+    b: number;
+    a: number;
+    constructor(r:number, g:number, b:number, a?:number){
+        this.r = r;
+        this.g =  g;
+        this.b = b;
+        this.a = a ? a : 255;
+    }
+
+    NormalizeToLinear(): rgba {
+        return new rgba(this.r / 255, this.g / 255, this.b / 255, this.a / 255);
+    }
+
+    AsModVector3(): mod.Vector {
+        return mod.CreateVector(this.r, this.g, this.b);
+    }
+
+    static FromModVector3(vector: mod.Vector): rgba {
+        return new rgba(mod.XComponentOf(vector), mod.YComponentOf(vector), mod.ZComponentOf(vector));
+    }
+}
+
+// Colors
+const NEUTRAL_COLOR = new rgba(145, 145, 145, 1).NormalizeToLinear().AsModVector3();
+const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
+    [TeamID.TEAM_NEUTRAL, NEUTRAL_COLOR],
+    [TeamID.TEAM_1, new rgba(216, 6, 249, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_2, new rgba(249, 95, 6, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_3, new rgba(39, 249, 6, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_4, new rgba(4, 103, 252, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_5, new rgba(249, 6, 6, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_6, new rgba(233, 249, 6, 1).NormalizeToLinear().AsModVector3()],
+    [TeamID.TEAM_7, new rgba(255, 255, 255, 1).NormalizeToLinear().AsModVector3()]
+]);
 
 
 // ------------------------------------------
@@ -108,6 +150,7 @@ interface RaycastResult {
     player?: mod.Player;    // The player who cast the ray (may be undefined for non-player raycasts)
     point?: mod.Vector;     // Hit point (only when hit=true)
     normal?: mod.Vector;    // Surface normal (only when hit=true)
+    ID?: number
 }
 
 interface RaycastRequest {
@@ -118,6 +161,11 @@ interface RaycastRequest {
 
 class RaycastManager {
     private queue: RaycastRequest[] = [];
+    private static ids: number = 0;
+    
+    static GetNextID(): number{
+        return ++RaycastManager.ids;
+    }
 
     /**
      * Cast a ray from start to stop with a player context
@@ -193,7 +241,8 @@ class RaycastManager {
             hit: true,
             player: player,
             point: point,
-            normal: normal
+            normal: normal,
+            ID: RaycastManager.GetNextID()
         });
     }
 
@@ -229,45 +278,6 @@ class RaycastManager {
 
 // Global raycast manager instance
 const raycastManager = new RaycastManager();
-
-// Wrapper class to handle colour conversions
-class rgba {
-    r: number;
-    g: number;
-    b: number;
-    a: number;
-    constructor(r:number, g:number, b:number, a?:number){
-        this.r = r;
-        this.g =  g;
-        this.b = b;
-        this.a = a ? a : 255;
-    }
-
-    NormalizeToLinear(): rgba {
-        return new rgba(this.r / 255, this.g / 255, this.b / 255, this.a / 255);
-    }
-
-    AsModVector3(): mod.Vector {
-        return mod.CreateVector(this.r, this.g, this.b);
-    }
-
-    static FromModVector3(vector: mod.Vector): rgba {
-        return new rgba(mod.XComponentOf(vector), mod.YComponentOf(vector), mod.ZComponentOf(vector));
-    }
-}
-
-// Colors
-const NEUTRAL_COLOR = new rgba(145, 145, 145, 1).NormalizeToLinear().AsModVector3();
-const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
-    [TeamID.TEAM_NEUTRAL, NEUTRAL_COLOR],
-    [TeamID.TEAM_1, new rgba(216, 6, 249, 1).NormalizeToLinear().AsModVector3()],
-    [TeamID.TEAM_2, new rgba(249, 95, 6, 1).NormalizeToLinear().AsModVector3()],
-    [TeamID.TEAM_3, new rgba(39, 249, 6, 1).NormalizeToLinear().AsModVector3()],
-    [TeamID.TEAM_4, new rgba(4, 103, 252, 1).NormalizeToLinear().AsModVector3()],
-    [TeamID.TEAM_5, new rgba(249, 6, 6, 1).NormalizeToLinear().AsModVector3()],
-    [TeamID.TEAM_6, new rgba(233, 249, 6, 1).NormalizeToLinear().AsModVector3()],
-    [TeamID.TEAM_7, new rgba(255, 255, 255, 1).NormalizeToLinear().AsModVector3()]
-]);
 
 // Utility
 const ZERO_VEC = mod.CreateVector(0, 0, 0);
@@ -401,9 +411,9 @@ interface TeamConfig {
 interface FlagConfig {
     flagId: number;
     owningTeamId: TeamID;
-    allowedCapturingTeams: number[];  // Empty = any opposing team can capture
+    allowedCapturingTeams?: number[];  // Empty = any opposing team can capture
     customColor?: mod.Vector;  // Optional color override
-    spawnObjectId: number;
+    spawnObjectId?: number;
 }
 
 interface GameModeConfig {
@@ -758,32 +768,49 @@ class Flag {
         }
     }
     
-    async DropFlag(position?: mod.Vector, direction?: mod.Vector): Promise<void> {
+    async DropFlag(position?: mod.Vector, direction?: mod.Vector, dropDistance: number = 2.5): Promise<void> {
         if (!this.isBeingCarried) return;
-
-        if(position){
-            console.log(`Dropping flag at ${VectorToString(position)}`);
-        }
 
         this.isAtHome = false;
         this.isBeingCarried = false;
         this.isDropped = true;
 
+        const rayHeightOffGround = mod.CreateVector(0.0, 1.0, 0.0);     // How high from the ground should collision rays start from
+        const flagCollisionRadius = 1;                                  // Offset to make sure we don't spawn the flag inside an object
+
         // Set flag drop point
-        let dropPos: mod.Vector = position ? position : ZERO_VEC;
-        if(!position && this.carrierPlayer){
-            let soldierPos = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetPosition);
-            dropPos = soldierPos;
+        if(this.carrierPlayer){
+            let soldierPosition = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetPosition);
+            let facingDir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
+
+            // Flatten player look direction so it is parallel to X and Z axis
+            position = position ?? soldierPosition;
+            direction = direction ?? mod.Normalize(mod.CreateVector(mod.XComponentOf(facingDir), 0, mod.ZComponentOf(facingDir)));
+        } else {
+            position = position ?? this.currentPosition;
         }
-        this.currentPosition = dropPos;
 
-        // Play pickup SFX
-        let dropSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureNeutralize_OneShot2D, this.homePosition, ZERO_VEC);
-        mod.EnableSFX(dropSfx, true);
-        mod.PlaySound(dropSfx, 100);
+        // Find a valid flag location moving in the provided direction towards the offset and check for ray collisions so we don't spawn inside an object
+        let forwardHit: RaycastResult = {hit: false};
+        let flagSpawnPositionHigh: mod.Vector = mod.Add(position, rayHeightOffGround);
+        if(direction){
+            let forwardRayStart = mod.Add(mod.Add(position, mod.Multiply(direction, 1)), rayHeightOffGround); // Don't let ray start inside soldier
+            flagSpawnPositionHigh = mod.Add(forwardRayStart, mod.Multiply(direction, dropDistance));
+            forwardHit = await raycastManager.cast(forwardRayStart, flagSpawnPositionHigh);
+            flagSpawnPositionHigh = forwardHit.point ?? flagSpawnPositionHigh;
+            if(DEBUG_MODE)
+                console.log(`Checking for valid flag drop location forwards. Hit:${forwardHit.hit}, Location:${forwardHit.point ? VectorToString(forwardHit.point) : ""}`);
+        } else {
+            direction = mod.DownVector();
+        }
 
-        // Update the position of the flag interaction point
-        this.UpdateFlagInteractionPoint();
+        // Find a valid flag location looking downwards
+        let dropRayStart = forwardHit.hit ? mod.Add(flagSpawnPositionHigh, mod.Multiply(direction, flagCollisionRadius * -1)) : flagSpawnPositionHigh;
+        let dropRayEnd = mod.Add(dropRayStart, mod.Multiply(mod.DownVector(), 1000));
+        let dropHit = await raycastManager.cast(dropRayStart, dropRayEnd);
+        if(DEBUG_MODE)
+            console.log(`Checking for valid flag drop location downwards. Hit:${dropHit.hit}, Location:${dropHit.point ? VectorToString(dropHit.point) : ""}`);
+        this.currentPosition = dropHit.hit ? dropHit.point ?? ZERO_VEC : position;
         
         // Remove carrier restrictions
         if (this.carrierPlayer) {
@@ -792,15 +819,20 @@ class Flag {
         }
         this.carrierPlayer = null;
         
-        // Spawn dropped flag prop
+        // Spawn and animate dropped flag prop
         if (this.flagProp) {
             mod.UnspawnObject(this.flagProp);
         }
-        this.flagProp = mod.SpawnObject(
-            FLAG_PROP,
-            this.currentPosition,
-            ZERO_VEC
-        );
+        let flagSpawnHeight = mod.Add(this.currentPosition,  mod.CreateVector(0.0, 0.5, 0.0));
+        let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
+        let flagPositionDelta = mod.Subtract(this.currentPosition, flagSpawnHeight);
+        this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);
+        //this.flagProp = mod.SpawnObject(FLAG_PROP, flagSpawnHeight, flagRotation);
+        // if(this.flagProp)
+        //     mod.MoveObjectOverTime(this.flagProp, flagPositionDelta, ZERO_VEC, 0.2, false, false);
+
+        // Update the position of the flag interaction point
+        this.UpdateFlagInteractionPoint();
         
         // Start timers
         this.dropTime = GetCurrentTime();
@@ -827,7 +859,12 @@ class Flag {
         // Start pickup delay
         this.StartPickupDelay();
 
-        // Play audio
+         // Play drop SFX
+        let dropSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureNeutralize_OneShot2D, this.currentPosition, ZERO_VEC);
+        mod.EnableSFX(dropSfx, true);
+        mod.PlaySound(dropSfx, 100);
+
+        // Play drop VO
         let friendlyVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
         if(friendlyVO){
             mod.PlayVO(friendlyVO, mod.VoiceOverEvents2D.ObjectiveContested, mod.VoiceOverFlags.Alpha, this.team);
@@ -956,12 +993,7 @@ class Flag {
         if(this.carrierPlayer){
             if(mod.GetObjId(this.carrierPlayer) == mod.GetObjId(player)){
                 if(!mod.IsInventorySlotActive(player, CARRIER_FORCED_WEAPON_SLOT)){
-                    let soldierPos = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetPosition);
-                    let facingDir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
-                    let flatFacingDir = mod.Normalize(mod.CreateVector(mod.XComponentOf(facingDir), 0, mod.ZComponentOf(facingDir)));
-                    let localDropOffset = mod.Multiply(flatFacingDir, 2.5);
-                    let dropPos = mod.Add(soldierPos, localDropOffset);
-                    this.DropFlag(dropPos, flatFacingDir);
+                    this.DropFlag();
                 }
             }
         }
@@ -1124,14 +1156,12 @@ function CreateClassicCTFConfig(): GameModeConfig {
             {
                 flagId: 1,
                 owningTeamId: TeamID.TEAM_1,
-                allowedCapturingTeams: [], // Empty = all opposing teams
-                spawnObjectId: GetDefaultFlagSpawnIdForTeam(team1)
+                //allowedCapturingTeams: [], // Empty = all opposing teams
             },
             {
                 flagId: 2,
                 owningTeamId: TeamID.TEAM_2,
-                allowedCapturingTeams: [], // Empty = all opposing teams
-                spawnObjectId: GetDefaultFlagSpawnIdForTeam(team2)
+                //allowedCapturingTeams: [], // Empty = all opposing teams
             }
         ]
     };
@@ -1189,27 +1219,23 @@ function Create4TeamNeutralCTFConfig(): GameModeConfig {
             {
                 flagId: 1,
                 owningTeamId: TeamID.TEAM_1,
-                allowedCapturingTeams: [], // Empty = all opposing teams
-                spawnObjectId: GetDefaultFlagSpawnIdForTeam(team1)
+                //allowedCapturingTeams: [], // Empty = all opposing teams
             },
             {
                 flagId: 2,
                 owningTeamId: TeamID.TEAM_2,
-                allowedCapturingTeams: [], // Empty = all opposing teams
-                spawnObjectId: GetDefaultFlagSpawnIdForTeam(team2)
+                //allowedCapturingTeams: [], // Empty = all opposing teams
             },
             {
                 flagId: 3,
                 owningTeamId: TeamID.TEAM_3,
-                allowedCapturingTeams: [], // Empty = all opposing teams
-                spawnObjectId: GetDefaultFlagSpawnIdForTeam(team3)
+                //allowedCapturingTeams: [], // Empty = all opposing teams
             },
             {
                 flagId: 4,
                 owningTeamId: TeamID.TEAM_4,
-                allowedCapturingTeams: [], // Empty = all opposing teams
-                spawnObjectId: GetDefaultFlagSpawnIdForTeam(team4)
-            },
+                //allowedCapturingTeams: [], // Empty = all opposing teams
+            }
             // {
             //     flagId: 5,
             //     owningTeamId: TeamID.TEAM_NEUTRAL,
@@ -1271,7 +1297,7 @@ function LoadGameModeConfig(config: GameModeConfig): void {
             );
 
             // Sort by flag captures
-            mod.SetScoreboardSorting(0);
+            //mod.SetScoreboardSorting(1);
         }
     } else {
         console.log(`Using CustomFFA scoreboard`);
@@ -1286,7 +1312,7 @@ function LoadGameModeConfig(config: GameModeConfig): void {
         mod.SetScoreboardColumnWidths(0.2, 0.2, 0.2, 0.4);
 
         // Sort by teamID to group players
-        mod.SetScoreboardSorting(0);
+        //mod.SetScoreboardSorting(1);
     }
 
     // Initialize flags from config
@@ -1298,7 +1324,7 @@ function LoadGameModeConfig(config: GameModeConfig): void {
         }
         
         // Get flag spawn position
-        const flagSpawn = mod.GetSpatialObject(flagConfig.spawnObjectId);
+        const flagSpawn = mod.GetSpatialObject(flagConfig.spawnObjectId ?? GetDefaultFlagSpawnIdForTeam(mod.GetTeam(flagConfig.owningTeamId)));
         const flagPosition = mod.GetObjectPosition(flagSpawn);
         
         // Create flag instance
@@ -1440,7 +1466,8 @@ export function OnPlayerLeaveGame(playerId: number): void {
     // Check if leaving player was carrying any flag
     for (const [flagId, flagData] of flags.entries()) {
         if (flagData.carrierPlayer && mod.GetObjId(flagData.carrierPlayer) === playerId) {
-            flagData.DropFlag();
+            // Drop each flag at its current position
+            flagData.DropFlag(flagData.currentPosition);
         }
     }
     
