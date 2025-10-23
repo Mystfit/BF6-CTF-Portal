@@ -40,32 +40,7 @@ const TEAM_BALANCE_CHECK_INTERVAL = 10;                             // Check bal
 
 
 //==============================================================================================
-// ADDITIONAL CONSTANTS - Fine-tuning values
-//==============================================================================================
-
-// Flag placement and positioning
-const FLAG_DROP_DISTANCE = 2.5;                                     // Distance in front of player when dropping flag
-const FLAG_INTERACTION_HEIGHT_OFFSET = 1.3;                         // Height offset for flag interaction point
-const FLAG_SPAWN_HEIGHT_OFFSET = 0.5;                               // Height offset when spawning flag above ground
-const FLAG_COLLISION_RADIUS = 1.0;                                  // Safety radius to prevent spawning inside objects
-const FLAG_DROP_RAYCAST_DISTANCE = 100;                             // Maximum distance for downward raycast when dropping
-const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
-const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
-
-// Spawn validation settings
-const SPAWN_VALIDATION_DIRECTIONS = 6;                              // Number of radial check directions
-const SPAWN_VALIDATION_MAX_ITERATIONS = 2;                          // Maximum adjustment passes
-const SPAWN_VALIDATION_HEIGHT_OFFSET = 0.5;                         // Height offset above adjusted position for ground detection ray
-
-// Vehicle seat indices
-const VEHICLE_DRIVER_SEAT = 0;                                      // Driver seat index in vehicles
-const VEHICLE_FIRST_PASSENGER_SEAT = 1;                             // First passenger seat index
-
-// Update rates
-const TICK_RATE = 0.032;                                            // ~30fps update rate for carrier position updates (portal server tickrate)
-
-//==============================================================================================
-// CONSTANTS - Team and object IDs (you probably won't need to modify these)
+// CONSTANTS - (you probably won't need to modify these)
 //==============================================================================================
 
 // HQ ids
@@ -122,68 +97,10 @@ const TEAM_ID_START_OFFSET = 100;
 const TEAM_ID_STRIDE_OFFSET = 10;
 
 
-//==============================================================================================
-// HOW IT WORKS - Understanding CTF Game Flow
-//==============================================================================================
-/*
- * FLAG LIFECYCLE EXPLAINED:
- * =========================
- * 1. AT HOME (isAtHome=true)
- *    - Flag sits at spawn point with interaction point
- *    - Opposing teams can pick it up
- *    - Own team sees "DEFEND" icons
- *
- * 2. BEING CARRIED (isBeingCarried=true)
- *    - Player picked up flag -> becomes carrier
- *    - Carrier forced to melee weapon (can't shoot)
- *    - Carrier can't drive vehicles (forced to passenger seat)
- *    - VFX smoke trail follows carrier
- *    - Icons update to show "PICKUP" or "RECOVER" for different teams
- *
- * 3. DROPPED (isDropped=true)
- *    - Carrier died or manually dropped flag
- *    - 3-second delay before anyone can pick it up
- *    - Auto-returns to base after 30 seconds if not picked up
- *    - Own team can return it early by interacting
- *
- * 4. SCORING
- *    - Carrier enters their team's capture zone with enemy flag
- *    - Must have own flag at home to score
- *    - Team gets 1 point, first to TARGET_SCORE wins
- *
- * MULTI-TEAM SUPPORT:
- * ===================
- * - Configurable 2-7 team gameplay via GameModeConfig
- * - Each flag can restrict which teams can capture it
- * - Dynamic scoreboard adapts to team count
- * - Team balance system moves players between teams
- *
- * CONFIGURATION SYSTEM:
- * =====================
- * To create a custom game mode, define a GameModeConfig:
- * 
- * const config = {
- *   teams: [
- *     { teamId: 1, name: "Red", color: redVector, hqId: 1 },
- *     { teamId: 2, name: "Blue", color: blueVector, hqId: 2 }
- *   ],
- *   flags: [
- *     { flagId: 1, owningTeamId: 1 },  // Red flag
- *     { flagId: 2, owningTeamId: 2 }   // Blue flag
- *   ]
- * };
- * 
- * Then call LoadGameModeConfig(config) to apply it.
- */
-
-//==============================================================================================
-// COLOR & UTILITY CLASSES
-//==============================================================================================
-
-/**
- * RGBA color class with conversion utilities for the mod API.
- * Handles color normalization and conversion to mod.Vector format.
- */
+// ----------------------------------------------------------------
+// RGBA
+// A RGB/float colour data type with conversions into mod datatypes
+// ----------------------------------------------------------------
 class rgba {
     r: number;
     g: number;
@@ -210,7 +127,7 @@ class rgba {
 }
 
 // Colors
-const NEUTRAL_COLOR = new rgba(255, 255, 255, 1).NormalizeToLinear().AsModVector3();
+const NEUTRAL_COLOR = new rgba(145, 145, 145, 1).NormalizeToLinear().AsModVector3();
 const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
     [TeamID.TEAM_NEUTRAL, NEUTRAL_COLOR],
     [TeamID.TEAM_1, new rgba(216, 6, 249, 1).NormalizeToLinear().AsModVector3()],
@@ -223,49 +140,23 @@ const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
 ]);
 
 
-//==============================================================================================
-// RAYCAST MANAGER
-//==============================================================================================
-/**
- * RaycastManager - Asynchronous raycast queue system
- * 
- * Wraps mod.RayCast, OnRayCastHit, and OnRayCastMissed to enable Promise-based raycasts.
- * Uses a FIFO queue to match raycast requests with their results, allowing multiple
- * raycasts to be in-flight simultaneously.
- * 
- * Usage:
- *   const result = await raycastManager.cast(startPos, endPos);
- *   if (result.hit) {
- *     console.log("Hit at:", result.point);
- *   }
- */
+// ------------------------------------------
+// Raycast manager
+// Wraps RayCast, OnRayCastHit, OnRayCastMissed from index.d.ts so we can asyncronously/syncronously track multiple raycasts using a queue
+// ------------------------------------------
 
 interface RaycastResult {
     hit: boolean;           // true if OnRayCastHit fired, false if OnRayCastMissed
-    ID: number             // Unique ID for this raycast result
     player?: mod.Player;    // The player who cast the ray (may be undefined for non-player raycasts)
     point?: mod.Vector;     // Hit point (only when hit=true)
     normal?: mod.Vector;    // Surface normal (only when hit=true)
+    ID?: number
 }
 
 interface RaycastRequest {
     player?: mod.Player;    // Player who initiated the raycast (may be undefined)
-    id: number,
     resolve: (result: RaycastResult) => void;  // Promise resolve function
     reject: (error: any) => void;              // Promise reject function
-}
-
-interface ProjectileRaycastResult {
-    hit: boolean;
-    arcPoints: mod.Vector[];
-    rayIds: number[],
-    hitPosition?: mod.Vector;
-    hitNormal?: mod.Vector;
-}
-
-interface ValidatedSpawnResult {
-    position: mod.Vector;
-    isValid: boolean;
 }
 
 class RaycastManager {
@@ -281,87 +172,46 @@ class RaycastManager {
      * @param player The player casting the ray
      * @param start Start position
      * @param stop End position
-     * @param debug Enable visualization of raycasts (default: false)
-     * @param debugDuration Duration in seconds for debug visualization (default: 5)
      * @returns Promise that resolves with raycast result
      */
-    cast(player: mod.Player, start: mod.Vector, stop: mod.Vector, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
+    cast(player: mod.Player, start: mod.Vector, stop: mod.Vector): Promise<RaycastResult>;
     
     /**
      * Cast a ray from start to stop without player context
      * @param start Start position
      * @param stop End position
-     * @param debug Enable visualization of raycasts (default: false)
-     * @param debugDuration Duration in seconds for debug visualization (default: 5)
      * @returns Promise that resolves with raycast result
      */
-    cast(start: mod.Vector, stop: mod.Vector, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
+    cast(start: mod.Vector, stop: mod.Vector): Promise<RaycastResult>;
 
     // Implementation
     cast(...args: any[]): Promise<RaycastResult> {
-        return new Promise<RaycastResult>(async (resolve, reject) => {
+        return new Promise<RaycastResult>((resolve, reject) => {
             try {
-                let player: mod.Player | undefined;
-                let start: mod.Vector;
-                let stop: mod.Vector;
-                let debug: boolean = false;
-                let debugDuration: number = 5;
-                
                 // Determine which overload was called
-                if (args.length >= 3 && typeof args[0] !== 'number') {
-                    // Cast with player: (player, start, stop, debug?, debugDuration?)
-                    player = args[0];
-                    start = args[1];
-                    stop = args[2];
-                    debug = args[3] ?? false;
-                    debugDuration = args[4] ?? 5;
-                } else if (args.length >= 2) {
-                    // Cast without player: (start, stop, debug?, debugDuration?)
-                    start = args[0];
-                    stop = args[1];
-                    debug = args[2] ?? false;
-                    debugDuration = args[3] ?? 5;
-                    player = undefined;
+                if (args.length === 3) {
+                    // Cast with player: (player, start, stop)
+                    const player: mod.Player = args[0];
+                    const start: mod.Vector = args[1];
+                    const stop: mod.Vector = args[2];
+                    
+                    // Add request to queue
+                    this.queue.push({ player, resolve, reject });
+                    
+                    // Call the actual raycast function
+                    mod.RayCast(player, start, stop);
+                } else if (args.length === 2) {
+                    // Cast without player: (start, stop)
+                    const start: mod.Vector = args[0];
+                    const stop: mod.Vector = args[1];
+                    
+                    // Add request to queue
+                    this.queue.push({ player: undefined, resolve, reject });
+                    
+                    // Call the actual raycast function
+                    mod.RayCast(start, stop);
                 } else {
                     reject(new Error('Invalid number of arguments for RaycastManager.cast()'));
-                    return;
-                }
-                
-                // Add request to queue
-                let id = RaycastManager.GetNextID();
-                this.queue.push({ player, id, resolve, reject });
-                
-                // Call the actual raycast function
-                if (player) {
-                    mod.RayCast(player, start, stop);
-                } else {
-                    mod.RayCast(start, stop);
-                }
-                
-                // Visualize if debug is enabled
-                if (debug) {
-                    // Interpolate points along the ray line (minimum 1 per unit)
-                    const rayVector = mod.Subtract(stop, start);
-                    const rayLength = VectorLength(rayVector);
-                    const numPoints = Math.max(2, Math.ceil(rayLength));
-                    const points: mod.Vector[] = [];
-                    
-                    // Create interpolated points
-                    for (let i = 0; i < numPoints; i++) {
-                        const t = i / (numPoints - 1);
-                        const point = mod.Add(start, mod.Multiply(rayVector, t));
-                        points.push(point);
-                    }
-                    
-                    // Visualize start point (cyan) and end point (magenta)
-                    const cyanColor = new rgba(0, 255, 255, 1).NormalizeToLinear().AsModVector3();
-                    const magentaColor = new rgba(255, 0, 255, 1).NormalizeToLinear().AsModVector3();
-                    
-                    // Visualize the ray line
-                    this.VisualizePoints(points, cyanColor, debugDuration);
-                    
-                    // Visualize end point with different color
-                    this.VisualizePoints([stop], magentaColor, debugDuration);
                 }
             } catch (error) {
                 reject(error);
@@ -392,7 +242,7 @@ class RaycastManager {
             player: player,
             point: point,
             normal: normal,
-            ID: request.id
+            ID: RaycastManager.GetNextID()
         });
     }
 
@@ -414,8 +264,7 @@ class RaycastManager {
         // Resolve the promise with miss result
         request.resolve({
             hit: false,
-            player: player,
-            ID: request.id
+            player: player
         });
     }
 
@@ -424,349 +273,6 @@ class RaycastManager {
      */
     getQueueLength(): number {
         return this.queue.length;
-    }
-
-    /**
-     * Visualize an array of points using WorldIcons
-     * 
-     * @param points Array of positions to visualize
-     * @param color Optional color for the icons (default: yellow)
-     * @param debugDuration Duration in seconds before icons are destroyed (default: 5, 0 or negative = persist indefinitely)
-     * @returns Promise that resolves after visualization is complete
-     */
-    async VisualizePoints(
-        points: mod.Vector[], 
-        color?: mod.Vector,
-        debugDuration: number = 5,
-        rayIds?: number[]
-    ): Promise<void> {
-        // Default to yellow if no color provided
-        const iconColor = color ?? new rgba(255, 255, 0, 1).NormalizeToLinear().AsModVector3();
-        const lastIconColor = color ?? new rgba(255, 0, 0, 1).NormalizeToLinear().AsModVector3();
-
-        // Create WorldIcons for each point
-        const icons: mod.WorldIcon[] = [];
-        for (const [idx, point] of points.entries()) {
-            const worldIcon: mod.WorldIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, point, ZERO_VEC);
-            mod.SetWorldIconImage(worldIcon, mod.WorldIconImages.Triangle);
-            mod.SetWorldIconColor(worldIcon, (idx < points.length - 1) ? iconColor : lastIconColor);
-            mod.EnableWorldIconImage(worldIcon, true);
-            if(rayIds){
-                if(idx < rayIds.length){
-                    mod.EnableWorldIconText(worldIcon, true);
-                    mod.SetWorldIconText(worldIcon, mod.Message(rayIds[idx]));
-                }
-            }
-            icons.push(worldIcon);
-        }
-        
-        // If debugDuration is positive, wait and then destroy icons
-        if (debugDuration > 0) {
-            await mod.Wait(debugDuration);
-            for (const icon of icons) {
-                mod.UnspawnObject(icon);
-            }
-        }
-        // If debugDuration <= 0, icons persist indefinitely (no cleanup)
-    }
-
-    /**
-     * Find a valid position on the ground by casting rays forward and down
-     * 
-     * This utility method finds a safe position on the ground by:
-     * 1. Casting a ray forward from the starting position
-     * 2. Using radial collision checks to find a safe position away from obstacles
-     * 3. Casting a ray downward to find the ground
-     * 
-     * @param startPosition The starting position for the raycast
-     * @param direction The direction to cast (normalized)
-     * @param forwardDistance How far to cast forward
-     * @param collisionRadius Safety radius to avoid spawning inside objects
-     * @param downwardDistance Maximum distance to cast downward
-     * @param debug Enable visualization of raycasts (default: false)
-     * @param debugDuration Duration in seconds for debug visualization (default: 5)
-     * @returns Promise resolving to the ground position, or the start position if no ground found
-     */
-    static async FindValidGroundPosition(
-        startPosition: mod.Vector,
-        direction: mod.Vector,
-        forwardDistance: number,
-        collisionRadius: number,
-        downwardDistance: number,
-        debug: boolean = false,
-        debugDuration: number = 5
-    ): Promise<mod.Vector> {
-        let highPosition = startPosition;
-        
-        // Cast forward to check for obstacles
-        let forwardHit: RaycastResult = {hit: false, ID:-1};
-        
-        if (direction) {
-            // Don't let ray start inside the starting object
-            let forwardRayStart = mod.Add(startPosition, mod.Multiply(direction, 1));
-            let forwardRayEnd = mod.Add(forwardRayStart, mod.Multiply(direction, forwardDistance));
-            forwardHit = await raycastManager.cast(forwardRayStart, forwardRayEnd);
-            highPosition = forwardHit.point ?? forwardRayEnd;
-            
-            // Visualize forward ray (blue)
-            if (debug) {
-                const blueColor = new rgba(0, 0, 255, 1).NormalizeToLinear().AsModVector3();
-                await raycastManager.VisualizePoints([forwardRayStart, highPosition], blueColor, debugDuration);
-            }
-            
-            if (DEBUG_MODE) {
-                console.log(`Forward raycast - Hit: ${forwardHit.hit}, Location: ${forwardHit.point ? VectorToString(forwardHit.point) : "none"}`);
-            }
-        }
-
-        // Begin normal downward ray ground check
-        //---------------------------------------
-        // If we hit something, back up by collision radius
-        let downwardRayStart = forwardHit.hit 
-            ? mod.Add(highPosition, mod.Multiply(direction, collisionRadius * -1)) 
-            : highPosition;
-        
-        // Cast downward to find ground
-        let downwardRayEnd = mod.Add(downwardRayStart, mod.Multiply(mod.DownVector(), downwardDistance));
-        let downHit = await raycastManager.cast(downwardRayStart, downwardRayEnd);
-        
-        const finalPosition = downHit.hit ? (downHit.point ?? startPosition) : startPosition;
-        
-        // Visualize downward ray (green) and final position (red)
-        if (debug) {
-            const greenColor = new rgba(0, 255, 0, 1).NormalizeToLinear().AsModVector3();
-            const redColor = new rgba(255, 0, 0, 1).NormalizeToLinear().AsModVector3();
-            await raycastManager.VisualizePoints([downwardRayStart, finalPosition], greenColor, debugDuration);
-            await raycastManager.VisualizePoints([finalPosition], redColor, debugDuration);
-        }
-        
-        if (DEBUG_MODE) {
-            console.log(`Downward raycast - Hit: ${downHit.hit}, Location: ${downHit.point ? VectorToString(downHit.point) : "none"}`);
-        }
-        
-        // Return ground position if found, otherwise return start position
-        return finalPosition;
-        
-        // End normal downward ray ground check
-        //-------------------------------------
-        
-        // // Use radial validation to find a safe spawn position
-        // const validatedResult = await RaycastManager.ValidateSpawnLocationWithRadialCheck(
-        //     highPosition,
-        //     collisionRadius,
-        //     SPAWN_VALIDATION_DIRECTIONS,
-        //     downwardDistance
-        // );
-        
-        // if (!validatedResult.isValid && DEBUG_MODE) {
-        //     console.log(`Warning: FindValidGroundPosition could not find valid location`);
-        // }
-        
-        // return validatedResult.position;
-    }
-
-    async ProjectileRaycast(
-        startPosition: mod.Vector,
-        direction: mod.Vector,
-        speed: number,
-        distance: number,
-        sampleRate: number,
-        gravity: number = 9.8,
-        debug: boolean = false,
-        debugDuration: number = 5
-    ): Promise<ProjectileRaycastResult> {
-        const arcPoints: mod.Vector[] = [];
-        const rayIds: number[] = [];
-        const timeStep = 1.0 / sampleRate;
-        
-        const dirNormalized = mod.Normalize(direction);
-        const velocity = mod.Multiply(dirNormalized, speed);
-        
-        let currentPos = startPosition;
-        let currentVelocity = velocity;
-        let totalDistance = 0;
-        let hit = false;
-        let hitPosition: mod.Vector | undefined;
-        let hitNormal: mod.Vector | undefined;
-        
-        arcPoints.push(currentPos);
-        
-        while (totalDistance < distance && !hit) {
-            const gravityVec = mod.Multiply(mod.DownVector(), gravity * timeStep);
-            currentVelocity = mod.Add(currentVelocity, gravityVec);
-            
-            const displacement = mod.Multiply(currentVelocity, timeStep);
-            const nextPos = mod.Add(currentPos, displacement);
-            
-            const rayResult = await this.cast(currentPos, nextPos);
-            
-            if (rayResult.hit && rayResult.point) {
-                hit = true;
-                hitPosition = rayResult.point;
-                hitNormal = rayResult.normal;
-                arcPoints.push(rayResult.point);
-                rayIds.push(rayResult.ID);
-                break;
-            }
-            
-            currentPos = nextPos;
-            arcPoints.push(currentPos);
-            rayIds.push(rayResult.ID);
-            
-            totalDistance += VectorLength(displacement);
-        }
-        
-        // Visualize arc path if debug is enabled (yellow by default)
-        if (debug && arcPoints.length > 0) {
-            this.VisualizePoints(arcPoints, undefined, debugDuration, rayIds);
-        }
-        
-        return {
-            hit,
-            arcPoints,
-            rayIds,
-            hitPosition,
-            hitNormal
-        };
-    }
-
-    /**
-     * Generate evenly spaced radial directions in a horizontal plane
-     * 
-     * @param numDirections Number of directions to generate around a circle
-     * @returns Array of normalized direction vectors (Y component = 0)
-     */
-    private static GenerateRadialDirections(numDirections: number): mod.Vector[] {
-        const directions: mod.Vector[] = [];
-        const angleStep = (Math.PI * 2) / numDirections;
-        
-        for (let i = 0; i < numDirections; i++) {
-            const angle = i * angleStep;
-            const x = Math.cos(angle);
-            const z = Math.sin(angle);
-            directions.push(mod.CreateVector(x, 0, z));
-        }
-        
-        return directions;
-    }
-
-    /**
-     * Validate and adjust a spawn location using radial collision checks
-     * 
-     * This function performs multiple passes of radial raycasts to detect nearby geometry
-     * and adjust the position away from collisions. If a valid position is found, it performs
-     * a downward raycast to find the ground.
-     * 
-     * @param centerPosition Starting position to validate
-     * @param checkRadius Radius to check for collisions
-     * @param numDirections Number of directions to check (evenly distributed)
-     * @param downwardDistance Maximum distance for downward ground-finding raycast
-     * @param maxIterations Maximum number of adjustment passes (default: 2)
-     * @returns Promise resolving to validated position and validity flag
-     */
-    static async ValidateSpawnLocationWithRadialCheck(
-        centerPosition: mod.Vector,
-        checkRadius: number,
-        numDirections: number,
-        downwardDistance: number,
-        maxIterations: number = SPAWN_VALIDATION_MAX_ITERATIONS
-    ): Promise<ValidatedSpawnResult> {
-        let currentPosition = centerPosition;
-        let foundCollision = false;
-        
-        // Generate radial check directions
-        const directions = RaycastManager.GenerateRadialDirections(numDirections);
-        
-        if (DEBUG_MODE) {
-            console.log(`ValidateSpawnLocation: Starting at ${VectorToString(centerPosition)} with radius ${checkRadius}`);
-        }
-        
-        // Iterative adjustment passes
-        for (let iteration = 0; iteration < maxIterations; iteration++) {
-            foundCollision = false;
-            let adjustmentVector = mod.CreateVector(0, 0, 0);
-            let collisionCount = 0;
-            
-            // Cast rays in all directions
-            for (const direction of directions) {
-                const rayEnd = mod.Add(currentPosition, mod.Multiply(direction, checkRadius));
-                const rayResult = await raycastManager.cast(currentPosition, rayEnd);
-                
-                if (rayResult.hit && rayResult.point) {
-                    foundCollision = true;
-                    collisionCount++;
-                    
-                    // Calculate how much the ray penetrated into the collision radius
-                    const hitVector = mod.Subtract(rayResult.point, currentPosition);
-                    const hitDistance = VectorLength(hitVector);
-                    const penetrationDepth = checkRadius - hitDistance;
-                    
-                    // Create a push vector away from the collision
-                    // Direction is opposite to the hit direction, scaled by penetration
-                    const pushVector = mod.Multiply(direction, -penetrationDepth);
-                    adjustmentVector = mod.Add(adjustmentVector, pushVector);
-                    
-                    if (DEBUG_MODE) {
-                        console.log(`  Iteration ${iteration}: Collision at distance ${hitDistance.toFixed(2)} (penetration: ${penetrationDepth.toFixed(2)})`);
-                    }
-                }
-            }
-            
-            // If we found collisions, apply the average adjustment
-            if (foundCollision && collisionCount > 0) {
-                // Average the adjustment vector
-                adjustmentVector = mod.Multiply(adjustmentVector, 1.0 / collisionCount);
-                currentPosition = mod.Add(currentPosition, adjustmentVector);
-                
-                if (DEBUG_MODE) {
-                    console.log(`  Iteration ${iteration}: Adjusted position by ${VectorToString(adjustmentVector)}`);
-                    console.log(`  New position: ${VectorToString(currentPosition)}`);
-                }
-            } else {
-                // No collisions found, position is valid
-                if (DEBUG_MODE) {
-                    console.log(`  Iteration ${iteration}: No collisions, position is clear`);
-                }
-                break;
-            }
-        }
-        
-        // Perform downward raycast to find ground
-        // Add height offset to ensure ray starts above ground and doesn't clip through
-        const downwardRayStart = mod.Add(currentPosition, mod.CreateVector(0, SPAWN_VALIDATION_HEIGHT_OFFSET, 0));
-        const downwardRayEnd = mod.Add(downwardRayStart, mod.Multiply(mod.DownVector(), downwardDistance));
-        const groundResult = await raycastManager.cast(downwardRayStart, downwardRayEnd);
-        
-        let finalPosition = currentPosition;
-        let isValid = true;
-        
-        if (groundResult.hit && groundResult.point) {
-            finalPosition = groundResult.point;
-            
-            if (DEBUG_MODE) {
-                console.log(`  Ground found at ${VectorToString(finalPosition)}`);
-            }
-        } else {
-            // No ground found - position is invalid
-            isValid = false;
-            
-            if (DEBUG_MODE) {
-                console.log(`  WARNING: No ground found below position`);
-            }
-        }
-        
-        // Final check: if we still have collisions after max iterations, mark as invalid
-        if (foundCollision) {
-            isValid = false;
-            if (DEBUG_MODE) {
-                console.log(`  WARNING: Still have collisions after ${maxIterations} iterations`);
-            }
-        }
-        
-        return {
-            position: finalPosition,
-            isValid: isValid
-        };
     }
 }
 
@@ -818,10 +324,10 @@ class PlayerScore {
 //==============================================================================================
 
 class JSPlayer {
-    readonly player: mod.Player;
-    readonly playerId: number;
+    player: mod.Player;
+    playerId: number;
     score: PlayerScore;
-    readonly joinOrder: number; // Track join order for team balancing
+    joinOrder: number; // Track join order for team balancing
     heldFlags: Flag[] = [];
 
     static playerInstances: mod.Player[] = [];
@@ -941,13 +447,13 @@ class CaptureZoneConfig {
 }
 
 class CaptureZone {
-    readonly team: mod.Team;
-    readonly teamId: number;
-    readonly areaTrigger: mod.AreaTrigger | undefined;
-    readonly captureZoneID?: number;
-    readonly captureZoneSpatialObjId?: number;
-    readonly iconPosition: mod.Vector;
-    readonly baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
+    team: mod.Team;
+    teamId: number;
+    areaTrigger: mod.AreaTrigger | undefined;
+    captureZoneID?: number;
+    captureZoneSpatialObjId?: number;
+    iconPosition: mod.Vector;
+    baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
 
     constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
         this.team = team;
@@ -1067,15 +573,15 @@ class CaptureZone {
 //==============================================================================================
 
 class Flag {
-    readonly flagId: number;
-    readonly owningTeamId: number;
-    readonly allowedCapturingTeams: number[];
+    flagId: number;
+    owningTeamId: number;
+    allowedCapturingTeams: number[];
     customColor?: mod.Vector;
     
     // Legacy properties (kept for backwards compatibility during transition)
-    readonly team: mod.Team;
-    readonly teamId: number;
-    readonly homePosition: mod.Vector;
+    team: mod.Team;
+    teamId: number;
+    homePosition: mod.Vector;
     currentPosition: mod.Vector;
     
     // State
@@ -1093,6 +599,7 @@ class Flag {
     autoReturnTime: number = 0;
     
     // Game objects
+    // flagHomeWorldIcon: mod.WorldIcon;
     flagRecoverIcon: mod.WorldIcon;
     flagCarriedIcons: Map<number, mod.WorldIcon> = new Map(); // One icon per opposing team
     flagInteractionPoint: mod.InteractPoint | null = null;
@@ -1261,44 +768,50 @@ class Flag {
         }
     }
     
-    async DropFlag(position?: mod.Vector, direction?: mod.Vector, dropDistance: number = FLAG_DROP_DISTANCE): Promise<void> {
+    async DropFlag(position?: mod.Vector, direction?: mod.Vector, dropDistance: number = 2.5): Promise<void> {
         if (!this.isBeingCarried) return;
 
         this.isAtHome = false;
         this.isBeingCarried = false;
         this.isDropped = true;
-        let facingDir: mod.Vector = ZERO_VEC;
 
-        // Determine drop position and direction
+        const rayHeightOffGround = mod.CreateVector(0.0, 1.0, 0.0);     // How high from the ground should collision rays start from
+        const flagCollisionRadius = 1;                                  // Offset to make sure we don't spawn the flag inside an object
+
+        // Set flag drop point
         if(this.carrierPlayer){
             let soldierPosition = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetPosition);
-            facingDir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
+            let facingDir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
 
             // Flatten player look direction so it is parallel to X and Z axis
             position = position ?? soldierPosition;
             direction = direction ?? mod.Normalize(mod.CreateVector(mod.XComponentOf(facingDir), 0, mod.ZComponentOf(facingDir)));
         } else {
             position = position ?? this.currentPosition;
-            direction = direction ?? mod.DownVector();
         }
 
-        // Use RaycastManager utility to find a valid ground position
-        // this.currentPosition = await RaycastManager.FindValidGroundPosition(
-        //     mod.Add(position, mod.CreateVector(0.0, SOLDIER_HALF_HEIGHT, 0.0)),
-        //     facingDir,
-        //     dropDistance,
-        //     FLAG_COLLISION_RADIUS,
-        //     FLAG_DROP_RAYCAST_DISTANCE
-        // );
+        // Find a valid flag location moving in the provided direction towards the offset and check for ray collisions so we don't spawn inside an object
+        let forwardHit: RaycastResult = {hit: false};
+        let flagSpawnPositionHigh: mod.Vector = mod.Add(position, rayHeightOffGround);
+        if(direction){
+            let forwardRayStart = mod.Add(mod.Add(position, mod.Multiply(direction, 1)), rayHeightOffGround); // Don't let ray start inside soldier
+            flagSpawnPositionHigh = mod.Add(forwardRayStart, mod.Multiply(direction, dropDistance));
+            forwardHit = await raycastManager.cast(forwardRayStart, flagSpawnPositionHigh);
+            flagSpawnPositionHigh = forwardHit.point ?? flagSpawnPositionHigh;
+            if(DEBUG_MODE)
+                console.log(`Checking for valid flag drop location forwards. Hit:${forwardHit.hit}, Location:${forwardHit.point ? VectorToString(forwardHit.point) : ""}`);
+        } else {
+            direction = mod.DownVector();
+        }
 
-        let flagPath = await raycastManager.ProjectileRaycast(
-            mod.Add(
-                mod.Add(position, mod.CreateVector(0.0, SOLDIER_HALF_HEIGHT, 0.0)),     // Start halfway up soldier body
-                mod.Multiply(facingDir, 1.75)       // Start projectile arc away from player to avoid intersections
-            ),
-            facingDir, 5, 100, 5, 9.8, true, 5);
-        this.currentPosition = flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position; // If we don't have a valid hit lcoation, default to soldier
-
+        // Find a valid flag location looking downwards
+        let dropRayStart = forwardHit.hit ? mod.Add(flagSpawnPositionHigh, mod.Multiply(direction, flagCollisionRadius * -1)) : flagSpawnPositionHigh;
+        let dropRayEnd = mod.Add(dropRayStart, mod.Multiply(mod.DownVector(), 1000));
+        let dropHit = await raycastManager.cast(dropRayStart, dropRayEnd);
+        if(DEBUG_MODE)
+            console.log(`Checking for valid flag drop location downwards. Hit:${dropHit.hit}, Location:${dropHit.point ? VectorToString(dropHit.point) : ""}`);
+        this.currentPosition = dropHit.hit ? dropHit.point ?? ZERO_VEC : position;
+        
         // Remove carrier restrictions
         if (this.carrierPlayer) {
             this.RestoreCarrierWeapons(this.carrierPlayer);
@@ -1310,8 +823,13 @@ class Flag {
         if (this.flagProp) {
             mod.UnspawnObject(this.flagProp);
         }
+        let flagSpawnHeight = mod.Add(this.currentPosition,  mod.CreateVector(0.0, 0.5, 0.0));
         let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
+        let flagPositionDelta = mod.Subtract(this.currentPosition, flagSpawnHeight);
         this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);
+        //this.flagProp = mod.SpawnObject(FLAG_PROP, flagSpawnHeight, flagRotation);
+        // if(this.flagProp)
+        //     mod.MoveObjectOverTime(this.flagProp, flagPositionDelta, ZERO_VEC, 0.2, false, false);
 
         // Update the position of the flag interaction point
         this.UpdateFlagInteractionPoint();
@@ -1361,13 +879,11 @@ class Flag {
     }
 
     UpdateFlagInteractionPoint(){
-        if(this.flagInteractionPoint){
-            try { 
-                mod.UnspawnObject(this.flagInteractionPoint); 
-            } catch(error: unknown){}
+        if(this.flagInteractionPoint && mod.GetObjId(this.flagInteractionPoint) > 1){
+            mod.UnspawnObject(this.flagInteractionPoint);
         }
 
-        let flagInteractOffset = mod.Add(this.currentPosition, mod.CreateVector(0, FLAG_INTERACTION_HEIGHT_OFFSET, 0));
+        let flagInteractOffset = mod.Add(this.currentPosition, mod.CreateVector(0, 1.3, 0));
         this.flagInteractionPoint = mod.SpawnObject(mod.RuntimeSpawn_Common.InteractPoint, flagInteractOffset, ZERO_VEC);
         if(this.flagInteractionPoint){
             mod.EnableInteractPoint(this.flagInteractionPoint, true);
@@ -1378,6 +894,10 @@ class Flag {
         await mod.Wait(FLAG_PICKUP_DELAY);
         if (this.isDropped) {
             this.canBePickedUp = true;
+            if (DEBUG_MODE) {
+                // console.log("Flag can now be picked up");
+                //mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.flag_can_pickup));
+            }
         }
     }
 
@@ -1888,8 +1408,10 @@ function RefreshScoreboard(){
 }
 
 async function TickUpdate(): Promise<void> {
+    const tickRate = 0.016; // ~60fps
+    
     while (gameStarted) {
-        await mod.Wait(TICK_RATE);
+        await mod.Wait(tickRate);
         
         // Update all flag carrier positions
         for (const [flagId, flagData] of flags.entries()) {
@@ -2063,7 +1585,7 @@ export function OnPlayerEnterVehicleSeat(
 ): void {
     // If player is carrying flag and in driver seat, force to passenger
     if (IsCarryingAnyFlag(eventPlayer)) {      
-        if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
+        if (mod.GetPlayerVehicleSeat(eventPlayer) === 0) { // Driver seat
             if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
             mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat))
             ForceToPassengerSeat(eventPlayer, eventVehicle);
@@ -2192,7 +1714,7 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     const seatCount = mod.GetVehicleSeatCount(vehicle);
     
     // Try to find an empty passenger seat
-    for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
+    for (let i = seatCount-1; i >= 1; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
             mod.ForcePlayerToSeat(player, vehicle, i);
             if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
@@ -2329,17 +1851,6 @@ function VectorToString(v: mod.Vector): string {
     return `X: ${mod.XComponentOf(v)}, Y: ${mod.YComponentOf(v)}, Z: ${mod.ZComponentOf(v)}`
 }
 
-function VectorLength(vec: mod.Vector): number{
-    return Math.sqrt(VectorLengthSquared(vec));
-}
-
-function VectorLengthSquared(vec: mod.Vector): number{
-    let xLength = mod.XComponentOf(vec);
-    let yLength = mod.YComponentOf(vec);
-    let zLength = mod.ZComponentOf(vec);
-    return Math.sqrt((xLength * xLength) + (yLength * yLength) + (zLength * yLength));
-}
-
 function GetTeamName(team: mod.Team): string {
     let teamName = teamConfigs.get(mod.GetObjId(team))?.name;
     if(teamName){
@@ -2404,7 +1915,7 @@ function DropAllFlags(player: mod.Player){
     let playerPosX = mod.XComponentOf(playerPos);
     let playerPosY = mod.YComponentOf(playerPos);
     let playerPosZ = mod.ZComponentOf(playerPos);
-    let flagDropRadius = FLAG_DROP_RING_RADIUS;
+    let flagDropRadius = 2.5;
 
     let carriedFlags = GetCarriedFlags(player);
     let angleInc = Math.PI * 2.0 / carriedFlags.length;
