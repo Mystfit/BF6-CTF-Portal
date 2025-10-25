@@ -7,6 +7,60 @@ try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof
  * Author: Mystfit and Claude Sonnet 4.5 (20250929).
  */
 
+//==============================================================================================
+// HOW IT WORKS - Understanding CTF Game Flow
+//==============================================================================================
+/*
+ * FLAG LIFECYCLE EXPLAINED:
+ * =========================
+ * 1. AT HOME (isAtHome=true)
+ *    - Flag sits at spawn point with interaction point
+ *    - Opposing teams can pick it up
+ *    - Own team sees "DEFEND" icons
+ *
+ * 2. BEING CARRIED (isBeingCarried=true)
+ *    - Player picked up flag -> becomes carrier
+ *    - Carrier forced to melee weapon (can't shoot)
+ *    - Carrier can't drive vehicles (forced to passenger seat)
+ *    - VFX smoke trail follows carrier
+ *    - Icons update to show "PICKUP" or "RECOVER" for different teams
+ *
+ * 3. DROPPED (isDropped=true)
+ *    - Carrier died or manually dropped flag
+ *    - 3-second delay before anyone can pick it up
+ *    - Auto-returns to base after 30 seconds if not picked up
+ *    - Own team can return it early by interacting
+ *
+ * 4. SCORING
+ *    - Carrier enters their team's capture zone with enemy flag
+ *    - Must have own flag at home to score
+ *    - Team gets 1 point, first to TARGET_SCORE wins
+ *
+ * MULTI-TEAM SUPPORT:
+ * ===================
+ * - Configurable 2-7 team gameplay via GameModeConfig
+ * - Each flag can restrict which teams can capture it
+ * - Dynamic scoreboard adapts to team count
+ * - Team balance system moves players between teams
+ *
+ * CONFIGURATION SYSTEM:
+ * =====================
+ * To create a custom game mode, define a GameModeConfig:
+ * 
+ * const config = {
+ *   teams: [
+ *     { teamId: 1, name: "Red", color: redVector, hqId: 1 },
+ *     { teamId: 2, name: "Blue", color: blueVector, hqId: 2 }
+ *   ],
+ *   flags: [
+ *     { flagId: 1, owningTeamId: 1 },  // Red flag
+ *     { flagId: 2, owningTeamId: 2 }   // Blue flag
+ *   ]
+ * };
+ * 
+ * Then call LoadGameModeConfig(config) to apply it.
+ */
+
 //@ts-ignore
 import * as modlib from 'modlib';
 
@@ -19,14 +73,15 @@ const VERSION = [1, 1, 0];
 const DEBUG_MODE = true;                                            // Print extra debug messages
 
 // Game Settings
-const TARGET_SCORE = 5;                                             // Points needed to win
+const GAMEMODE_TARGET_SCORE = 5;                                             // Points needed to win
 
 // Flag settings
 const FLAG_PICKUP_DELAY = 3;                                        // Seconds before dropped flag can be picked up
 const FLAG_AUTO_RETURN_TIME = 30;                                   // Seconds before dropped flag auto-returns to base
 const FLAG_SFX_DURATION = 5.0;                                      // Time delay before alarm sound shuts off
 const FLAG_ICON_HEIGHT_OFFSET = 2.5;                                // Height that the flag icon should be placed above a flag
-const FLAG_PROP = mod.RuntimeSpawn_Common.ServerRack_01;            // Prop representing a flag at a spawner and when dropped
+const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
+const FLAG_THROW_SPEED = 5;                                         // Speed in units p/s to throw a flag away a player
 
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up
@@ -34,7 +89,7 @@ const CARRIER_FORCED_WEAPON_SLOT = mod.InventorySlots.MeleeWeapon;  // Force fla
 const CARRIER_CAN_HOLD_MULTIPLE_FLAGS = true;                       // Let the flag carrier pick up multiple flags at once
 
 // Team balance
-const AUTO_TEAM_BALANCE: boolean = true;                            // Make sure teams are evenly balanced 
+const TEAM_AUTO_BALANCE: boolean = true;                            // Make sure teams are evenly balanced 
 const TEAM_BALANCE_DELAY = 5.0;                                     // Seconds to delay before auto-balancing teams
 const TEAM_BALANCE_CHECK_INTERVAL = 10;                             // Check balance every N seconds
 
@@ -47,14 +102,15 @@ const TEAM_BALANCE_CHECK_INTERVAL = 10;                             // Check bal
 const FLAG_DROP_DISTANCE = 2.5;                                     // Distance in front of player when dropping flag
 const FLAG_INTERACTION_HEIGHT_OFFSET = 1.3;                         // Height offset for flag interaction point
 const FLAG_SPAWN_HEIGHT_OFFSET = 0.5;                               // Height offset when spawning flag above ground
-const FLAG_COLLISION_RADIUS = 1.0;                                  // Safety radius to prevent spawning inside objects
+const FLAG_COLLISION_RADIUS = 1;                                    // Safety radius to prevent spawning inside objects
 const FLAG_DROP_RAYCAST_DISTANCE = 100;                             // Maximum distance for downward raycast when dropping
 const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
+const SOLDIER_HEIGHT = 2;                                           // Full soldier height
 
 // Spawn validation settings
-const SPAWN_VALIDATION_DIRECTIONS = 6;                              // Number of radial check directions
-const SPAWN_VALIDATION_MAX_ITERATIONS = 2;                          // Maximum adjustment passes
+const SPAWN_VALIDATION_DIRECTIONS = 4;                              // Number of radial check directions
+const SPAWN_VALIDATION_MAX_ITERATIONS = 1;                          // Maximum adjustment passes
 const SPAWN_VALIDATION_HEIGHT_OFFSET = 0.5;                         // Height offset above adjusted position for ground detection ray
 
 // Vehicle seat indices
@@ -123,58 +179,26 @@ const TEAM_ID_STRIDE_OFFSET = 10;
 
 
 //==============================================================================================
-// HOW IT WORKS - Understanding CTF Game Flow
+// GLOBAL STATE
 //==============================================================================================
-/*
- * FLAG LIFECYCLE EXPLAINED:
- * =========================
- * 1. AT HOME (isAtHome=true)
- *    - Flag sits at spawn point with interaction point
- *    - Opposing teams can pick it up
- *    - Own team sees "DEFEND" icons
- *
- * 2. BEING CARRIED (isBeingCarried=true)
- *    - Player picked up flag -> becomes carrier
- *    - Carrier forced to melee weapon (can't shoot)
- *    - Carrier can't drive vehicles (forced to passenger seat)
- *    - VFX smoke trail follows carrier
- *    - Icons update to show "PICKUP" or "RECOVER" for different teams
- *
- * 3. DROPPED (isDropped=true)
- *    - Carrier died or manually dropped flag
- *    - 3-second delay before anyone can pick it up
- *    - Auto-returns to base after 30 seconds if not picked up
- *    - Own team can return it early by interacting
- *
- * 4. SCORING
- *    - Carrier enters their team's capture zone with enemy flag
- *    - Must have own flag at home to score
- *    - Team gets 1 point, first to TARGET_SCORE wins
- *
- * MULTI-TEAM SUPPORT:
- * ===================
- * - Configurable 2-7 team gameplay via GameModeConfig
- * - Each flag can restrict which teams can capture it
- * - Dynamic scoreboard adapts to team count
- * - Team balance system moves players between teams
- *
- * CONFIGURATION SYSTEM:
- * =====================
- * To create a custom game mode, define a GameModeConfig:
- * 
- * const config = {
- *   teams: [
- *     { teamId: 1, name: "Red", color: redVector, hqId: 1 },
- *     { teamId: 2, name: "Blue", color: blueVector, hqId: 2 }
- *   ],
- *   flags: [
- *     { flagId: 1, owningTeamId: 1 },  // Red flag
- *     { flagId: 2, owningTeamId: 2 }   // Blue flag
- *   ]
- * };
- * 
- * Then call LoadGameModeConfig(config) to apply it.
- */
+
+let gameStarted = false;
+
+// Team balance state
+let lastBalanceCheckTime = 0;
+let balanceInProgress = false;
+
+// Team references
+let teamNeutral: mod.Team;
+let team1: mod.Team;
+let team2: mod.Team;
+let team3: mod.Team;
+let team4: mod.Team;
+
+// Time
+let lastTickTime: number = 0;
+let lastSecondUpdateTime: number = 0;
+
 
 //==============================================================================================
 // COLOR & UTILITY CLASSES
@@ -219,7 +243,7 @@ const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
     [TeamID.TEAM_4, new rgba(4, 103, 252, 1).NormalizeToLinear().AsModVector3()],
     [TeamID.TEAM_5, new rgba(249, 6, 6, 1).NormalizeToLinear().AsModVector3()],
     [TeamID.TEAM_6, new rgba(233, 249, 6, 1).NormalizeToLinear().AsModVector3()],
-    [TeamID.TEAM_7, new rgba(255, 255, 255, 1).NormalizeToLinear().AsModVector3()]
+    [TeamID.TEAM_7, new rgba(133, 133, 133, 1).NormalizeToLinear().AsModVector3()]
 ]);
 
 
@@ -253,6 +277,10 @@ interface RaycastRequest {
     id: number,
     resolve: (result: RaycastResult) => void;  // Promise resolve function
     reject: (error: any) => void;              // Promise reject function
+    debug?: boolean;        // Whether to visualize this raycast
+    debugDuration?: number; // Duration for debug visualization
+    start?: mod.Vector;     // Start position (for visualization)
+    stop?: mod.Vector;      // End position (for visualization)
 }
 
 interface ProjectileRaycastResult {
@@ -271,9 +299,51 @@ interface ValidatedSpawnResult {
 class RaycastManager {
     private queue: RaycastRequest[] = [];
     private static ids: number = 0;
+
+    static GetID(): number {
+        return RaycastManager.ids;
+    }
     
     static GetNextID(): number{
         return ++RaycastManager.ids;
+    }
+
+    /**
+     * Cast a ray from start to stop without player context
+     * @param start Start position
+     * @param stop End position
+     * @param debug Enable visualization of raycasts (default: false)
+     * @param debugDuration Duration in seconds for debug visualization (default: 5)
+     * @returns Promise that resolves with raycast result
+     */
+    cast(start: mod.Vector, stop: mod.Vector, debug: boolean = false, debugDuration: number = 5): Promise<RaycastResult> {
+        return new Promise<RaycastResult>(async (resolve, reject) => {
+            try {
+                // Validate parameters
+                if (!start || !stop) {
+                    reject(new Error('RaycastManager.cast() requires valid start and stop vectors'));
+                    return;
+                }
+                
+                // Add request to queue with debug info
+                let id = RaycastManager.GetNextID();
+                this.queue.push({ 
+                    player: undefined, 
+                    id, 
+                    resolve, 
+                    reject,
+                    debug,
+                    debugDuration,
+                    start,
+                    stop
+                });
+                
+                // Call the actual raycast function
+                mod.RayCast(start, stop);
+            } catch (error) {
+                reject(error);
+            }
+        });
     }
 
     /**
@@ -285,84 +355,35 @@ class RaycastManager {
      * @param debugDuration Duration in seconds for debug visualization (default: 5)
      * @returns Promise that resolves with raycast result
      */
-    cast(player: mod.Player, start: mod.Vector, stop: mod.Vector, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
-    
-    /**
-     * Cast a ray from start to stop without player context
-     * @param start Start position
-     * @param stop End position
-     * @param debug Enable visualization of raycasts (default: false)
-     * @param debugDuration Duration in seconds for debug visualization (default: 5)
-     * @returns Promise that resolves with raycast result
-     */
-    cast(start: mod.Vector, stop: mod.Vector, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
-
-    // Implementation
-    cast(...args: any[]): Promise<RaycastResult> {
+    castWithPlayer(player: mod.Player, start: mod.Vector, stop: mod.Vector, debug: boolean = false, debugDuration: number = 5): Promise<RaycastResult> {
         return new Promise<RaycastResult>(async (resolve, reject) => {
             try {
-                let player: mod.Player | undefined;
-                let start: mod.Vector;
-                let stop: mod.Vector;
-                let debug: boolean = false;
-                let debugDuration: number = 5;
-                
-                // Determine which overload was called
-                if (args.length >= 3 && typeof args[0] !== 'number') {
-                    // Cast with player: (player, start, stop, debug?, debugDuration?)
-                    player = args[0];
-                    start = args[1];
-                    stop = args[2];
-                    debug = args[3] ?? false;
-                    debugDuration = args[4] ?? 5;
-                } else if (args.length >= 2) {
-                    // Cast without player: (start, stop, debug?, debugDuration?)
-                    start = args[0];
-                    stop = args[1];
-                    debug = args[2] ?? false;
-                    debugDuration = args[3] ?? 5;
-                    player = undefined;
-                } else {
-                    reject(new Error('Invalid number of arguments for RaycastManager.cast()'));
+                // Validate parameters
+                if (!start || !stop) {
+                    reject(new Error('RaycastManager.castWithPlayer() requires valid start and stop vectors'));
                     return;
                 }
                 
-                // Add request to queue
+                if (!player || !mod.IsPlayerValid(player)) {
+                    reject(new Error('RaycastManager.castWithPlayer() requires a valid player'));
+                    return;
+                }
+                
+                // Add request to queue with debug info
                 let id = RaycastManager.GetNextID();
-                this.queue.push({ player, id, resolve, reject });
+                this.queue.push({ 
+                    player, 
+                    id, 
+                    resolve, 
+                    reject,
+                    debug,
+                    debugDuration,
+                    start,
+                    stop
+                });
                 
                 // Call the actual raycast function
-                if (player) {
-                    mod.RayCast(player, start, stop);
-                } else {
-                    mod.RayCast(start, stop);
-                }
-                
-                // Visualize if debug is enabled
-                if (debug) {
-                    // Interpolate points along the ray line (minimum 1 per unit)
-                    const rayVector = mod.Subtract(stop, start);
-                    const rayLength = VectorLength(rayVector);
-                    const numPoints = Math.max(2, Math.ceil(rayLength));
-                    const points: mod.Vector[] = [];
-                    
-                    // Create interpolated points
-                    for (let i = 0; i < numPoints; i++) {
-                        const t = i / (numPoints - 1);
-                        const point = mod.Add(start, mod.Multiply(rayVector, t));
-                        points.push(point);
-                    }
-                    
-                    // Visualize start point (cyan) and end point (magenta)
-                    const cyanColor = new rgba(0, 255, 255, 1).NormalizeToLinear().AsModVector3();
-                    const magentaColor = new rgba(255, 0, 255, 1).NormalizeToLinear().AsModVector3();
-                    
-                    // Visualize the ray line
-                    this.VisualizePoints(points, cyanColor, debugDuration);
-                    
-                    // Visualize end point with different color
-                    this.VisualizePoints([stop], magentaColor, debugDuration);
-                }
+                mod.RayCast(player, start, stop);
             } catch (error) {
                 reject(error);
             }
@@ -385,6 +406,11 @@ class RaycastManager {
 
         // Pop the first request from the queue (FIFO)
         const request = this.queue.shift()!;
+        
+        // Visualize if debug was enabled for this raycast
+        if (request.debug && request.start && request.stop) {
+            this.VisualizeRaycast(request.start, point, request.debugDuration || 5, true);
+        }
         
         // Resolve the promise with hit result
         request.resolve({
@@ -411,6 +437,11 @@ class RaycastManager {
         // Pop the first request from the queue (FIFO)
         const request = this.queue.shift()!;
         
+        // Visualize if debug was enabled for this raycast
+        if (request.debug && request.start && request.stop) {
+            this.VisualizeRaycast(request.start, request.stop, request.debugDuration || 5, false);
+        }
+        
         // Resolve the promise with miss result
         request.resolve({
             hit: false,
@@ -427,28 +458,75 @@ class RaycastManager {
     }
 
     /**
+     * Visualize a raycast result
+     * @param start Start position of the ray
+     * @param end End position (hit point if hit=true, intended end if hit=false)
+     * @param debugDuration Duration in seconds for visualization
+     * @param hit Whether the ray hit something
+     */
+    private async VisualizeRaycast(
+        start: mod.Vector,
+        end: mod.Vector,
+        debugDuration: number,
+        hit: boolean
+    ): Promise<void> {
+        // Interpolate points along the ray line (minimum 1 per unit)
+        const rayVector = mod.Subtract(end, start);
+        const rayLength = VectorLength(rayVector);
+        const numPoints = Math.max(2, Math.ceil(rayLength));
+        const points: mod.Vector[] = [];
+        
+        // Create interpolated points
+        for (let i = 0; i < numPoints; i++) {
+            const t = i / (numPoints - 1);
+            const point = mod.Add(start, mod.Multiply(rayVector, t));
+            points.push(point);
+        }
+        
+        // Choose colors based on hit/miss
+        // Hit: green ray, red endpoint
+        // Miss: yellow ray, magenta endpoint
+        const rayColor = hit 
+            ? new rgba(0, 255, 0, 1).NormalizeToLinear().AsModVector3()
+            : new rgba(255, 255, 0, 1).NormalizeToLinear().AsModVector3();
+        const endColor = hit
+            ? new rgba(255, 0, 0, 1).NormalizeToLinear().AsModVector3()
+            : new rgba(255, 0, 255, 1).NormalizeToLinear().AsModVector3();
+        
+        // Visualize the ray line
+        this.VisualizePoints(points, rayColor, debugDuration);
+        
+        // Visualize end point with different color
+        this.VisualizePoints([end], endColor, debugDuration, [], hit ? mod.WorldIconImages.Cross : mod.WorldIconImages.Triangle);
+    }
+
+    /**
      * Visualize an array of points using WorldIcons
      * 
      * @param points Array of positions to visualize
      * @param color Optional color for the icons (default: yellow)
      * @param debugDuration Duration in seconds before icons are destroyed (default: 5, 0 or negative = persist indefinitely)
+     * @param rayIds Array of text to draw per point
+     * @param iconImage Custom icon to use
      * @returns Promise that resolves after visualization is complete
      */
     async VisualizePoints(
         points: mod.Vector[], 
         color?: mod.Vector,
         debugDuration: number = 5,
-        rayIds?: number[]
+        rayIds?: number[],
+        iconImage?: mod.WorldIconImages
     ): Promise<void> {
         // Default to yellow if no color provided
         const iconColor = color ?? new rgba(255, 255, 0, 1).NormalizeToLinear().AsModVector3();
         const lastIconColor = color ?? new rgba(255, 0, 0, 1).NormalizeToLinear().AsModVector3();
+        const icon = iconImage ?? mod.WorldIconImages.Triangle;
 
         // Create WorldIcons for each point
         const icons: mod.WorldIcon[] = [];
         for (const [idx, point] of points.entries()) {
             const worldIcon: mod.WorldIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, point, ZERO_VEC);
-            mod.SetWorldIconImage(worldIcon, mod.WorldIconImages.Triangle);
+            mod.SetWorldIconImage(worldIcon,icon);
             mod.SetWorldIconColor(worldIcon, (idx < points.length - 1) ? iconColor : lastIconColor);
             mod.EnableWorldIconImage(worldIcon, true);
             if(rayIds){
@@ -567,8 +645,7 @@ class RaycastManager {
 
     async ProjectileRaycast(
         startPosition: mod.Vector,
-        direction: mod.Vector,
-        speed: number,
+        velocity: mod.Vector,
         distance: number,
         sampleRate: number,
         gravity: number = 9.8,
@@ -578,9 +655,6 @@ class RaycastManager {
         const arcPoints: mod.Vector[] = [];
         const rayIds: number[] = [];
         const timeStep = 1.0 / sampleRate;
-        
-        const dirNormalized = mod.Normalize(direction);
-        const velocity = mod.Multiply(dirNormalized, speed);
         
         let currentPos = startPosition;
         let currentVelocity = velocity;
@@ -662,6 +736,7 @@ class RaycastManager {
      * @param numDirections Number of directions to check (evenly distributed)
      * @param downwardDistance Maximum distance for downward ground-finding raycast
      * @param maxIterations Maximum number of adjustment passes (default: 2)
+     * @param debug Visualize raycasts
      * @returns Promise resolving to validated position and validity flag
      */
     static async ValidateSpawnLocationWithRadialCheck(
@@ -669,17 +744,14 @@ class RaycastManager {
         checkRadius: number,
         numDirections: number,
         downwardDistance: number,
-        maxIterations: number = SPAWN_VALIDATION_MAX_ITERATIONS
+        maxIterations: number = SPAWN_VALIDATION_MAX_ITERATIONS,
+        debug: boolean = false
     ): Promise<ValidatedSpawnResult> {
         let currentPosition = centerPosition;
         let foundCollision = false;
         
         // Generate radial check directions
         const directions = RaycastManager.GenerateRadialDirections(numDirections);
-        
-        if (DEBUG_MODE) {
-            console.log(`ValidateSpawnLocation: Starting at ${VectorToString(centerPosition)} with radius ${checkRadius}`);
-        }
         
         // Iterative adjustment passes
         for (let iteration = 0; iteration < maxIterations; iteration++) {
@@ -690,7 +762,7 @@ class RaycastManager {
             // Cast rays in all directions
             for (const direction of directions) {
                 const rayEnd = mod.Add(currentPosition, mod.Multiply(direction, checkRadius));
-                const rayResult = await raycastManager.cast(currentPosition, rayEnd);
+                const rayResult = await raycastManager.cast(currentPosition, rayEnd, debug);
                 
                 if (rayResult.hit && rayResult.point) {
                     foundCollision = true;
@@ -701,21 +773,25 @@ class RaycastManager {
                     const hitDistance = VectorLength(hitVector);
                     const penetrationDepth = checkRadius - hitDistance;
                     
-                    // Create a push vector away from the collision
-                    // Direction is opposite to the hit direction, scaled by penetration
-                    const pushVector = mod.Multiply(direction, -penetrationDepth);
+                    // Create a conservative push vector away from the collision
+                    // Direction is opposite to the hit direction
+                    const pushAmount = penetrationDepth;
+                    const pushVector = mod.Multiply(direction, -pushAmount);
                     adjustmentVector = mod.Add(adjustmentVector, pushVector);
                     
                     if (DEBUG_MODE) {
-                        console.log(`  Iteration ${iteration}: Collision at distance ${hitDistance.toFixed(2)} (penetration: ${penetrationDepth.toFixed(2)})`);
+                        console.log(`  Iteration ${iteration}: Collision at distance ${hitDistance.toFixed(2)} (penetration: ${penetrationDepth.toFixed(2)}, push: ${pushAmount.toFixed(2)})`);
                     }
                 }
             }
             
-            // If we found collisions, apply the average adjustment
+            // If we found collisions, apply the adjustment
             if (foundCollision && collisionCount > 0) {
-                // Average the adjustment vector
-                adjustmentVector = mod.Multiply(adjustmentVector, 1.0 / collisionCount);
+                // Average the adjustment vector if multiple collisions
+                if (collisionCount > 1) {
+                    adjustmentVector = mod.Multiply(adjustmentVector, 1.0 / collisionCount);
+                }
+                
                 currentPosition = mod.Add(currentPosition, adjustmentVector);
                 
                 if (DEBUG_MODE) {
@@ -735,16 +811,24 @@ class RaycastManager {
         // Add height offset to ensure ray starts above ground and doesn't clip through
         const downwardRayStart = mod.Add(currentPosition, mod.CreateVector(0, SPAWN_VALIDATION_HEIGHT_OFFSET, 0));
         const downwardRayEnd = mod.Add(downwardRayStart, mod.Multiply(mod.DownVector(), downwardDistance));
-        const groundResult = await raycastManager.cast(downwardRayStart, downwardRayEnd);
-        
+        const groundResult = await raycastManager.cast(downwardRayStart, downwardRayEnd, debug);
+        console.log(`Looking for spawn location using downward ray start: ${VectorToString(downwardRayStart)}, ray end: ${VectorToString(downwardRayEnd)}`);
+
         let finalPosition = currentPosition;
         let isValid = true;
         
         if (groundResult.hit && groundResult.point) {
-            finalPosition = groundResult.point;
+            // Preserve the adjusted X and Z coordinates from collision avoidance,
+            // but use the Y coordinate from the ground hit point
+            finalPosition = mod.CreateVector(
+                mod.XComponentOf(currentPosition),
+                mod.YComponentOf(groundResult.point),
+                mod.ZComponentOf(currentPosition)
+            );
             
             if (DEBUG_MODE) {
                 console.log(`  Ground found at ${VectorToString(finalPosition)}`);
+                console.log(`  Preserved adjusted position: X=${mod.XComponentOf(currentPosition).toFixed(6)}, Z=${mod.ZComponentOf(currentPosition).toFixed(6)}`);
             }
         } else {
             // No ground found - position is invalid
@@ -755,12 +839,11 @@ class RaycastManager {
             }
         }
         
-        // Final check: if we still have collisions after max iterations, mark as invalid
-        if (foundCollision) {
-            isValid = false;
-            if (DEBUG_MODE) {
-                console.log(`  WARNING: Still have collisions after ${maxIterations} iterations`);
-            }
+        // Note: We don't mark as invalid if collisions still exist after max iterations.
+        // The adjusted position is still better than the unadjusted position, even if
+        // some collisions remain. The only critical failure is if we can't find ground.
+        if (foundCollision && DEBUG_MODE) {
+            console.log(`  Note: Still have some collisions after ${maxIterations} iterations, but using adjusted position anyway`);
         }
         
         return {
@@ -773,27 +856,333 @@ class RaycastManager {
 // Global raycast manager instance
 const raycastManager = new RaycastManager();
 
+//==============================================================================================
+// ANIMATION MANAGER
+//==============================================================================================
+/**
+ * AnimationManager - Asynchronous object animation system
+ * 
+ * Provides complex animation capabilities beyond the basic MoveObjectOverTime function.
+ * Supports path-based animations, speed/duration control, rotation, and callbacks.
+ * 
+ * Usage:
+ *   await animationManager.AnimateAlongPath(object, points, { speed: 10 });
+ */
+
+interface AnimationOptions {
+    speed?: number;              // Units per second (alternative to duration)
+    duration?: number;           // Total duration in seconds (overrides speed)
+    rotateToDirection?: boolean; // Auto-rotate to face movement direction
+    rotationSpeed?: number;      // How fast to rotate in degrees/second (default: instant)
+    loop?: boolean;              // Loop the animation
+    reverse?: boolean;           // Reverse after completion
+    onProgress?: (progress: number) => void;
+    onComplete?: () => void;
+    onSegmentComplete?: (segmentIndex: number) => void;
+}
+
+interface ActiveAnimation {
+    object: mod.Object;
+    objectId: number;
+    cancelled: boolean;
+    paused: boolean;
+    progress: number;
+}
+
+class AnimationManager {
+    private activeAnimations: Map<number, ActiveAnimation> = new Map();
+
+    /**
+     * Animate an object along a path defined by an array of points
+     * @param object The object to animate (SpatialObject, VFX, WorldIcon, etc.)
+     * @param points Array of Vector positions defining the path
+     * @param options Animation configuration options
+     * @returns Promise that resolves when animation completes
+     */
+    async AnimateAlongPath(
+        object: mod.Object,
+        points: mod.Vector[],
+        options: AnimationOptions = {}
+    ): Promise<void> {
+        if (points.length < 2) {
+            console.error("AnimateAlongPath requires at least 2 points");
+            return;
+        }
+
+        const objectId = mod.GetObjId(object);
+        
+        // Register active animation with expected position tracking
+        const animation: ActiveAnimation = {
+            object,
+            objectId,
+            cancelled: false,
+            paused: false,
+            progress: 0
+        };
+        this.activeAnimations.set(objectId, animation);
+
+        // Track expected position to avoid precision loss from GetObjectPosition
+        let expectedPosition = points[0];
+
+        try {
+            // Calculate total path distance
+            let totalDistance = 0;
+            for (let i = 0; i < points.length - 1; i++) {
+                totalDistance += VectorLength(mod.Subtract(points[i + 1], points[i]));
+            }
+
+            // Determine timing
+            let totalDuration: number;
+            if (options.duration !== undefined) {
+                totalDuration = options.duration;
+            } else if (options.speed !== undefined) {
+                totalDuration = totalDistance / options.speed;
+            } else {
+                // Default: 1 second per unit of distance
+                totalDuration = totalDistance;
+            }
+
+            // Animate through each segment
+            let elapsedTime = 0;
+            for (let i = 0; i < points.length - 1; i++) {
+                if (animation.cancelled) break;
+
+                const startPoint = expectedPosition; // Use tracked position
+                const endPoint = points[i + 1];
+                const segmentDistance = VectorLength(mod.Subtract(endPoint, startPoint));
+                const segmentDuration = (segmentDistance / totalDistance) * totalDuration;
+
+                // Calculate rotation if needed
+                let rotation = ZERO_VEC;
+                if (options.rotateToDirection) {
+                    rotation = this.CalculateRotationFromDirection(
+                        mod.Subtract(endPoint, startPoint)
+                    );
+                }
+
+                // Animate this segment
+                await this.AnimateBetweenPoints(
+                    object,
+                    startPoint,
+                    endPoint,
+                    segmentDuration,
+                    {
+                        ...options,
+                        rotation,
+                        isSegment: true
+                    }
+                );
+
+                // Update expected position for next segment
+                expectedPosition = endPoint;
+
+                elapsedTime += segmentDuration;
+                animation.progress = elapsedTime / totalDuration;
+
+                if (options.onProgress) {
+                    options.onProgress(animation.progress);
+                }
+
+                if (options.onSegmentComplete) {
+                    options.onSegmentComplete(i);
+                }
+            }
+
+            // Handle loop/reverse
+            if (!animation.cancelled) {
+                if (options.reverse) {
+                    const reversedPoints = [...points].reverse();
+                    await this.AnimateAlongPath(object, reversedPoints, {
+                        ...options,
+                        reverse: false // Prevent infinite recursion
+                    });
+                } else if (options.loop) {
+                    await this.AnimateAlongPath(object, points, options);
+                }
+            }
+
+            if (options.onComplete && !animation.cancelled) {
+                options.onComplete();
+            }
+        } finally {
+            this.activeAnimations.delete(objectId);
+        }
+    }
+
+    /**
+     * Animate an object between two points
+     * @param object The object to animate
+     * @param startPos Starting position (expected position from tracking)
+     * @param endPos Ending position
+     * @param duration Time in seconds
+     * @param options Additional options including rotation
+     */
+    private async AnimateBetweenPoints(
+        object: mod.Object,
+        startPos: mod.Vector,
+        endPos: mod.Vector,
+        duration: number,
+        options: any = {}
+    ): Promise<void> {
+        const objectId = mod.GetObjId(object);
+        const animation = this.activeAnimations.get(objectId);
+        
+        if (!animation || animation.cancelled) return;
+
+        // Calculate delta from expected start position to end position
+        // We use startPos (which is our tracked expected position) instead of GetObjectPosition
+        // to avoid precision loss from the engine's position rounding
+        const positionDelta = mod.Subtract(endPos, startPos);
+        const rotationDelta = options.rotation || ZERO_VEC;
+
+        if (DEBUG_MODE) {
+            // Detailed precision logging
+            console.log(`=== Animation Segment Debug ===`);
+            console.log(`Start pos (tracked): X:${mod.XComponentOf(startPos).toFixed(6)}, Y:${mod.YComponentOf(startPos).toFixed(6)}, Z:${mod.ZComponentOf(startPos).toFixed(6)}`);
+            console.log(`End pos (target): X:${mod.XComponentOf(endPos).toFixed(6)}, Y:${mod.YComponentOf(endPos).toFixed(6)}, Z:${mod.ZComponentOf(endPos).toFixed(6)}`);
+            console.log(`Position delta: X:${mod.XComponentOf(positionDelta).toFixed(6)}, Y:${mod.YComponentOf(positionDelta).toFixed(6)}, Z:${mod.ZComponentOf(positionDelta).toFixed(6)}`);
+            console.log(`Rotation delta: X:${mod.XComponentOf(rotationDelta).toFixed(6)}, Y:${mod.YComponentOf(rotationDelta).toFixed(6)}, Z:${mod.ZComponentOf(rotationDelta).toFixed(6)}`);
+        }
+
+        // Use MoveObjectOverTime for smooth animation
+        mod.MoveObjectOverTime(
+            object,
+            positionDelta,
+            rotationDelta,
+            duration,
+            false, // Don't loop
+            false  // Don't reverse
+        );
+
+        // Wait for the animation to complete
+        await mod.Wait(duration);
+    }
+
+    /**
+     * Simple animation to a target position
+     * @param object The object to animate
+     * @param targetPos Target position
+     * @param duration Duration in seconds
+     * @param options Animation options
+     */
+    async AnimateToPosition(
+        object: mod.Object,
+        targetPos: mod.Vector,
+        duration: number,
+        options: AnimationOptions = {}
+    ): Promise<void> {
+        const currentPos = mod.GetObjectPosition(object);
+        await this.AnimateAlongPath(object, [currentPos, targetPos], {
+            ...options,
+            duration
+        });
+    }
+
+    /**
+     * Calculate Euler rotation to face a direction vector
+     * @param direction Direction vector to face
+     * @returns Rotation vector (Euler angles in radians)
+     */
+    private CalculateRotationFromDirection(direction: mod.Vector): mod.Vector {
+        const normalized = mod.Normalize(direction);
+        const x = mod.XComponentOf(normalized);
+        const y = mod.YComponentOf(normalized);
+        const z = mod.ZComponentOf(normalized);
+
+        // Calculate yaw (rotation around Y axis)
+        const yaw = Math.atan2(x, -z);
+
+        // Calculate pitch (rotation around X axis)
+        const horizontalDist = Math.sqrt(x * x + z * z);
+        const pitch = Math.atan2(y, horizontalDist);
+
+        // Return as Euler angles (pitch, yaw, roll)
+        return mod.CreateVector(pitch, yaw, 0);
+    }
+
+    /**
+     * Stop an active animation
+     * @param object The object whose animation should be stopped
+     */
+    StopAnimation(object: mod.Object): void {
+        const objectId = mod.GetObjId(object);
+        const animation = this.activeAnimations.get(objectId);
+        
+        if (animation) {
+            animation.cancelled = true;
+            mod.StopActiveMovementForObject(object);
+            this.activeAnimations.delete(objectId);
+        }
+    }
+
+    /**
+     * Check if an object is currently animating
+     * @param object The object to check
+     * @returns True if the object is animating
+     */
+    IsAnimating(object: mod.Object): boolean {
+        const objectId = mod.GetObjId(object);
+        return this.activeAnimations.has(objectId);
+    }
+
+    /**
+     * Get the current animation progress (0-1)
+     * @param object The object to check
+     * @returns Progress value between 0 and 1, or 0 if not animating
+     */
+    GetAnimationProgress(object: mod.Object): number {
+        const objectId = mod.GetObjId(object);
+        const animation = this.activeAnimations.get(objectId);
+        return animation ? animation.progress : 0;
+    }
+
+    /**
+     * Pause an active animation
+     * @param object The object whose animation should be paused
+     */
+    PauseAnimation(object: mod.Object): void {
+        const objectId = mod.GetObjId(object);
+        const animation = this.activeAnimations.get(objectId);
+        
+        if (animation) {
+            animation.paused = true;
+            mod.StopActiveMovementForObject(object);
+        }
+    }
+
+    /**
+     * Resume a paused animation
+     * @param object The object whose animation should be resumed
+     */
+    ResumeAnimation(object: mod.Object): void {
+        const objectId = mod.GetObjId(object);
+        const animation = this.activeAnimations.get(objectId);
+        
+        if (animation) {
+            animation.paused = false;
+            // Note: Resuming requires storing the remaining path/duration
+            // This is a simplified implementation
+        }
+    }
+
+    /**
+     * Stop all active animations
+     */
+    StopAllAnimations(): void {
+        for (const [objectId, animation] of this.activeAnimations.entries()) {
+            animation.cancelled = true;
+            mod.StopActiveMovementForObject(animation.object);
+        }
+        this.activeAnimations.clear();
+    }
+}
+
+// Global animation manager instance
+const animationManager = new AnimationManager();
+
 // Utility
 const ZERO_VEC = mod.CreateVector(0, 0, 0);
 const ONE_VEC = mod.CreateVector(1, 1, 1);
-
-
-//==============================================================================================
-// GLOBAL STATE
-//==============================================================================================
-
-let gameStarted = false;
-
-// Team balance state
-let lastBalanceCheckTime = 0;
-let balanceInProgress = false;
-
-// Team references
-let teamNeutral: mod.Team;
-let team1: mod.Team;
-let team2: mod.Team;
-let team3: mod.Team;
-let team4: mod.Team;
 
 
 //==============================================================================================
@@ -818,11 +1207,16 @@ class PlayerScore {
 //==============================================================================================
 
 class JSPlayer {
+    // Player game attributes
     readonly player: mod.Player;
     readonly playerId: number;
     score: PlayerScore;
     readonly joinOrder: number; // Track join order for team balancing
     heldFlags: Flag[] = [];
+
+    // Player world attributes
+    lastPosition: mod.Vector = ZERO_VEC;
+    velocity: mod.Vector = ZERO_VEC;
 
     static playerInstances: mod.Player[] = [];
     static #allJsPlayers: { [key: number]: JSPlayer } = {};
@@ -1083,20 +1477,20 @@ class Flag {
     isBeingCarried: boolean = false;
     isDropped: boolean = false;
     canBePickedUp: boolean = true;
+    numFlagTimesPickedUp:number = 0;
     
     // Player tracking
     carrierPlayer: mod.Player | null = null;
     
     // Timers
     dropTime: number = 0;
-    canPickupTime: number = 0;
     autoReturnTime: number = 0;
     
     // Game objects
     flagRecoverIcon: mod.WorldIcon;
     flagCarriedIcons: Map<number, mod.WorldIcon> = new Map(); // One icon per opposing team
     flagInteractionPoint: mod.InteractPoint | null = null;
-    flagProp: mod.SpatialObject | null = null;
+    flagProp: mod.Object | null = null;
     flagHomeVFX: mod.VFX;
     alarmSFX : mod.SFX | null = null;
     
@@ -1172,6 +1566,11 @@ class Flag {
             ZERO_VEC
         );
 
+        // If we're using an MCOM, disable it to hide the objective marker
+        let mcom: mod.MCOM = this.flagProp as mod.MCOM;
+        if(mcom)
+            mod.EnableGameModeObjective(mcom, false);
+        
         // Update defend icons for all opposing teams
         for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
             mod.SetWorldIconColor(carriedIcon, GetTeamColor(this.team));
@@ -1212,6 +1611,7 @@ class Flag {
         }
 
         // Set flag state
+        this.numFlagTimesPickedUp += 1;
         this.isAtHome = false;
         this.isBeingCarried = true;
         this.isDropped = false;
@@ -1267,7 +1667,10 @@ class Flag {
         this.isAtHome = false;
         this.isBeingCarried = false;
         this.isDropped = true;
+        this.canBePickedUp = false;
         let facingDir: mod.Vector = ZERO_VEC;
+        let throwDirectionAndSpeed: mod.Vector = ZERO_VEC;
+        let startRaycastID: number = RaycastManager.GetID();    // For debugging how many rays we're using
 
         // Determine drop position and direction
         if(this.carrierPlayer){
@@ -1277,50 +1680,86 @@ class Flag {
             // Flatten player look direction so it is parallel to X and Z axis
             position = position ?? soldierPosition;
             direction = direction ?? mod.Normalize(mod.CreateVector(mod.XComponentOf(facingDir), 0, mod.ZComponentOf(facingDir)));
+            
+            // Get jsPlayer to obtain cached velocity
+            let jsPlayer = JSPlayer.get(this.carrierPlayer);
+            if(jsPlayer){
+                throwDirectionAndSpeed = mod.Add(mod.Multiply(facingDir, FLAG_THROW_SPEED), jsPlayer.velocity);
+            }
+
+            this.RestoreCarrierWeapons(this.carrierPlayer);
+            mod.RemoveUIIcon(this.carrierPlayer);
         } else {
             position = position ?? this.currentPosition;
             direction = direction ?? mod.DownVector();
+            throwDirectionAndSpeed = mod.Multiply(direction, FLAG_THROW_SPEED);
         }
+        
+        // Clear the flag carrier at this point since we shouldn't need it
+        this.carrierPlayer = null;
 
-        // Use RaycastManager utility to find a valid ground position
-        // this.currentPosition = await RaycastManager.FindValidGroundPosition(
-        //     mod.Add(position, mod.CreateVector(0.0, SOLDIER_HALF_HEIGHT, 0.0)),
-        //     facingDir,
-        //     dropDistance,
-        //     FLAG_COLLISION_RADIUS,
-        //     FLAG_DROP_RAYCAST_DISTANCE
-        // );
 
+        // Calculate projectile path for flag arc
         let flagPath = await raycastManager.ProjectileRaycast(
             mod.Add(
-                mod.Add(position, mod.CreateVector(0.0, SOLDIER_HALF_HEIGHT, 0.0)),     // Start halfway up soldier body
-                mod.Multiply(facingDir, 1.75)       // Start projectile arc away from player to avoid intersections
+                mod.Add(position, mod.CreateVector(0.0, SOLDIER_HEIGHT, 0.0)),     // Start above soldier head to avoid self collisions
+                mod.Multiply(facingDir, 0.75)        // Start projectile arc away from player to avoid intersections
             ),
-            facingDir, 5, 100, 5, 9.8, true, 5);
-        this.currentPosition = flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position; // If we don't have a valid hit lcoation, default to soldier
-
-        // Remove carrier restrictions
-        if (this.carrierPlayer) {
-            this.RestoreCarrierWeapons(this.carrierPlayer);
-            mod.RemoveUIIcon(this.carrierPlayer);
-        }
-        this.carrierPlayer = null;
+            throwDirectionAndSpeed,                 // Velocity
+            FLAG_DROP_RAYCAST_DISTANCE,             // Max drop distance
+            2,                                      // Sample rate
+            9.8,                                    // gravity
+            DEBUG_MODE, 5);                         // Use DEBUG_MODE for visualization
         
-        // Spawn and animate dropped flag prop
-        if (this.flagProp) {
-            mod.UnspawnObject(this.flagProp);
+        // Move validation location slightly away from the hit location in direction of the hit normal
+        let groundLocationAdjusted = mod.Add(flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position, mod.Multiply(flagPath.hitNormal ?? ZERO_VEC, 0.5));
+        
+        // Adjust flag spawn location to make sure it's not clipping into a wall
+        const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck(
+            groundLocationAdjusted,             // Hit location, vertically adjusted upwards to avoid clipping into the ground plane
+            FLAG_COLLISION_RADIUS,              // Collision radius of the flag that is safe to spawn it in
+            SPAWN_VALIDATION_DIRECTIONS,        // How many direction rays to cast around the object
+            FLAG_DROP_RAYCAST_DISTANCE,         // How far down to look for a valid ground location
+            SPAWN_VALIDATION_MAX_ITERATIONS,    // Adjustment iterations, in case we don't find a valid location
+            DEBUG_MODE                          // Debug
+        );
+
+        let endRayCastID: number = RaycastManager.GetID();
+        if(DEBUG_MODE){
+            console.log(`Flag drop took ${endRayCastID - startRaycastID} raycasts to complete`);
+            if (!validatedFlagSpawn.isValid) {
+                console.log(`Warning: FindValidGroundPosition could not find valid location`);
+            }
         }
+
+       
+        // Remove old flag if it exists - it shouldn't but lets make sure
+        try{
+            if (this.flagProp)
+                mod.UnspawnObject(this.flagProp);
+        } catch(error: unknown){
+            console.log("Couldn't unspawn flag prop");
+        }
+        // Use the validated position if valid, otherwise use the adjusted ground location from projectile path
+        const startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;
+
+        // Flag rotation based on facing direction
+        // TODO: replace with facing angle and hit normal
         let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
+        
+        // Set final position after animation
+        this.currentPosition = startPosition;
+
+        // Finally spawn the flag
         this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);
+        
+        // If we're using an MCOM, disable it to hide the objective marker
+        let mcom: mod.MCOM = this.flagProp as mod.MCOM;
+        if(mcom)
+            mod.EnableGameModeObjective(mcom, false);
 
         // Update the position of the flag interaction point
         this.UpdateFlagInteractionPoint();
-        
-        // Start timers
-        this.dropTime = GetCurrentTime();
-        this.canPickupTime = this.dropTime + FLAG_PICKUP_DELAY;
-        this.autoReturnTime = this.dropTime + FLAG_AUTO_RETURN_TIME;
-        this.canBePickedUp = false;
 
         // Update capture icons for all opposing teams
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2,0));
@@ -1337,9 +1776,6 @@ class Flag {
         // Update VFX
         mod.MoveVFX(this.flagHomeVFX, this.currentPosition, ZERO_VEC);
         mod.SetVFXColor(this.flagHomeVFX, GetTeamDroppedColor(this.team));
-        
-        // Start pickup delay
-        this.StartPickupDelay();
 
          // Play drop SFX
         let dropSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureNeutralize_OneShot2D, this.currentPosition, ZERO_VEC);
@@ -1351,6 +1787,10 @@ class Flag {
         if(friendlyVO){
             mod.PlayVO(friendlyVO, mod.VoiceOverEvents2D.ObjectiveContested, mod.VoiceOverFlags.Alpha, this.team);
         }
+
+        // Start timers
+        this.StartAutoReturn(FLAG_AUTO_RETURN_TIME, this.numFlagTimesPickedUp).then( () => {console.log(`Flag ${this.teamId} auto-returning to base`)});
+        this.StartPickupDelay().then(() => {console.log("Flag pickup delay expired")});
         
         if (DEBUG_MODE) {
             console.log(`Flag dropped`);
@@ -1361,11 +1801,14 @@ class Flag {
     }
 
     UpdateFlagInteractionPoint(){
-        if(this.flagInteractionPoint){
-            try { 
-                mod.UnspawnObject(this.flagInteractionPoint); 
-            } catch(error: unknown){}
+        try{
+            if(this.flagInteractionPoint){
+                mod.UnspawnObject(this.flagInteractionPoint);
+            }
+        } catch(error: unknown){
+            console.log("Interaction zone already unspawned");
         }
+        console.log("Spawning updated interaction zone for flag");
 
         let flagInteractOffset = mod.Add(this.currentPosition, mod.CreateVector(0, FLAG_INTERACTION_HEIGHT_OFFSET, 0));
         this.flagInteractionPoint = mod.SpawnObject(mod.RuntimeSpawn_Common.InteractPoint, flagInteractOffset, ZERO_VEC);
@@ -1420,8 +1863,31 @@ class Flag {
             this.ReturnFlag();
         }
     }
+
+    async StartAutoReturn(returnDelay: number, expectedNumTimesPickedUp: number): Promise<void> {
+        let currFlagTimesPickedUp = expectedNumTimesPickedUp;
+        await mod.Wait(returnDelay);
+        if(this.isDropped && !this.isBeingCarried && !this.isAtHome && currFlagTimesPickedUp === this.numFlagTimesPickedUp){
+            console.log(`Flag auto return. Number of times returned ${this.numFlagTimesPickedUp}. Expected ${currFlagTimesPickedUp}`);
+            this.ReturnFlag();
+        }
+    }
+
+    SlowUpdate(timeDelta:number) {
+        if(this.isDropped){
+            let mcom: mod.MCOM = this.flagProp as mod.MCOM;
+            if(mcom)
+                mod.EnableGameModeObjective(mcom, false);
+        }
+    }
+
+    FastUpdate(timeDelta:number) {
+        if (this.isBeingCarried) {
+            this.UpdateCarrier(timeDelta);
+        }
+    }
     
-    UpdateCarrier(): void {
+    UpdateCarrier(timeDelta: number): void {
         if (!this.isBeingCarried || !this.carrierPlayer) return;
         
         if (!mod.IsPlayerValid(this.carrierPlayer) || 
@@ -1432,10 +1898,15 @@ class Flag {
         // Get the soldier position for attaching effects
         this.currentPosition = mod.GetSoldierState(
             this.carrierPlayer, 
-            mod.SoldierStateVector.GetPosition
-        );
+            mod.SoldierStateVector.GetPosition);
         let currentRotation = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
-
+        let currentVelocity = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetLinearVelocity);
+        // Update jsPlayer velocity
+        let jsPlayer = JSPlayer.get(this.carrierPlayer);
+        if(jsPlayer){
+            jsPlayer.velocity = currentVelocity
+        }
+        
         // Make smoke effect follow carrier
         mod.MoveVFX(this.flagHomeVFX, this.currentPosition, currentRotation);
 
@@ -1890,27 +2361,35 @@ function RefreshScoreboard(){
 async function TickUpdate(): Promise<void> {
     while (gameStarted) {
         await mod.Wait(TICK_RATE);
+
+        let currentTime = GetCurrentTime();
+        let timeDelta = currentTime - lastTickTime;
+        // console.log(`Fast tick delta ${timeDelta}`);
         
         // Update all flag carrier positions
-        for (const [flagId, flagData] of flags.entries()) {
-            if (flagData.isBeingCarried) {
-                flagData.UpdateCarrier();
-            }
+        for (const [flagId, flag] of flags.entries()) {
+            flag.FastUpdate(timeDelta);
         }
+
+        lastTickTime = currentTime;
     }
 }
 
 async function SecondUpdate(): Promise<void> {
     while (gameStarted) {
         await mod.Wait(1);
+
+        let currentTime = GetCurrentTime();
+        let timeDelta = currentTime - lastTickTime;
+        // console.log(`Second tick delta ${timeDelta}`);
         
-        // Check auto-return timers for all flags
-        for (const [flagId, flagData] of flags.entries()) {
-            flagData.CheckAutoReturn();
-        }
+        // // Check auto-return timers for all flags
+        // for (const [flagId, flagData] of flags.entries()) {
+        //     flagData.CheckAutoReturn();
+        // }
         
         // Periodic team balance check
-        if (AUTO_TEAM_BALANCE) {
+        if (TEAM_AUTO_BALANCE) {
             CheckAndBalanceTeams();
         }
 
@@ -1921,6 +2400,13 @@ async function SecondUpdate(): Promise<void> {
         if (mod.GetMatchTimeRemaining() <= 0) {
             EndGameByTime();
         }
+
+        // Slow update for flags
+        for(let [flagID, flag] of flags){
+            flag.SlowUpdate(timeDelta);
+        }
+
+        lastSecondUpdateTime = currentTime;
     }
 }
 
@@ -2183,7 +2669,7 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
     GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => flag.ResetFlag());
     
     // Check win condition
-    if (currentScore >= TARGET_SCORE) {
+    if (currentScore >= GAMEMODE_TARGET_SCORE) {
         EndGameByScore(scoringTeamId);
     }
 }
@@ -2236,7 +2722,7 @@ function EndGameByTime(): void {
 //==============================================================================================
 
 async function CheckAndBalanceTeams(): Promise<void> {
-    if (!AUTO_TEAM_BALANCE || balanceInProgress || !gameStarted) return;
+    if (!TEAM_AUTO_BALANCE || balanceInProgress || !gameStarted) return;
     
     const currentTime = GetCurrentTime();
     if (currentTime - lastBalanceCheckTime < TEAM_BALANCE_CHECK_INTERVAL) return;
@@ -2318,7 +2804,8 @@ async function CheckAndBalanceTeams(): Promise<void> {
 //==============================================================================================
 
 function GetCurrentTime(): number {
-    return mod.GetMatchTimeElapsed();
+    //return mod.GetMatchTimeElapsed();
+    return Date.now() / 1000;
 }
 
 function GetRandomInt(max: number): number {
