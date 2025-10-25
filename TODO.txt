@@ -1,17 +1,17 @@
 Notes
 =====
 
-- IN PROGRESS: Disable flag taken alarm sound after 5 seconds
+- COMPLETE:  Disable flag taken alarm sound after 5 seconds
 - COMPLETE: Add support for multiple teams (more than 2)
 - IN PROGRESS: Add support for neutral flags (any team can capture)
 - COMPLETE: Dynamic base WorldIcon spawning to show where a flag needs to be captured
 - Add markers for each base that is a slightly different shade of colour than the team color. 
-    - Your base marker is ALWAYS visible. Enemy team base marker disappears when their flag is away, but will appear if your flag is away.
+    - COMPLETE: Your base marker is ALWAYS visible. Enemy team base marker disappears when their flag is away, but will appear if your flag is away.
     - Your base marker will say "". The enemy marker will say "".
-- Make roaming recover marker colour match your team colour
-- All world icons must match your team colour for objects owned by a team
+- COMPLETE: Make roaming recover marker colour match your team colour
+- COMPLETE: All world icons must match your team colour for objects owned by a team
 - COMPLETE: Change team colours to purple and orange
-- Stop flags dropping inside props by using raycasts. Bonus for using an arc.
+- COMPLETE (with bonus!): Stop flags dropping inside props by using raycasts. Bonus for using an arc.
 - Drop icon update rate. Either use UI object or make it smoother
 - Forcefully 3D spot the flag carrier
 - COMPLETE: Add configurable option for flag carrier to have pistol?
