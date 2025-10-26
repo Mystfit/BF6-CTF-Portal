@@ -71,8 +71,8 @@
     "debug_player_carrying_any_flag": "DEBUG: Player holding any flag: {}",
     "debug_team_player_counts": "DEBUG: Team 1 players: {} Team 2 players: {}",
     "team_autoswitch": "Autobalancing player {} to {}",
-    "scoreUI_flag_status_home": "()",
-    "scoreUI_flag_status_carried": "<>",
-    "scoreUI_flag_status_dropped": "[]",
+    "scoreUI_flag_status_home": "(  )",
+    "scoreUI_flag_status_carried": "<  >",
+    "scoreUI_flag_status_dropped": "[  ]",
     "scoreUI_team_label": "Team {}"
 }

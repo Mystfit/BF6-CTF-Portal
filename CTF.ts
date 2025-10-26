@@ -70,10 +70,10 @@ const VERSION = [1, 1, 0];
 // CONFIGURATION
 //==============================================================================================
 
-const DEBUG_MODE = true;                                            // Print extra debug messages
+const DEBUG_MODE = false;                                            // Print extra debug messages
 
 // Game Settings
-const GAMEMODE_TARGET_SCORE = 5;                                             // Points needed to win
+const GAMEMODE_TARGET_SCORE = 5;                                     // Points needed to win
 
 // Flag settings
 const FLAG_PICKUP_DELAY = 3;                                        // Seconds before dropped flag can be picked up
@@ -472,7 +472,7 @@ class RaycastManager {
         hit: boolean
     ): Promise<void> {
         // Interpolate points along the ray line (minimum 1 per unit)
-        const rayVector = Float3.FromVector(end).Subtract(Float3.FromVector(start)).ToVector();
+        const rayVector = Math2.Vec3.FromVector(end).Subtract(Math2.Vec3.FromVector(start)).ToVector();
         const rayLength = VectorLength(rayVector);
         const numPoints = Math.max(2, Math.ceil(rayLength));
         const points: mod.Vector[] = [];
@@ -770,7 +770,7 @@ class RaycastManager {
                     collisionCount++;
                     
                     // Calculate how much the ray penetrated into the collision radius
-                    const hitVector = Float3.FromVector(rayResult.point).Subtract(Float3.FromVector(currentPosition)).ToVector(); //mod.Subtract(rayResult.point, currentPosition);
+                    const hitVector = Math2.Vec3.FromVector(rayResult.point).Subtract(Math2.Vec3.FromVector(currentPosition)).ToVector(); //mod.Subtract(rayResult.point, currentPosition);
                     const hitDistance = VectorLength(hitVector);
                     const penetrationDepth = checkRadius - hitDistance;
                     
@@ -877,7 +877,7 @@ interface AnimationOptions {
     rotationSpeed?: number;      // How fast to rotate in degrees/second (default: instant)
     loop?: boolean;              // Loop the animation
     reverse?: boolean;           // Reverse after completion
-    onProgress?: (progress: number) => void;
+    onProgress?: (progress: number, position: mod.Vector) => void;
     onComplete?: () => void;
     onSegmentComplete?: (segmentIndex: number) => void;
 }
@@ -929,7 +929,7 @@ class AnimationManager {
             // Calculate total path distance
             let totalDistance = 0;
             for (let i = 0; i < points.length - 1; i++) {
-                totalDistance += VectorLength(Float3.FromVector(points[i + 1]).Subtract(Float3.FromVector(points[i])).ToVector()); //mod.Subtract(points[i + 1], points[i]));
+                totalDistance += VectorLength(Math2.Vec3.FromVector(points[i + 1]).Subtract(Math2.Vec3.FromVector(points[i])).ToVector()); //mod.Subtract(points[i + 1], points[i]));
             }
 
             // Determine timing
@@ -950,14 +950,14 @@ class AnimationManager {
 
                 const startPoint = expectedPosition; // Use tracked position
                 const endPoint = points[i + 1];
-                const segmentDistance = VectorLength(Float3.FromVector(endPoint).Subtract(Float3.FromVector(startPoint)).ToVector()); //mod.Subtract(endPoint, startPoint));
+                const segmentDistance = VectorLength(Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector()); //mod.Subtract(endPoint, startPoint));
                 const segmentDuration = (segmentDistance / totalDistance) * totalDuration;
 
                 // Calculate rotation if needed
                 let rotation = ZERO_VEC;
                 if (options.rotateToDirection) {
                     rotation = this.CalculateRotationFromDirection(
-                        Float3.FromVector(endPoint).Subtract(Float3.FromVector(startPoint)).ToVector() //mod.Subtract(endPoint, startPoint)
+                        Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector() //mod.Subtract(endPoint, startPoint)
                     );
                 }
 
@@ -981,7 +981,7 @@ class AnimationManager {
                 animation.progress = elapsedTime / totalDuration;
 
                 if (options.onProgress) {
-                    options.onProgress(animation.progress);
+                    options.onProgress(animation.progress, expectedPosition);
                 }
 
                 if (options.onSegmentComplete) {
@@ -1033,7 +1033,7 @@ class AnimationManager {
         // Calculate delta from expected start position to end position
         // We use startPos (which is our tracked expected position) instead of GetObjectPosition
         // to avoid precision loss from the engine's position rounding
-        const positionDelta = Float3.FromVector(endPos).Subtract(Float3.FromVector(startPos)).ToVector(); //mod.Subtract(endPos, startPos);
+        const positionDelta = Math2.Vec3.FromVector(endPos).Subtract(Math2.Vec3.FromVector(startPos)).ToVector(); //mod.Subtract(endPos, startPos);
         const rotationDelta = options.rotation || ZERO_VEC;
 
         if (DEBUG_MODE) {
@@ -1778,7 +1778,8 @@ class Flag {
             let numInterPoints = 3;
             let interpolatedFlagPathPoints = InterpolatePoints(adjustedFlagPathPoints, numInterPoints);
             await animationManager.AnimateAlongPath(this.flagProp, interpolatedFlagPathPoints, {
-                speed: 400
+                speed: 400,
+                onProgress: (progress, position) => mod.MoveVFX(this.flagHomeVFX, position, ZERO_VEC) 
             }).catch((reason: any) => {
                 console.log(`Animation path failed with reason ${reason}`);
             });
@@ -2041,27 +2042,6 @@ class Flag {
                 }
             }
         }
-        // let vo_flag = DEFAULT_TEAM_VO_FLAGS.get(this.teamId);
-        // console.log(`Flag VO team ID is ${this.teamId}`);
-
-        // // Play VO for flag owning team (defenders)
-        // let flagOwningTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
-        // if(flagOwningTeamVO){
-        //     if(vo_flag){
-        //         console.log(`Playing flag ${this.teamId} taken VO for flag owner team ${mod.GetObjId(this.team)}`);
-        //         mod.PlayVO(flagOwningTeamVO, mod.VoiceOverEvents2D.ObjectiveLockdownEnemy, vo_flag, this.team);
-        //     }
-        // }
-        
-        // // Play VO for all opposing teams (attackers)
-        // if(this.carrierPlayer && vo_flag){
-        //     let carrierTeam:mod.Team = mod.GetTeam(this.carrierPlayer);
-        //     let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
-        //     if(capturingTeamVO){
-        //         console.log(`Playing flag team ${this.teamId} taken VO for flag carrier team ${mod.GetObjId(carrierTeam)}`);
-        //         mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCapturing, vo_flag, carrierTeam);
-        //     }
-        // }
     }
 
     StopFlagAlarm(){
@@ -2289,8 +2269,8 @@ function LoadGameModeConfig(config: GameModeConfig): void {
         );
         mod.SetScoreboardColumnWidths(0.2, 0.2, 0.2, 0.4);
 
-        // Sort by teamID to group players
-        //mod.SetScoreboardSorting(1);
+        // Sort by teamID to group players - this overload is zero indexed so the first available column is used
+        mod.SetScoreboardSorting(0, false);
     }
 
     // Initialize flags from config
@@ -2427,7 +2407,6 @@ async function SecondUpdate(): Promise<void> {
 
         // Periodically update scoreboard for players
         RefreshScoreboard();
-
 
         // Check time limit
         if (mod.GetMatchTimeRemaining() <= 0) {
@@ -2640,40 +2619,41 @@ function BuildFlagStatus(flag: Flag): mod.Message {
 class TeamColumnWidget {
     readonly teamId: number;
     readonly team: mod.Team;
+    readonly isPlayerTeam: boolean;
     readonly columnWidget: mod.UIWidget;
     readonly scoreWidget: mod.UIWidget;
     readonly flagStatusWidget: mod.UIWidget;
+    readonly verticalPadding:number = 8;
     
-    private readonly COLUMN_WIDTH = 40;
-    private readonly COLUMN_HEIGHT = 40;
-    
-    constructor(team: mod.Team, position: mod.Vector, parent: mod.UIWidget) {
+    constructor(team: mod.Team, position: mod.Vector, size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
         this.team = team;
         this.teamId = mod.GetObjId(team);
+        this.isPlayerTeam = isPlayerTeam;
+        
         
         // Create column container with team color background
         this.columnWidget = modlib.ParseUI({
             type: "Container",
             parent: parent,
-            position: [mod.XComponentOf(position), mod.YComponentOf(position)],
-            size: [this.COLUMN_WIDTH, this.COLUMN_HEIGHT],
-            anchor: mod.UIAnchor.TopLeft,
-            bgFill: mod.UIBgFill.OutlineThick,
+            position: mod.Add(position, mod.CreateVector(0, (isPlayerTeam ? 0 : this.verticalPadding), 0)),
+            size: [size[0], size[1] + (isPlayerTeam ? this.verticalPadding : 0)],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill:  (this.isPlayerTeam) ? mod.UIBgFill.Solid :  mod.UIBgFill.Blur,
             bgColor: GetTeamColorById(this.teamId),
-            bgAlpha: 0.8
+            bgAlpha: 0.5
         })!;
         
         // Create score text (top row)
         this.scoreWidget = modlib.ParseUI({
             type: "Text",
             parent: this.columnWidget,
-            position: [0, 10],
-            size: [this.COLUMN_WIDTH, 25],
+            position: [0, 0],
+            size: [size[0], 25],
             anchor: mod.UIAnchor.Center,
             textAnchor: mod.UIAnchor.Center,
             textSize: 28,
             textLabel: "",
-            textColor: [1, 1, 1],
+            textColor: (isPlayerTeam) ? [1,1,1] : GetTeamColorById(this.teamId),
             bgAlpha: 0
         })!;
         
@@ -2681,8 +2661,8 @@ class TeamColumnWidget {
         this.flagStatusWidget = modlib.ParseUI({
             type: "Text",
             parent: this.columnWidget,
-            position: [0, 30],
-            size: [this.COLUMN_WIDTH, 25],
+            position: [0, 30 + (this.isPlayerTeam ? this.verticalPadding : 0)],
+            size: [size[0], 25],
             anchor: mod.UIAnchor.Center,
             textAnchor: mod.UIAnchor.Center,
             textSize: 20,
@@ -2723,14 +2703,16 @@ class ScoreboardUI {
     readonly playerId: number;
     
     private rootWidget: mod.UIWidget | undefined;
-    private teamIndicatorWidget: mod.UIWidget | undefined;
+    private teamIndicatorContainer: mod.UIWidget | undefined;
+    private teamIndicatorText: mod.UIWidget | undefined;
+    private teamRow: mod.UIWidget | undefined;
     private teamColumns: Map<number, TeamColumnWidget> = new Map();
     
     private readonly ROOT_WIDTH = 700;
-    private readonly ROOT_HEIGHT = 150;
-    private readonly TOP_PADDING = 100;
-    private readonly TEAM_INDICATOR_HEIGHT = 40;
-    private readonly COLUMN_SPACING = 20;
+    private readonly ROOT_HEIGHT = 100;
+    private readonly TOP_PADDING = 67;
+    private readonly TEAM_INDICATOR_HEIGHT = 25;
+    private readonly COLUMN_SPACING = 40;
     
     constructor(player: mod.Player) {
         this.player = player;
@@ -2743,9 +2725,9 @@ class ScoreboardUI {
         
         // Calculate total width needed based on team count
         const teamCount = teams.size;
-        const columnWidth = 120;
+        const columnWidth = 40; // Must match TeamColumnWidget.COLUMN_WIDTH
         const totalColumnsWidth = (teamCount * columnWidth) + ((teamCount - 1) * this.COLUMN_SPACING);
-        const actualRootWidth = Math.max(this.ROOT_WIDTH, totalColumnsWidth + 40); // 40px padding
+        const actualRootWidth = totalColumnsWidth;//Math.max(this.ROOT_WIDTH, totalColumnsWidth + 40); // 40px padding
         
         // Create root container
         this.rootWidget = modlib.ParseUI({
@@ -2755,35 +2737,66 @@ class ScoreboardUI {
             anchor: mod.UIAnchor.TopCenter,
             bgFill: mod.UIBgFill.Blur,
             bgColor: [0, 0, 0],
-            bgAlpha: 0.2,
+            bgAlpha: 0.0,
             playerId: this.player
+        })!;
+
+        // Create team indicator (Row 1)
+        this.teamIndicatorContainer = modlib.ParseUI({
+            type: "Container",
+            parent: this.rootWidget,
+            position: [0, 0],
+            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
+            anchor: mod.UIAnchor.TopCenter,
+            //bgFill: mod.UIBgFill.Blur,
+            bgColor: GetTeamColor(mod.GetTeam(this.player)),
+            bgAlpha: 0.5
         })!;
         
         // Create team indicator (Row 1)
-        this.teamIndicatorWidget = modlib.ParseUI({
+        this.teamIndicatorText = modlib.ParseUI({
             type: "Text",
-            parent: this.rootWidget,
-            position: [0, 10],
+            parent: this.teamIndicatorContainer,
+            position: [0, 2],
             size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
             anchor: mod.UIAnchor.TopCenter,
-            textAnchor: mod.UIAnchor.TopCenter,
-            textSize: 24,
+            textAnchor: mod.UIAnchor.Center,
+            textSize: 20,
             textLabel: mod.Message(mod.stringkeys.scoreUI_team_label, GetTeamName(mod.GetTeam(this.player))),
             textColor: [1, 1, 1],
             bgAlpha: 0
         })!;
         
-        // Create team columns (Row 2)
-        const columnsStartY = this.TEAM_INDICATOR_HEIGHT + 20;
-        const columnsStartX = (actualRootWidth - totalColumnsWidth) / 2; // Center the columns
+        this.teamRow = modlib.ParseUI({
+            type: "Container",
+            parent: this.rootWidget,
+            size: [actualRootWidth, 30],
+            position: [0, this.TEAM_INDICATOR_HEIGHT],
+            anchor: mod.UIAnchor.TopCenter,
+            //bgFill: mod.UIBgFill.Blur,
+            bgColor: [0, 0, 0],
+            bgAlpha: 0.0,
+            playerId: this.player
+        })!;
         
-        let currentX = columnsStartX;
+        // Create team columns (Row 2)
+        const columnsStartY = 0;
+        
+        // Calculate starting X position for the first widget's CENTER point
+        // Start at left edge of group (-totalColumnsWidth/2) then offset by half a column width
+        let currentX = -(totalColumnsWidth / 2) + (columnWidth / 2);
+        
         for (const [teamId, team] of teams.entries()) {
-            const columnPos = mod.CreateVector(currentX, columnsStartY, 0);
-            const column = new TeamColumnWidget(team, columnPos, this.rootWidget);
+            let isPlayerTeam: boolean = mod.Equals(team, mod.GetTeam(this.player));
+            const columnPos = mod.CreateVector(currentX, 0, 0);
+            const column = new TeamColumnWidget(team, columnPos, [30, 30], this.teamRow, isPlayerTeam);
             this.teamColumns.set(teamId, column);
             currentX += columnWidth + this.COLUMN_SPACING;
         }
+
+        // Update root widget width now that we have the total column width
+        mod.SetUIWidgetSize(this.rootWidget, mod.CreateVector(totalColumnsWidth, this.ROOT_HEIGHT, 0));
+        this.rootWidget
         
         // Initial refresh
         this.refresh();
@@ -2793,7 +2806,7 @@ class ScoreboardUI {
      * Update all UI elements with current game state
      */
     refresh(): void {
-        if (!this.rootWidget || !this.teamIndicatorWidget) return;
+        if (!this.rootWidget || !this.teamIndicatorContainer || !this.teamIndicatorText) return;
         
         // Update team indicator text with player's current team
         const playerTeam = mod.GetTeam(this.player);
@@ -2801,8 +2814,9 @@ class ScoreboardUI {
         const teamName = GetTeamName(playerTeam);
         const teamColor = GetTeamColor(playerTeam);
         
-        mod.SetUITextLabel(this.teamIndicatorWidget, mod.Message(mod.stringkeys.scoreUI_team_label, teamName));
-        mod.SetUITextColor(this.teamIndicatorWidget, teamColor);
+        mod.SetUITextLabel(this.teamIndicatorText, mod.Message(mod.stringkeys.scoreUI_team_label, teamName));
+        mod.SetUITextColor(this.teamIndicatorText, mod.CreateVector(1,1,1));
+        mod.SetUIWidgetBgColor(this.teamIndicatorContainer, teamColor);
         
         // Update each team column
         for (const [teamId, column] of this.teamColumns.entries()) {
@@ -3235,8 +3249,8 @@ function LerpVector(start: mod.Vector, end: mod.Vector, alpha: number): mod.Vect
     
     // Linear interpolation formula: result = start + (end - start) * alpha
     // Which is equivalent to: result = start * (1 - alpha) + end * alpha
-    const startFloat = Float3.FromVector(start);
-    const endFloat = Float3.FromVector(end);
+    const startFloat = Math2.Vec3.FromVector(start);
+    const endFloat = Math2.Vec3.FromVector(end);
     const delta = endFloat.Subtract(startFloat);
     const scaledDelta = delta.MultiplyScalar(alpha);
     const final = startFloat.Add(scaledDelta);
@@ -3271,44 +3285,46 @@ function InterpolatePoints(points: mod.Vector[], numPoints:number): mod.Vector[]
     return interpolatedPoints;
 }
 
-interface Float3{
+interface Vec3 {
     x: number,
     y: number,
     z: number
 }
 
-class Float3 {
-    x: number = 0;
-    y: number = 0;
-    z: number = 0;
+namespace Math2 {
+    export class Vec3 {
+        x: number = 0;
+        y: number = 0;
+        z: number = 0;
 
-    constructor(x: number, y: number, z:number){
-        this.x = x;
-        this.y = y;
-        this.z = z;
-    }
+        constructor(x: number, y: number, z:number){
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
 
-    static FromVector(vector: mod.Vector): Float3 {
-        return new Float3(mod.XComponentOf(vector), mod.YComponentOf(vector), mod.ZComponentOf(vector));
-    }
+        static FromVector(vector: mod.Vector): Vec3 {
+            return new Vec3(mod.XComponentOf(vector), mod.YComponentOf(vector), mod.ZComponentOf(vector));
+        }
 
-    ToVector(): mod.Vector {
-        return mod.CreateVector(this.x, this.y, this.z);
-    }
+        ToVector(): mod.Vector {
+            return mod.CreateVector(this.x, this.y, this.z);
+        }
 
-    Subtract(other:Float3): Float3 {
-        return new Float3(this.x - other.x, this.y - other.y, this.z - other.z);
-    }
+        Subtract(other:Vec3): Vec3 {
+            return new Vec3(this.x - other.x, this.y - other.y, this.z - other.z);
+        }
 
-    Multiply(other:Float3): Float3 {
-        return new Float3(this.x * other.x, this.y * other.y, this.z * other.z);
-    }
+        Multiply(other:Vec3): Vec3 {
+            return new Vec3(this.x * other.x, this.y * other.y, this.z * other.z);
+        }
 
-    MultiplyScalar(scalar:number): Float3 {
-        return new Float3(this.x * scalar, this.y * scalar, this.z * scalar);
-    }
+        MultiplyScalar(scalar:number): Vec3 {
+            return new Vec3(this.x * scalar, this.y * scalar, this.z * scalar);
+        }
 
-    Add(other:Float3): Float3 {
-        return new Float3(this.x + other.x, this.y + other.y, this.z + other.z);
+        Add(other:Vec3): Vec3 {
+            return new Vec3(this.x + other.x, this.y + other.y, this.z + other.z);
+        }
     }
 }
