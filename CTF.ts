@@ -120,6 +120,7 @@ const VEHICLE_FIRST_PASSENGER_SEAT = 1;                             // First pas
 // Update rates
 const TICK_RATE = 0.032;                                            // ~30fps update rate for carrier position updates (portal server tickrate)
 
+
 //==============================================================================================
 // CONSTANTS - Team and object IDs (you probably won't need to modify these)
 //==============================================================================================
@@ -471,7 +472,7 @@ class RaycastManager {
         hit: boolean
     ): Promise<void> {
         // Interpolate points along the ray line (minimum 1 per unit)
-        const rayVector = mod.Subtract(end, start);
+        const rayVector = Float3.FromVector(end).Subtract(Float3.FromVector(start)).ToVector();
         const rayLength = VectorLength(rayVector);
         const numPoints = Math.max(2, Math.ceil(rayLength));
         const points: mod.Vector[] = [];
@@ -769,7 +770,7 @@ class RaycastManager {
                     collisionCount++;
                     
                     // Calculate how much the ray penetrated into the collision radius
-                    const hitVector = mod.Subtract(rayResult.point, currentPosition);
+                    const hitVector = Float3.FromVector(rayResult.point).Subtract(Float3.FromVector(currentPosition)).ToVector(); //mod.Subtract(rayResult.point, currentPosition);
                     const hitDistance = VectorLength(hitVector);
                     const penetrationDepth = checkRadius - hitDistance;
                     
@@ -928,7 +929,7 @@ class AnimationManager {
             // Calculate total path distance
             let totalDistance = 0;
             for (let i = 0; i < points.length - 1; i++) {
-                totalDistance += VectorLength(mod.Subtract(points[i + 1], points[i]));
+                totalDistance += VectorLength(Float3.FromVector(points[i + 1]).Subtract(Float3.FromVector(points[i])).ToVector()); //mod.Subtract(points[i + 1], points[i]));
             }
 
             // Determine timing
@@ -949,14 +950,14 @@ class AnimationManager {
 
                 const startPoint = expectedPosition; // Use tracked position
                 const endPoint = points[i + 1];
-                const segmentDistance = VectorLength(mod.Subtract(endPoint, startPoint));
+                const segmentDistance = VectorLength(Float3.FromVector(endPoint).Subtract(Float3.FromVector(startPoint)).ToVector()); //mod.Subtract(endPoint, startPoint));
                 const segmentDuration = (segmentDistance / totalDistance) * totalDuration;
 
                 // Calculate rotation if needed
                 let rotation = ZERO_VEC;
                 if (options.rotateToDirection) {
                     rotation = this.CalculateRotationFromDirection(
-                        mod.Subtract(endPoint, startPoint)
+                        Float3.FromVector(endPoint).Subtract(Float3.FromVector(startPoint)).ToVector() //mod.Subtract(endPoint, startPoint)
                     );
                 }
 
@@ -1032,7 +1033,7 @@ class AnimationManager {
         // Calculate delta from expected start position to end position
         // We use startPos (which is our tracked expected position) instead of GetObjectPosition
         // to avoid precision loss from the engine's position rounding
-        const positionDelta = mod.Subtract(endPos, startPos);
+        const positionDelta = Float3.FromVector(endPos).Subtract(Float3.FromVector(startPos)).ToVector(); //mod.Subtract(endPos, startPos);
         const rotationDelta = options.rotation || ZERO_VEC;
 
         if (DEBUG_MODE) {
@@ -1045,14 +1046,15 @@ class AnimationManager {
         }
 
         // Use MoveObjectOverTime for smooth animation
-        mod.MoveObjectOverTime(
-            object,
-            positionDelta,
-            rotationDelta,
-            duration,
-            false, // Don't loop
-            false  // Don't reverse
-        );
+        // mod.MoveObjectOverTime(
+        //     object,
+        //     positionDelta,
+        //     rotationDelta,
+        //     duration,
+        //     false, // Don't loop
+        //     false  // Don't reverse
+        // );
+        mod.SetObjectTransform(object, mod.CreateTransform(endPos, options.rotation));
 
         // Wait for the animation to complete
         await mod.Wait(duration);
@@ -1217,6 +1219,9 @@ class JSPlayer {
     // Player world attributes
     lastPosition: mod.Vector = ZERO_VEC;
     velocity: mod.Vector = ZERO_VEC;
+    
+    // UI
+    scoreboardUI?: ScoreboardUI;
 
     static playerInstances: mod.Player[] = [];
     static #allJsPlayers: { [key: number]: JSPlayer } = {};
@@ -1228,6 +1233,11 @@ class JSPlayer {
         this.score = new PlayerScore();
         this.joinOrder = JSPlayer.#nextJoinOrder++;
         JSPlayer.playerInstances.push(this.player);
+        
+        // Create scoreboard UI for human players
+        if (!mod.GetSoldierState(player, mod.SoldierStateBool.IsAISoldier)) {
+            this.scoreboardUI = new ScoreboardUI(player);
+        }
         
         if (DEBUG_MODE) {
             console.log(`CTF: Adding Player [${this.playerId}] with join order ${this.joinOrder}. Total: ${JSPlayer.playerInstances.length}`);
@@ -1707,7 +1717,7 @@ class Flag {
             ),
             throwDirectionAndSpeed,                 // Velocity
             FLAG_DROP_RAYCAST_DISTANCE,             // Max drop distance
-            2,                                      // Sample rate
+            5,                                      // Sample rate
             9.8,                                    // gravity
             DEBUG_MODE, 5);                         // Use DEBUG_MODE for visualization
         
@@ -1732,7 +1742,6 @@ class Flag {
             }
         }
 
-       
         // Remove old flag if it exists - it shouldn't but lets make sure
         try{
             if (this.flagProp)
@@ -1758,6 +1767,23 @@ class Flag {
         if(mcom)
             mod.EnableGameModeObjective(mcom, false);
 
+        // Play yeet SFX
+        let yeetSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Soldier_Ragdoll_OnDeath_OneShot3D, this.currentPosition, ZERO_VEC);
+        mod.EnableSFX(yeetSfx, true);
+        mod.PlaySound(yeetSfx, 100);
+
+        // Animate prop into position
+        if(this.flagProp){
+            let adjustedFlagPathPoints = flagPath.arcPoints.slice(0, -2).concat([startPosition]);
+            let numInterPoints = 3;
+            let interpolatedFlagPathPoints = InterpolatePoints(adjustedFlagPathPoints, numInterPoints);
+            await animationManager.AnimateAlongPath(this.flagProp, interpolatedFlagPathPoints, {
+                speed: 400
+            }).catch((reason: any) => {
+                console.log(`Animation path failed with reason ${reason}`);
+            });
+        }
+
         // Update the position of the flag interaction point
         this.UpdateFlagInteractionPoint();
 
@@ -1777,7 +1803,7 @@ class Flag {
         mod.MoveVFX(this.flagHomeVFX, this.currentPosition, ZERO_VEC);
         mod.SetVFXColor(this.flagHomeVFX, GetTeamDroppedColor(this.team));
 
-         // Play drop SFX
+        // Play drop SFX
         let dropSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureNeutralize_OneShot2D, this.currentPosition, ZERO_VEC);
         mod.EnableSFX(dropSfx, true);
         mod.PlaySound(dropSfx, 100);
@@ -2071,6 +2097,7 @@ class Flag {
         }
     }
 }
+
 
 //==============================================================================================
 // CONFIGURATION LOADING
@@ -2370,6 +2397,11 @@ async function TickUpdate(): Promise<void> {
         for (const [flagId, flag] of flags.entries()) {
             flag.FastUpdate(timeDelta);
         }
+        
+        // Update all players UI instances
+        JSPlayer.getAllAsArray().forEach(jsPlayer => {
+            jsPlayer.scoreboardUI?.refresh();
+        });
 
         lastTickTime = currentTime;
     }
@@ -2396,6 +2428,7 @@ async function SecondUpdate(): Promise<void> {
         // Periodically update scoreboard for players
         RefreshScoreboard();
 
+
         // Check time limit
         if (mod.GetMatchTimeRemaining() <= 0) {
             EndGameByTime();
@@ -2410,6 +2443,7 @@ async function SecondUpdate(): Promise<void> {
     }
 }
 
+
 //==============================================================================================
 // EVENT HANDLERS
 //==============================================================================================
@@ -2419,6 +2453,10 @@ export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
         console.log(`Player joined: ${mod.GetObjId(eventPlayer)}`);
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
     }
+
+    // Make sure we create a JSPlayer for our new player
+    JSPlayer.get(eventPlayer);
+
     // Trigger team balance check
     CheckAndBalanceTeams();
 
@@ -2450,6 +2488,9 @@ export function OnPlayerDeployed(eventPlayer: mod.Player): void {
         const teamId = mod.GetObjId(mod.GetTeam(eventPlayer));
         // console.log(`Player ${mod.GetObjId(eventPlayer)} deployed on team ${teamId}`);
     }
+
+    // If we don't have a JSPlayer by now, we really should create one
+    JSPlayer.get(eventPlayer);
 }
 
 export function OnPlayerDied(
@@ -2571,8 +2612,219 @@ export function OnRayCastMissed(eventPlayer: mod.Player): void {
     raycastManager.handleMiss(eventPlayer);
 }
 
-export function OngoingWorldIcon(eventWorldIcon: mod.WorldIcon): void {
+
+//==============================================================================================
+// UI HELPER FUNCTIONS
+//==============================================================================================
+
+/**
+ * Get the text representation of a flag's current status
+ * @param flag The flag to get status for
+ * @returns Status message: "(  )" for home, "<  >" for carried, "[  ]" for dropped
+ */
+function BuildFlagStatus(flag: Flag): mod.Message {
+    if (flag.isAtHome) return mod.Message(mod.stringkeys.scoreUI_flag_status_home);
+    if (flag.isBeingCarried) return mod.Message(mod.stringkeys.scoreUI_flag_status_carried);
+    if (flag.isDropped) return mod.Message(mod.stringkeys.scoreUI_flag_status_dropped);
+    return mod.Message(mod.stringkeys.scoreUI_flag_status_home); // Default to home
+}
+
+//==============================================================================================
+// UI CLASSES
+//==============================================================================================
+
+/**
+ * TeamColumnWidget - Displays a single team's score and flag status
+ * Encapsulates the column background, score text, and flag status text
+ */
+class TeamColumnWidget {
+    readonly teamId: number;
+    readonly team: mod.Team;
+    readonly columnWidget: mod.UIWidget;
+    readonly scoreWidget: mod.UIWidget;
+    readonly flagStatusWidget: mod.UIWidget;
     
+    private readonly COLUMN_WIDTH = 40;
+    private readonly COLUMN_HEIGHT = 40;
+    
+    constructor(team: mod.Team, position: mod.Vector, parent: mod.UIWidget) {
+        this.team = team;
+        this.teamId = mod.GetObjId(team);
+        
+        // Create column container with team color background
+        this.columnWidget = modlib.ParseUI({
+            type: "Container",
+            parent: parent,
+            position: [mod.XComponentOf(position), mod.YComponentOf(position)],
+            size: [this.COLUMN_WIDTH, this.COLUMN_HEIGHT],
+            anchor: mod.UIAnchor.TopLeft,
+            bgFill: mod.UIBgFill.OutlineThick,
+            bgColor: GetTeamColorById(this.teamId),
+            bgAlpha: 0.8
+        })!;
+        
+        // Create score text (top row)
+        this.scoreWidget = modlib.ParseUI({
+            type: "Text",
+            parent: this.columnWidget,
+            position: [0, 10],
+            size: [this.COLUMN_WIDTH, 25],
+            anchor: mod.UIAnchor.Center,
+            textAnchor: mod.UIAnchor.Center,
+            textSize: 28,
+            textLabel: "",
+            textColor: [1, 1, 1],
+            bgAlpha: 0
+        })!;
+        
+        // Create flag status text (bottom row)
+        this.flagStatusWidget = modlib.ParseUI({
+            type: "Text",
+            parent: this.columnWidget,
+            position: [0, 30],
+            size: [this.COLUMN_WIDTH, 25],
+            anchor: mod.UIAnchor.Center,
+            textAnchor: mod.UIAnchor.Center,
+            textSize: 20,
+            textLabel: mod.Message(mod.stringkeys.scoreUI_flag_status_home),
+            textColor: [1, 1, 1],
+            bgAlpha: 0
+        })!;
+    }
+    
+    /**
+     * Update the team's score and flag status display
+     * @param score Current team score
+     * @param flagStatus Flag status message (from GetFlagStatusText)
+     */
+    update(): void {
+        // mod.SetUITextLabel(this.scoreWidget, mod.Message(mod.stringkeys.scoreboard_score_value, score));
+        // mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
+
+        const score = teamScores.get(this.teamId) ?? 0;
+
+        // Get flag status for this team
+        const flag = flags.get(this.teamId);
+        if(flag){
+            const flagStatus = BuildFlagStatus(flag);
+            mod.SetUITextLabel(this.scoreWidget, mod.Message(score));
+            mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
+
+        }
+    }
+}
+
+/**
+ * ScoreboardUI - Main scoring interface for CTF
+ * Shows player's team and all team scores with flag statuses
+ */
+class ScoreboardUI {
+    readonly player: mod.Player;
+    readonly playerId: number;
+    
+    private rootWidget: mod.UIWidget | undefined;
+    private teamIndicatorWidget: mod.UIWidget | undefined;
+    private teamColumns: Map<number, TeamColumnWidget> = new Map();
+    
+    private readonly ROOT_WIDTH = 700;
+    private readonly ROOT_HEIGHT = 150;
+    private readonly TOP_PADDING = 100;
+    private readonly TEAM_INDICATOR_HEIGHT = 40;
+    private readonly COLUMN_SPACING = 20;
+    
+    constructor(player: mod.Player) {
+        this.player = player;
+        this.playerId = mod.GetObjId(player);
+        this.create();
+    }
+    
+    private create(): void {
+        if (this.rootWidget) return;
+        
+        // Calculate total width needed based on team count
+        const teamCount = teams.size;
+        const columnWidth = 120;
+        const totalColumnsWidth = (teamCount * columnWidth) + ((teamCount - 1) * this.COLUMN_SPACING);
+        const actualRootWidth = Math.max(this.ROOT_WIDTH, totalColumnsWidth + 40); // 40px padding
+        
+        // Create root container
+        this.rootWidget = modlib.ParseUI({
+            type: "Container",
+            size: [actualRootWidth, this.ROOT_HEIGHT],
+            position: [0, this.TOP_PADDING],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill: mod.UIBgFill.Blur,
+            bgColor: [0, 0, 0],
+            bgAlpha: 0.2,
+            playerId: this.player
+        })!;
+        
+        // Create team indicator (Row 1)
+        this.teamIndicatorWidget = modlib.ParseUI({
+            type: "Text",
+            parent: this.rootWidget,
+            position: [0, 10],
+            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
+            anchor: mod.UIAnchor.TopCenter,
+            textAnchor: mod.UIAnchor.TopCenter,
+            textSize: 24,
+            textLabel: mod.Message(mod.stringkeys.scoreUI_team_label, GetTeamName(mod.GetTeam(this.player))),
+            textColor: [1, 1, 1],
+            bgAlpha: 0
+        })!;
+        
+        // Create team columns (Row 2)
+        const columnsStartY = this.TEAM_INDICATOR_HEIGHT + 20;
+        const columnsStartX = (actualRootWidth - totalColumnsWidth) / 2; // Center the columns
+        
+        let currentX = columnsStartX;
+        for (const [teamId, team] of teams.entries()) {
+            const columnPos = mod.CreateVector(currentX, columnsStartY, 0);
+            const column = new TeamColumnWidget(team, columnPos, this.rootWidget);
+            this.teamColumns.set(teamId, column);
+            currentX += columnWidth + this.COLUMN_SPACING;
+        }
+        
+        // Initial refresh
+        this.refresh();
+    }
+    
+    /**
+     * Update all UI elements with current game state
+     */
+    refresh(): void {
+        if (!this.rootWidget || !this.teamIndicatorWidget) return;
+        
+        // Update team indicator text with player's current team
+        const playerTeam = mod.GetTeam(this.player);
+        const playerTeamId = mod.GetObjId(playerTeam);
+        const teamName = GetTeamName(playerTeam);
+        const teamColor = GetTeamColor(playerTeam);
+        
+        mod.SetUITextLabel(this.teamIndicatorWidget, mod.Message(mod.stringkeys.scoreUI_team_label, teamName));
+        mod.SetUITextColor(this.teamIndicatorWidget, teamColor);
+        
+        // Update each team column
+        for (const [teamId, column] of this.teamColumns.entries()) {
+            column.update();
+        }
+    }
+    
+    /**
+     * Close and cleanup the scoreboard UI
+     */
+    close(): void {
+        if (this.rootWidget) {
+            mod.SetUIWidgetVisible(this.rootWidget, false);
+        }
+    }
+    
+    /**
+     * Check if the scoreboard is currently visible
+     */
+    isOpen(): boolean {
+        return this.rootWidget !== undefined;
+    }
 }
 
 
@@ -2968,4 +3220,95 @@ function getStringValue(stringKey: string): any {
 
 function NormalizeColour(r:number, g:number, b:number): [number, number, number] {
     return [r/255.0, g/255.0, b/255.0]
+}
+
+/**
+ * Linear interpolation between two vectors
+ * @param start Starting vector
+ * @param end Ending vector
+ * @param alpha Interpolation factor (0.0 = start, 1.0 = end)
+ * @returns Interpolated vector between start and end
+ */
+function LerpVector(start: mod.Vector, end: mod.Vector, alpha: number): mod.Vector {
+    // Clamp alpha to [0, 1] range
+    alpha = Math.max(0, Math.min(1, alpha));
+    
+    // Linear interpolation formula: result = start + (end - start) * alpha
+    // Which is equivalent to: result = start * (1 - alpha) + end * alpha
+    const startFloat = Float3.FromVector(start);
+    const endFloat = Float3.FromVector(end);
+    const delta = endFloat.Subtract(startFloat);
+    const scaledDelta = delta.MultiplyScalar(alpha);
+    const final = startFloat.Add(scaledDelta);
+    return final.ToVector();
+}
+
+function InterpolatePoints(points: mod.Vector[], numPoints:number): mod.Vector[] {
+    if(points.length < 2){
+        console.log("Need 1+ points to interpolate");
+        return points;
+    }
+
+    let interpolatedPoints: mod.Vector[] = [];
+    for(let [pointIdx, point] of points.entries()){
+        if(pointIdx < points.length - 1){
+            // Get current and next point
+            let currentPoint = points[pointIdx];
+            let nextPoint = points[pointIdx + 1];
+            interpolatedPoints.push(currentPoint);
+
+            for(let interpIdx = 1; interpIdx < numPoints; ++interpIdx){
+                let alpha: number = interpIdx / numPoints;
+                let interpVector = LerpVector(currentPoint, nextPoint, alpha);
+                console.log(`${interpIdx} | Start: ${VectorToString(currentPoint)}, End: ${VectorToString(nextPoint)}, Alpha: ${alpha}, Interp: ${VectorToString(interpVector)}}`);
+                interpolatedPoints.push(interpVector);
+            }
+
+            interpolatedPoints.push(nextPoint);
+        }
+    }
+
+    return interpolatedPoints;
+}
+
+interface Float3{
+    x: number,
+    y: number,
+    z: number
+}
+
+class Float3 {
+    x: number = 0;
+    y: number = 0;
+    z: number = 0;
+
+    constructor(x: number, y: number, z:number){
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+
+    static FromVector(vector: mod.Vector): Float3 {
+        return new Float3(mod.XComponentOf(vector), mod.YComponentOf(vector), mod.ZComponentOf(vector));
+    }
+
+    ToVector(): mod.Vector {
+        return mod.CreateVector(this.x, this.y, this.z);
+    }
+
+    Subtract(other:Float3): Float3 {
+        return new Float3(this.x - other.x, this.y - other.y, this.z - other.z);
+    }
+
+    Multiply(other:Float3): Float3 {
+        return new Float3(this.x * other.x, this.y * other.y, this.z * other.z);
+    }
+
+    MultiplyScalar(scalar:number): Float3 {
+        return new Float3(this.x * scalar, this.y * scalar, this.z * scalar);
+    }
+
+    Add(other:Float3): Float3 {
+        return new Float3(this.x + other.x, this.y + other.y, this.z + other.z);
+    }
 }
