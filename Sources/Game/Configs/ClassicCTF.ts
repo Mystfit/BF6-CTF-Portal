@@ -1,5 +1,8 @@
+//==============================================================================================
+// CLASSIC 2-TEAM CTF CONFIG
+//==============================================================================================
+
 const ClassicCTFConfig: GameModeConfig = {
-// Default 2-team CTF configuration for backwards compatibility
     teams: [
         { 
             teamId: TeamID.TEAM_1, 

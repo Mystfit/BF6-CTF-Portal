@@ -1,5 +1,5 @@
 //==============================================================================================
-// UI HELPER FUNCTIONS
+// MULTI 2+ TEAM CTF HUD
 //==============================================================================================
 
 /**
@@ -14,10 +14,6 @@ function BuildFlagStatus(flag: Flag): mod.Message {
     return mod.Message(mod.stringkeys.scoreUI_flag_status_home); // Default to home
 }
 
-//==============================================================================================
-// UI CLASSES
-//==============================================================================================
-
 /**
  * TeamColumnWidget - Displays a single team's score and flag status
  * Encapsulates the column background, score text, and flag status text
@@ -27,8 +23,9 @@ class TeamColumnWidget {
     readonly team: mod.Team;
     readonly isPlayerTeam: boolean;
     readonly columnWidget: mod.UIWidget;
+    readonly columnWidgetOutline: mod.UIWidget;
     readonly scoreWidget: mod.UIWidget;
-    readonly flagStatusWidget: mod.UIWidget;
+    readonly flagIcon: FlagIcon;
     readonly verticalPadding:number = 8;
     
     constructor(team: mod.Team, position: mod.Vector, size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
@@ -41,12 +38,24 @@ class TeamColumnWidget {
         this.columnWidget = modlib.ParseUI({
             type: "Container",
             parent: parent,
-            position: mod.Add(position, mod.CreateVector(0, (isPlayerTeam ? 0 : this.verticalPadding), 0)),
-            size: [size[0], size[1] + (isPlayerTeam ? this.verticalPadding : 0)],
+            position: position,
+            size: [size[0], size[1]],
             anchor: mod.UIAnchor.TopCenter,
-            bgFill:  (this.isPlayerTeam) ? mod.UIBgFill.Solid :  mod.UIBgFill.Blur,
+            bgFill:  mod.UIBgFill.Blur,
             bgColor: GetTeamColorById(this.teamId),
-            bgAlpha: 0.5
+            bgAlpha: 0.75
+        })!;
+
+        // Create column container with team color background
+        this.columnWidgetOutline = modlib.ParseUI({
+            type: "Container",
+            parent: parent,
+            position: position,
+            size: [size[0], size[1]],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill:  mod.UIBgFill.OutlineThin,
+            bgColor: GetTeamColorById(this.teamId),
+            bgAlpha: 0
         })!;
         
         // Create score text (top row)
@@ -59,23 +68,28 @@ class TeamColumnWidget {
             textAnchor: mod.UIAnchor.Center,
             textSize: 28,
             textLabel: "",
-            textColor: (isPlayerTeam) ? [1,1,1] : GetTeamColorById(this.teamId),
-            bgAlpha: 0
+            textColor: VectorClampToRange(mod.Add(GetTeamColorById(this.teamId), mod.CreateVector(0.5, 0.5, 0.5)), 0, 1),
+            bgAlpha: 0,
         })!;
-        
-        // Create flag status text (bottom row)
-        this.flagStatusWidget = modlib.ParseUI({
-            type: "Text",
+
+        let teamColorAdditive = isPlayerTeam ? 0.5 : -0.2;
+
+        let flagIconConfig: FlagIconParams = {
+            name: `FlagHomeIcon_Team${this.teamId}`,
             parent: this.columnWidget,
-            position: [0, 30 + (this.isPlayerTeam ? this.verticalPadding : 0)],
-            size: [size[0], 25],
-            anchor: mod.UIAnchor.Center,
-            textAnchor: mod.UIAnchor.Center,
-            textSize: 20,
-            textLabel: mod.Message(mod.stringkeys.scoreUI_flag_status_home),
-            textColor: [1, 1, 1],
-            bgAlpha: 0
-        })!;
+            position: mod.CreateVector(0, size[1] + this.verticalPadding, 0),
+            size: mod.CreateVector(35, 35, 0),
+            anchor: mod.UIAnchor.TopCenter,
+            fillColor:  GetTeamColorById(this.teamId),
+            fillAlpha: 1,
+            outlineColor: GetTeamColorById(this.teamId),
+            outlineAlpha: 1,
+            showFill: true,
+            showOutline: true,
+            bgFill: mod.UIBgFill.Solid,
+            outlineThickness: 0
+        };
+        this.flagIcon = new FlagIcon(flagIconConfig);
     }
     
     /**
@@ -94,8 +108,20 @@ class TeamColumnWidget {
         if(flag){
             const flagStatus = BuildFlagStatus(flag);
             mod.SetUITextLabel(this.scoreWidget, mod.Message(score));
-            mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
-
+            // mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
+            
+            // TODO: Ugly hack. This needs to be event triggered, not changed in update
+            if(flag.isAtHome){
+                this.flagIcon.SetVisible(true);
+                this.flagIcon.SetFillAlpha(1);
+                this.flagIcon.SetOutlineAlpha(1);
+            } else if(flag.isBeingCarried){
+                this.flagIcon.SetVisible(false);
+            } else if(flag.isDropped){
+                this.flagIcon.SetVisible(true);
+                this.flagIcon.SetFillAlpha(0.15);
+                this.flagIcon.SetOutlineAlpha(0.75);
+            }
         }
     }
 }
@@ -104,11 +130,11 @@ class TeamColumnWidget {
  * ScoreboardUI - Main scoring interface for CTF
  * Shows player's team and all team scores with flag statuses
  */
-class ScoreboardUI {
+class MultiTeamScoreHUD implements BaseScoreboardHUD {
     readonly player: mod.Player;
     readonly playerId: number;
     
-    private rootWidget: mod.UIWidget | undefined;
+    rootWidget: mod.UIWidget | undefined;
     private teamIndicatorContainer: mod.UIWidget | undefined;
     private teamIndicatorText: mod.UIWidget | undefined;
     private teamRow: mod.UIWidget | undefined;
@@ -126,12 +152,12 @@ class ScoreboardUI {
         this.create();
     }
     
-    private create(): void {
+    create(): void {
         if (this.rootWidget) return;
         
         // Calculate total width needed based on team count
         const teamCount = teams.size;
-        const columnWidth = 40; // Must match TeamColumnWidget.COLUMN_WIDTH
+        const columnWidth = 60; // Must match TeamColumnWidget.COLUMN_WIDTH
         const totalColumnsWidth = (teamCount * columnWidth) + ((teamCount - 1) * this.COLUMN_SPACING);
         const actualRootWidth = totalColumnsWidth;//Math.max(this.ROOT_WIDTH, totalColumnsWidth + 40); // 40px padding
         
@@ -176,10 +202,10 @@ class ScoreboardUI {
         this.teamRow = modlib.ParseUI({
             type: "Container",
             parent: this.rootWidget,
-            size: [actualRootWidth, 30],
-            position: [0, this.TEAM_INDICATOR_HEIGHT],
+            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
+            position: [0, this.TEAM_INDICATOR_HEIGHT + 8],
             anchor: mod.UIAnchor.TopCenter,
-            //bgFill: mod.UIBgFill.Blur,
+            bgFill: mod.UIBgFill.None,
             bgColor: [0, 0, 0],
             bgAlpha: 0.0,
             playerId: this.player
@@ -195,7 +221,7 @@ class ScoreboardUI {
         for (const [teamId, team] of teams.entries()) {
             let isPlayerTeam: boolean = mod.Equals(team, mod.GetTeam(this.player));
             const columnPos = mod.CreateVector(currentX, 0, 0);
-            const column = new TeamColumnWidget(team, columnPos, [30, 30], this.teamRow, isPlayerTeam);
+            const column = new TeamColumnWidget(team, columnPos, [50, 30], this.teamRow, isPlayerTeam);
             this.teamColumns.set(teamId, column);
             currentX += columnWidth + this.COLUMN_SPACING;
         }

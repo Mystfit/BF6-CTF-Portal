@@ -222,7 +222,7 @@ declare class JSPlayer {
     heldFlags: Flag[];
     lastPosition: mod.Vector;
     velocity: mod.Vector;
-    scoreboardUI?: ScoreboardUI;
+    scoreboardUI?: BaseScoreboardHUD;
     static playerInstances: mod.Player[];
     constructor(player: mod.Player);
     static get(player: mod.Player): JSPlayer | undefined;
@@ -328,13 +328,78 @@ declare class TeamColumnWidget {
     update(): void;
 }
 
-declare class ScoreboardUI {
+declare interface BaseScoreboardHUD {
     readonly player: mod.Player;
     readonly playerId: number;
-    constructor(player: mod.Player);
+    readonly rootWidget: mod.UIWidget | undefined;
+
+    create(): void;
     refresh(): void;
     close(): void;
     isOpen(): boolean;
+}
+
+declare class MultiTeamScoreHUD {
+    readonly player: mod.Player;
+    readonly playerId: number;
+    readonly rootWidget: mod.UIWidget | undefined;
+    
+    constructor(player: mod.Player);
+    create(): void;
+    refresh(): void;
+    close(): void;
+    isOpen(): boolean;
+}
+
+declare class ClassicCTFScoreHUD {
+    readonly player: mod.Player;
+    readonly playerId: number;
+    readonly rootWidget: mod.UIWidget | undefined;
+
+    constructor(player: mod.Player);
+    create(): void;
+    refresh(): void;
+    close(): void;
+    isOpen(): boolean;
+}
+
+interface FlagIconParams {
+    name: string;
+    position: mod.Vector;
+    size: mod.Vector;
+    anchor: mod.UIAnchor;
+    parent: mod.UIWidget;
+    visible?: boolean;
+    fillColor?: mod.Vector;
+    fillAlpha?: number;
+    outlineColor?: mod.Vector;
+    outlineAlpha?: number;
+    outlineThickness?: number;
+    showFill?: boolean;
+    showOutline?: boolean;
+    teamId?: mod.Team;
+    playerId?: mod.Player;
+    bgFill?: mod.UIBgFill;
+    flagPoleGap?: number;
+}
+
+declare class FlagIcon {
+    constructor(params: FlagIconParams);
+    SetFillVisible(visible: boolean): void;
+    SetOutlineVisible(visible: boolean): void;
+    IsFillVisible(): boolean;
+    IsOutlineVisible(): boolean;
+    SetFillColor(color: mod.Vector, alpha?: number): void;
+    SetFillAlpha(alpha: number): void;
+    SetOutlineColor(color: mod.Vector, alpha?: number): void;
+    SetOutlineAlpha(alpha:number): void;
+    SetColor(color: mod.Vector, alpha?: number): void;
+    SetPosition(position: mod.Vector): void;
+    SetParent(parent: mod.UIWidget): void;
+    IsVisible(): boolean;
+    SetVisible(visible: boolean): void;
+    Destroy(): void;
+    GetRootWidget(): mod.UIWidget;
 }
 
 // ============================================================================
@@ -355,6 +420,8 @@ declare namespace Math2 {
         Add(other: Vec3): Vec3;
     }
 }
+
+declare function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean;
 
 // ============================================================================
 // GLOBAL INSTANCES
@@ -390,6 +457,7 @@ declare let captureZones: Map<number, CaptureZone>;
 declare function GetCurrentTime(): number;
 declare function GetRandomInt(max: number): number;
 declare function VectorToString(v: mod.Vector): string;
+declare function VectorClampToRange(vector: mod.Vector, min:number, max:number): mod.Vector;
 declare function VectorLength(vec: mod.Vector): number;
 declare function VectorLengthSquared(vec: mod.Vector): number;
 declare function GetTeamName(team: mod.Team): string;

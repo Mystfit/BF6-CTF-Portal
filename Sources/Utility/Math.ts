@@ -1,3 +1,7 @@
+//==============================================================================================
+// MATH FUNCTIONS
+//==============================================================================================
+
 export namespace Math2 {
     export class Vec3 {
         x: number = 0;
@@ -99,4 +103,17 @@ function VectorLengthSquared(vec: mod.Vector): number{
     let yLength = mod.YComponentOf(vec);
     let zLength = mod.ZComponentOf(vec);
     return Math.sqrt((xLength * xLength) + (yLength * yLength) + (zLength * yLength));
+}
+
+function VectorClampToRange(vector: mod.Vector, min:number, max:number): mod.Vector{
+    return mod.CreateVector(
+        Math.min(Math.max(mod.XComponentOf(vector), min), max),
+        Math.min(Math.max(mod.YComponentOf(vector), min), max),
+        Math.min(Math.max(mod.ZComponentOf(vector), min), max),
+    );
+}
+
+function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean
+{
+    return Math.abs(a - b) < (epsilon ?? 1e-9);
 }

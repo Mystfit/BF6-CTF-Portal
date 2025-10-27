@@ -2,7 +2,7 @@ try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof
 /* 
  * Capture the Flag Game Mode
  * 
- * Two teams compete to capture the enemy flag and return it to their base.
+ * Two (or more) teams compete to capture the enemy flag and return it to their base.
  * First team to reach the target score wins.
  * Author: Mystfit and Claude Sonnet 4.5 (20250929).
  */
@@ -64,7 +64,7 @@ try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof
 //@ts-ignore
 import * as modlib from 'modlib';
 
-const VERSION = [1, 1, 0];
+const VERSION = [1, 2, 0];
 
 //==============================================================================================
 // CONFIGURATION
@@ -291,13 +291,7 @@ async function SecondUpdate(): Promise<void> {
         await mod.Wait(1);
 
         let currentTime = GetCurrentTime();
-        let timeDelta = currentTime - lastTickTime;
-        // console.log(`Second tick delta ${timeDelta}`);
-        
-        // // Check auto-return timers for all flags
-        // for (const [flagId, flagData] of flags.entries()) {
-        //     flagData.CheckAutoReturn();
-        // }
+        let timeDelta = currentTime - lastTickTime;        
         
         // Periodic team balance check
         if (TEAM_AUTO_BALANCE) {

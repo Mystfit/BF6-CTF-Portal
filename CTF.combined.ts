@@ -68,7 +68,7 @@ try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof
 //@ts-ignore
 import * as modlib from 'modlib';
 
-const VERSION = [1, 1, 0];
+const VERSION = [1, 2, 0];
 
 //==============================================================================================
 // CONFIGURATION
@@ -830,6 +830,19 @@ function VectorLengthSquared(vec: mod.Vector): number{
     let yLength = mod.YComponentOf(vec);
     let zLength = mod.ZComponentOf(vec);
     return Math.sqrt((xLength * xLength) + (yLength * yLength) + (zLength * yLength));
+}
+
+function VectorClampToRange(vector: mod.Vector, min:number, max:number): mod.Vector{
+    return mod.CreateVector(
+        Math.min(Math.max(mod.XComponentOf(vector), min), max),
+        Math.min(Math.max(mod.YComponentOf(vector), min), max),
+        Math.min(Math.max(mod.ZComponentOf(vector), min), max),
+    );
+}
+
+function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean
+{
+    return Math.abs(a - b) < (epsilon ?? 1e-9);
 }
 
 
@@ -1812,7 +1825,7 @@ class JSPlayer {
     velocity: mod.Vector = ZERO_VEC;
     
     // UI
-    scoreboardUI?: ScoreboardUI;
+    scoreboardUI?: BaseScoreboardHUD;
 
     static playerInstances: mod.Player[] = [];
     static #allJsPlayers: { [key: number]: JSPlayer } = {};
@@ -1827,7 +1840,7 @@ class JSPlayer {
         
         // Create scoreboard UI for human players
         if (!mod.GetSoldierState(player, mod.SoldierStateBool.IsAISoldier)) {
-            this.scoreboardUI = new ScoreboardUI(player);
+            this.scoreboardUI = new MultiTeamScoreHUD(player);
         }
         
         if (DEBUG_MODE) {
@@ -2977,6 +2990,19 @@ const FourTeamCTF: GameModeConfig = {
 }
 
 
+interface BaseScoreboardHUD {
+    readonly player: mod.Player;
+    readonly playerId: number;
+    readonly rootWidget: mod.UIWidget | undefined;
+
+    create(): void;
+    refresh(): void;
+    close(): void;
+    isOpen(): boolean;
+}
+
+
+
 //==============================================================================================
 // UI HELPER FUNCTIONS
 //==============================================================================================
@@ -3006,8 +3032,9 @@ class TeamColumnWidget {
     readonly team: mod.Team;
     readonly isPlayerTeam: boolean;
     readonly columnWidget: mod.UIWidget;
+    readonly columnWidgetOutline: mod.UIWidget;
     readonly scoreWidget: mod.UIWidget;
-    readonly flagStatusWidget: mod.UIWidget;
+    readonly flagIcon: FlagIcon;
     readonly verticalPadding:number = 8;
     
     constructor(team: mod.Team, position: mod.Vector, size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
@@ -3020,12 +3047,24 @@ class TeamColumnWidget {
         this.columnWidget = modlib.ParseUI({
             type: "Container",
             parent: parent,
-            position: mod.Add(position, mod.CreateVector(0, (isPlayerTeam ? 0 : this.verticalPadding), 0)),
-            size: [size[0], size[1] + (isPlayerTeam ? this.verticalPadding : 0)],
+            position: position,
+            size: [size[0], size[1]],
             anchor: mod.UIAnchor.TopCenter,
-            bgFill:  (this.isPlayerTeam) ? mod.UIBgFill.Solid :  mod.UIBgFill.Blur,
+            bgFill:  mod.UIBgFill.Blur,
             bgColor: GetTeamColorById(this.teamId),
-            bgAlpha: 0.5
+            bgAlpha: 0.75
+        })!;
+
+        // Create column container with team color background
+        this.columnWidgetOutline = modlib.ParseUI({
+            type: "Container",
+            parent: parent,
+            position: position,
+            size: [size[0], size[1]],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill:  mod.UIBgFill.OutlineThin,
+            bgColor: GetTeamColorById(this.teamId),
+            bgAlpha: 0
         })!;
         
         // Create score text (top row)
@@ -3038,23 +3077,28 @@ class TeamColumnWidget {
             textAnchor: mod.UIAnchor.Center,
             textSize: 28,
             textLabel: "",
-            textColor: (isPlayerTeam) ? [1,1,1] : GetTeamColorById(this.teamId),
-            bgAlpha: 0
+            textColor: VectorClampToRange(mod.Add(GetTeamColorById(this.teamId), mod.CreateVector(0.5, 0.5, 0.5)), 0, 1),
+            bgAlpha: 0,
         })!;
-        
-        // Create flag status text (bottom row)
-        this.flagStatusWidget = modlib.ParseUI({
-            type: "Text",
+
+        let teamColorAdditive = isPlayerTeam ? 0.5 : -0.2;
+
+        let flagIconConfig: FlagIconParams = {
+            name: `FlagHomeIcon_Team${this.teamId}`,
             parent: this.columnWidget,
-            position: [0, 30 + (this.isPlayerTeam ? this.verticalPadding : 0)],
-            size: [size[0], 25],
-            anchor: mod.UIAnchor.Center,
-            textAnchor: mod.UIAnchor.Center,
-            textSize: 20,
-            textLabel: mod.Message(mod.stringkeys.scoreUI_flag_status_home),
-            textColor: [1, 1, 1],
-            bgAlpha: 0
-        })!;
+            position: mod.CreateVector(0, size[1] + this.verticalPadding, 0),
+            size: mod.CreateVector(35, 35, 0),
+            anchor: mod.UIAnchor.TopCenter,
+            fillColor:  GetTeamColorById(this.teamId),
+            fillAlpha: 1,
+            outlineColor: GetTeamColorById(this.teamId),
+            outlineAlpha: 1,
+            showFill: true,
+            showOutline: true,
+            bgFill: mod.UIBgFill.Solid,
+            outlineThickness: 0
+        };
+        this.flagIcon = new FlagIcon(flagIconConfig);
     }
     
     /**
@@ -3073,8 +3117,20 @@ class TeamColumnWidget {
         if(flag){
             const flagStatus = BuildFlagStatus(flag);
             mod.SetUITextLabel(this.scoreWidget, mod.Message(score));
-            mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
-
+            // mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
+            
+            // TODO: Ugly hack. This needs to be event triggered, not changed in update
+            if(flag.isAtHome){
+                this.flagIcon.SetVisible(true);
+                this.flagIcon.SetFillAlpha(1);
+                this.flagIcon.SetOutlineAlpha(1);
+            } else if(flag.isBeingCarried){
+                this.flagIcon.SetVisible(false);
+            } else if(flag.isDropped){
+                this.flagIcon.SetVisible(true);
+                this.flagIcon.SetFillAlpha(0.15);
+                this.flagIcon.SetOutlineAlpha(0.75);
+            }
         }
     }
 }
@@ -3083,11 +3139,11 @@ class TeamColumnWidget {
  * ScoreboardUI - Main scoring interface for CTF
  * Shows player's team and all team scores with flag statuses
  */
-class ScoreboardUI {
+class MultiTeamScoreHUD implements BaseScoreboardHUD {
     readonly player: mod.Player;
     readonly playerId: number;
     
-    private rootWidget: mod.UIWidget | undefined;
+    rootWidget: mod.UIWidget | undefined;
     private teamIndicatorContainer: mod.UIWidget | undefined;
     private teamIndicatorText: mod.UIWidget | undefined;
     private teamRow: mod.UIWidget | undefined;
@@ -3105,12 +3161,12 @@ class ScoreboardUI {
         this.create();
     }
     
-    private create(): void {
+    create(): void {
         if (this.rootWidget) return;
         
         // Calculate total width needed based on team count
         const teamCount = teams.size;
-        const columnWidth = 40; // Must match TeamColumnWidget.COLUMN_WIDTH
+        const columnWidth = 60; // Must match TeamColumnWidget.COLUMN_WIDTH
         const totalColumnsWidth = (teamCount * columnWidth) + ((teamCount - 1) * this.COLUMN_SPACING);
         const actualRootWidth = totalColumnsWidth;//Math.max(this.ROOT_WIDTH, totalColumnsWidth + 40); // 40px padding
         
@@ -3155,10 +3211,10 @@ class ScoreboardUI {
         this.teamRow = modlib.ParseUI({
             type: "Container",
             parent: this.rootWidget,
-            size: [actualRootWidth, 30],
-            position: [0, this.TEAM_INDICATOR_HEIGHT],
+            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
+            position: [0, this.TEAM_INDICATOR_HEIGHT + 8],
             anchor: mod.UIAnchor.TopCenter,
-            //bgFill: mod.UIBgFill.Blur,
+            bgFill: mod.UIBgFill.None,
             bgColor: [0, 0, 0],
             bgAlpha: 0.0,
             playerId: this.player
@@ -3174,7 +3230,7 @@ class ScoreboardUI {
         for (const [teamId, team] of teams.entries()) {
             let isPlayerTeam: boolean = mod.Equals(team, mod.GetTeam(this.player));
             const columnPos = mod.CreateVector(currentX, 0, 0);
-            const column = new TeamColumnWidget(team, columnPos, [30, 30], this.teamRow, isPlayerTeam);
+            const column = new TeamColumnWidget(team, columnPos, [50, 30], this.teamRow, isPlayerTeam);
             this.teamColumns.set(teamId, column);
             currentX += columnWidth + this.COLUMN_SPACING;
         }
@@ -3227,6 +3283,65 @@ class ScoreboardUI {
 }
 
 
+/**
+ * ScoreboardUI - Main scoring interface for CTF
+ * Shows player's team and all team scores with flag statuses
+ */
+class ClassicCTFScoreHUD implements BaseScoreboardHUD{
+    readonly player: mod.Player;
+    readonly playerId: number;
+    
+    rootWidget: mod.UIWidget | undefined;
+    
+    constructor(player: mod.Player) {
+        this.player = player;
+        this.playerId = mod.GetObjId(player);
+        this.create();
+    }
+    
+    create(): void {
+        if (this.rootWidget) return;
+        
+        // Create root container
+        this.rootWidget = modlib.ParseUI({
+            type: "Container",
+            size: [0, 0],
+            position: [0, 0],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill: mod.UIBgFill.Blur,
+            bgColor: [0, 0, 0],
+            bgAlpha: 0.0,
+            playerId: this.player
+        })!;
+
+        // Initial refresh
+        this.refresh();
+    }
+    
+    /**
+     * Update all UI elements with current game state
+     */
+    refresh(): void {
+        if (!this.rootWidget) return;
+        
+    }
+    
+    /**
+     * Close and cleanup the scoreboard UI
+     */
+    close(): void {
+        if (this.rootWidget) {
+            mod.SetUIWidgetVisible(this.rootWidget, false);
+        }
+    }
+    
+    /**
+     * Check if the scoreboard is currently visible
+     */
+    isOpen(): boolean {
+        return this.rootWidget !== undefined;
+    }
+}
 
 
 //==============================================================================================
@@ -3256,42 +3371,55 @@ interface FlagIconParams {
     anchor: mod.UIAnchor;
     parent: mod.UIWidget;
     visible?: boolean;
-    color?: mod.Vector;         // Flag color (default: white)
-    alpha?: number;             // Flag alpha (default: 1.0)
-    outline?: boolean;          // Render as outline (default: false)
-    outlineThickness?: number;  // Outline thickness in pixels (default: 2)
+    fillColor?: mod.Vector;         // Fill color (default: white)
+    fillAlpha?: number;             // Fill alpha (default: 1.0)
+    outlineColor?: mod.Vector;      // Outline color (default: white)
+    outlineAlpha?: number;          // Outline alpha (default: 1.0)
+    outlineThickness?: number;      // Outline thickness in pixels (default: 2)
+    showFill?: boolean;             // Show filled version (default: true)
+    showOutline?: boolean;          // Show outline version (default: false)
     teamId?: mod.Team;
     playerId?: mod.Player;
+    bgFill?: mod.UIBgFill;
+    flagPoleGap?: number;
 }
 
 class FlagIcon {
     private rootContainer: mod.UIWidget;
-    private poleContainer: mod.UIWidget;
-    private flagContainers: mod.UIWidget[] = [];
+    private fillContainers: mod.UIWidget[] = [];     // Containers for filled version
+    private outlineContainers: mod.UIWidget[] = [];  // Containers for outline version
     
     private readonly params: FlagIconParams;
-    private isOutline: boolean;
     
     // Flag proportions
-    private readonly POLE_WIDTH_RATIO = 0.1;
-    private readonly POLE_HEIGHT_RATIO = 0.6;
-    private readonly FLAG_WIDTH_RATIO = 0.9;
-    private readonly FLAG_HEIGHT_RATIO = 0.6;
+    private readonly POLE_WIDTH_RATIO = 0.15;
+    private readonly POLE_HEIGHT_RATIO = 1.0;
+    private readonly FLAG_WIDTH_RATIO = 0.85;
+    private readonly FLAG_HEIGHT_RATIO = 0.55;
     
     constructor(params: FlagIconParams) {
         this.params = params;
-        this.isOutline = params.outline ?? false;
+        
+        // Default values
+        this.params.showFill = params.showFill ?? true;
+        this.params.showOutline = params.showOutline ?? false;
+        this.params.fillColor = VectorClampToRange(params.fillColor ?? mod.CreateVector(1, 1, 1), 0, 1);
+        this.params.fillAlpha = params.fillAlpha ?? 1.0;
+        this.params.outlineColor = VectorClampToRange(params.outlineColor ?? mod.CreateVector(1, 1, 1), 0, 1);
+        this.params.outlineAlpha = params.outlineAlpha ?? 1.0;
+        this.params.flagPoleGap = params.flagPoleGap ?? 2.0;
         
         // Create root container
         this.rootContainer = this.createRootContainer();
         
-        // Create flag components based on mode
-        this.poleContainer = this.createPole();
-        if (this.isOutline) {
-            this.createOutlineFlag();
-        } else {
-            this.createFilledFlag();
-        }
+        // Create both filled and outline versions (layered)
+        // Filled version is created first (rendered behind outline)
+        this.createFilledFlag();
+        this.createOutlineFlag();
+        
+        // Set initial visibility
+        this.SetFillVisible(this.params.showFill ?? true);
+        this.SetOutlineVisible(this.params.showOutline ?? false);
     }
     
     private createRootContainer(): mod.UIWidget {
@@ -3311,60 +3439,54 @@ class FlagIcon {
         return root;
     }
     
-    private createPole(): mod.UIWidget {
+    private createFilledFlag(): void {
         const totalWidth = mod.XComponentOf(this.params.size);
         const totalHeight = mod.YComponentOf(this.params.size);
         
         const poleWidth = totalWidth * this.POLE_WIDTH_RATIO;
         const poleHeight = totalHeight * this.POLE_HEIGHT_RATIO;
+        const flagWidth = totalWidth * this.FLAG_WIDTH_RATIO;
+        const flagHeight = totalHeight * this.FLAG_HEIGHT_RATIO;
+        const flagPoleGap = this.params.flagPoleGap ?? 2.0;
         
-        // Position pole at bottom-left, extending down
+        const color = this.params.fillColor ?? mod.CreateVector(1, 1, 1);
+        const alpha = this.params.fillAlpha ?? 1.0;
+        const bgFill = this.params.bgFill ?? mod.UIBgFill.Blur;
+        
+        // Create pole (bottom-left, extending down from flag)
         const poleX = 0;
-        const poleY = totalHeight - poleHeight;
+        const poleY = 0; //totalHeight - poleHeight;
         
         const pole = modlib.ParseUI({
             type: "Container",
-            name: `${this.params.name}_pole`,
+            name: `${this.params.name}_fill_pole`,
             position: [poleX, poleY],
             size: [poleWidth, poleHeight],
             anchor: mod.UIAnchor.TopLeft,
             parent: this.rootContainer,
             visible: true,
-            bgColor: this.params.color ?? [1, 1, 1],
-            bgAlpha: this.params.alpha ?? 1.0,
-            bgFill: mod.UIBgFill.Solid,
+            bgColor: color,
+            bgAlpha: alpha,
+            bgFill: bgFill,
             padding: 0
         })!;
-        
-        return pole;
-    }
-    
-    private createFilledFlag(): void {
-        const totalWidth = mod.XComponentOf(this.params.size);
-        const totalHeight = mod.YComponentOf(this.params.size);
-        
-        const flagWidth = totalWidth * this.FLAG_WIDTH_RATIO;
-        const flagHeight = totalHeight * this.FLAG_HEIGHT_RATIO;
-        
-        // Position flag at top-right
-        const flagX = totalWidth - flagWidth;
-        const flagY = 0;
-        
+
         const flag = modlib.ParseUI({
             type: "Container",
-            name: `${this.params.name}_flag`,
-            position: [flagX, flagY],
-            size: [flagWidth, flagHeight],
+            name: `${this.params.name}_fill_flag`,
+            position: [poleWidth + flagPoleGap, flagPoleGap],
+            size: [flagWidth - flagPoleGap, flagHeight],
             anchor: mod.UIAnchor.TopLeft,
             parent: this.rootContainer,
             visible: true,
-            bgColor: this.params.color ?? [1, 1, 1],
-            bgAlpha: this.params.alpha ?? 1.0,
-            bgFill: mod.UIBgFill.Solid,
+            bgColor: color,
+            bgAlpha: alpha,
+            bgFill: bgFill,
             padding: 0
         })!;
         
-        this.flagContainers = [flag];
+        // Store both in fill containers array
+        this.fillContainers = [pole, flag];
     }
     
     private createOutlineFlag(): void {
@@ -3372,116 +3494,152 @@ class FlagIcon {
         const totalHeight = mod.YComponentOf(this.params.size);
         const thickness = this.params.outlineThickness ?? 2;
         
+        const poleWidth = totalWidth * this.POLE_WIDTH_RATIO;
+        const poleHeight = totalHeight * this.POLE_HEIGHT_RATIO;
         const flagWidth = totalWidth * this.FLAG_WIDTH_RATIO;
         const flagHeight = totalHeight * this.FLAG_HEIGHT_RATIO;
-        const flagX = totalWidth - flagWidth;
-        const flagY = 0;
-        
-        const color = this.params.color ?? [1, 1, 1];
-        const alpha = this.params.alpha ?? 1.0;
-        
-        // Top border
-        const topBorder = modlib.ParseUI({
+        const flagPoleGap = this.params.flagPoleGap ?? 2.0;
+
+        const color = VectorClampToRange(this.params.outlineColor ?? mod.CreateVector(1, 1, 1), 0, 1);
+        const alpha = this.params.outlineAlpha ?? 1.0;
+
+        const flag = modlib.ParseUI({
             type: "Container",
-            name: `${this.params.name}_flag_top`,
-            position: [flagX, flagY],
-            size: [flagWidth, thickness],
+            name: `${this.params.name}_outline_flag`,
+            position: [poleWidth + flagPoleGap, flagPoleGap],
+            size: [flagWidth - flagPoleGap, flagHeight],
             anchor: mod.UIAnchor.TopLeft,
             parent: this.rootContainer,
             visible: true,
             bgColor: color,
             bgAlpha: alpha,
-            bgFill: mod.UIBgFill.Solid,
+            bgFill: mod.UIBgFill.OutlineThin,
             padding: 0
         })!;
-        
-        // Bottom border
-        const bottomBorder = modlib.ParseUI({
+
+        const pole = modlib.ParseUI({
             type: "Container",
-            name: `${this.params.name}_flag_bottom`,
-            position: [flagX, flagY + flagHeight - thickness],
-            size: [flagWidth, thickness],
+            name: `${this.params.name}_outline_pole`,
+            position: [0, 0],
+            size: [poleWidth, poleHeight],
             anchor: mod.UIAnchor.TopLeft,
             parent: this.rootContainer,
             visible: true,
             bgColor: color,
             bgAlpha: alpha,
-            bgFill: mod.UIBgFill.Solid,
+            bgFill: mod.UIBgFill.OutlineThin,
             padding: 0
         })!;
         
-        // Left border
-        const leftBorder = modlib.ParseUI({
-            type: "Container",
-            name: `${this.params.name}_flag_left`,
-            position: [flagX, flagY],
-            size: [thickness, flagHeight],
-            anchor: mod.UIAnchor.TopLeft,
-            parent: this.rootContainer,
-            visible: true,
-            bgColor: color,
-            bgAlpha: alpha,
-            bgFill: mod.UIBgFill.Solid,
-            padding: 0
-        })!;
-        
-        // Right border
-        const rightBorder = modlib.ParseUI({
-            type: "Container",
-            name: `${this.params.name}_flag_right`,
-            position: [flagX + flagWidth - thickness, flagY],
-            size: [thickness, flagHeight],
-            anchor: mod.UIAnchor.TopLeft,
-            parent: this.rootContainer,
-            visible: true,
-            bgColor: color,
-            bgAlpha: alpha,
-            bgFill: mod.UIBgFill.Solid,
-            padding: 0
-        })!;
-        
-        this.flagContainers = [topBorder, bottomBorder, leftBorder, rightBorder];
+        // Store all outline segments in outline containers array
+        this.outlineContainers = [flag, pole];
+    }
+
+    IsVisible(): boolean {
+        return mod.GetUIWidgetVisible(this.rootContainer);
     }
     
     /**
-     * Toggle between filled and outline rendering modes
+     * Show or hide the filled version of the flag
      */
-    ToggleOutline(): void {
-        // Delete existing flag containers
-        this.flagContainers.forEach(container => {
-            mod.DeleteUIWidget(container);
+    SetFillVisible(visible: boolean): void {
+        this.params.showFill = visible;
+        this.fillContainers.forEach(container => {
+            mod.SetUIWidgetVisible(container, visible);
         });
-        this.flagContainers = [];
-        
-        // Toggle mode and recreate flag
-        this.isOutline = !this.isOutline;
-        
-        if (this.isOutline) {
-            this.createOutlineFlag();
-        } else {
-            this.createFilledFlag();
-        }
     }
     
     /**
-     * Update the flag color and optionally the alpha
+     * Show or hide the outline version of the flag
      */
-    SetColor(color: mod.Vector, alpha?: number): void {
-        const newAlpha = alpha ?? this.params.alpha ?? 1.0;
-        
-        // Update pole
-        mod.SetUIWidgetBgColor(this.poleContainer, color);
-        mod.SetUIWidgetBgAlpha(this.poleContainer, newAlpha);
-        
-        // Update flag containers
-        this.flagContainers.forEach(container => {
-            mod.SetUIWidgetBgColor(container, color);
+    SetOutlineVisible(visible: boolean): void {
+        this.params.showOutline = visible;
+        this.outlineContainers.forEach(container => {
+            mod.SetUIWidgetVisible(container, visible);
+        });
+    }
+    
+    /**
+     * Check if fill is currently visible
+     */
+    IsFillVisible(): boolean {
+        return this.params.showFill ?? false;
+    }
+    
+    /**
+     * Check if outline is currently visible
+     */
+    IsOutlineVisible(): boolean {
+        return this.params.showOutline ?? false;
+    }
+    
+    /**
+     * Update the fill color and optionally the alpha
+     */
+    SetFillColor(color: mod.Vector, alpha?: number): void {
+        const newAlpha = alpha ?? this.params.fillAlpha ?? 1.0;
+        let clampedColor = VectorClampToRange(color, 0, 1);
+
+        // Update fill containers
+        this.fillContainers.forEach(container => {
+            mod.SetUIWidgetBgColor(container, clampedColor);
             mod.SetUIWidgetBgAlpha(container, newAlpha);
         });
         
         // Store new values
-        this.params.color = color;
-        this.params.alpha = newAlpha;
+        this.params.fillColor = clampedColor;
+        this.params.fillAlpha = newAlpha;
+    }
+
+    SetFillAlpha(alpha: number): void {
+        if(AreFloatsEqual(alpha, this.params.fillAlpha ?? 1.0))
+            return;
+        
+        this.params.fillAlpha = alpha;
+        
+        // Update fill containers
+        this.fillContainers.forEach(container => {
+            mod.SetUIWidgetBgAlpha(container, alpha);
+        });
+    }
+
+    
+    /**
+     * Update the outline color and optionally the alpha
+     */
+    SetOutlineColor(color: mod.Vector, alpha?: number): void {
+        const newAlpha = alpha ?? this.params.outlineAlpha ?? 1.0;
+        let clampedColor = VectorClampToRange(color, 0, 1);
+        
+        // Update outline containers
+        this.outlineContainers.forEach(container => {
+            mod.SetUIWidgetBgColor(container, clampedColor);
+            mod.SetUIWidgetBgAlpha(container, newAlpha);
+        });
+        
+        // Store new values
+        this.params.outlineColor = clampedColor;
+        this.params.outlineAlpha = newAlpha;
+    }
+
+    SetOutlineAlpha(alpha: number): void {
+        if(AreFloatsEqual(alpha, this.params.outlineAlpha ?? 1.0))
+            return;
+        
+        this.params.outlineAlpha = alpha;
+        
+        // Update fill containers
+        this.outlineContainers.forEach(container => {
+            mod.SetUIWidgetBgAlpha(container, alpha);
+        });
+    }
+    
+    /**
+     * Update both fill and outline colors
+     */
+    SetColor(color: mod.Vector, alpha?: number): void {
+        this.SetFillColor(color, alpha);
+        this.SetOutlineColor(color, alpha);
     }
     
     /**
@@ -3511,18 +3669,21 @@ class FlagIcon {
      * Clean up all UI widgets
      */
     Destroy(): void {
-        // Delete flag containers
-        this.flagContainers.forEach(container => {
+        // Delete fill containers
+        this.fillContainers.forEach(container => {
             mod.DeleteUIWidget(container);
         });
         
-        // Delete pole
-        mod.DeleteUIWidget(this.poleContainer);
+        // Delete outline containers
+        this.outlineContainers.forEach(container => {
+            mod.DeleteUIWidget(container);
+        });
         
         // Delete root container
         mod.DeleteUIWidget(this.rootContainer);
         
-        this.flagContainers = [];
+        this.fillContainers = [];
+        this.outlineContainers = [];
     }
     
     /**
@@ -3532,6 +3693,7 @@ class FlagIcon {
         return this.rootContainer;
     }
 }
+
 
 //==============================================================================================
 // TEAM BALANCE FUNCTIONS

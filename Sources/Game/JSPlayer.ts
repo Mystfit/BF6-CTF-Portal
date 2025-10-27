@@ -1,5 +1,5 @@
 //==============================================================================================
-// PLAYERSCORE CLASS
+// JSPLAYER CLASS
 //==============================================================================================
 
 class PlayerScore {
@@ -14,11 +14,6 @@ class PlayerScore {
     }
 }
 
-
-//==============================================================================================
-// JSPLAYER CLASS
-//==============================================================================================
-
 class JSPlayer {
     // Player game attributes
     readonly player: mod.Player;
@@ -32,7 +27,7 @@ class JSPlayer {
     velocity: mod.Vector = ZERO_VEC;
     
     // UI
-    scoreboardUI?: ScoreboardUI;
+    scoreboardUI?: BaseScoreboardHUD;
 
     static playerInstances: mod.Player[] = [];
     static #allJsPlayers: { [key: number]: JSPlayer } = {};
@@ -47,7 +42,7 @@ class JSPlayer {
         
         // Create scoreboard UI for human players
         if (!mod.GetSoldierState(player, mod.SoldierStateBool.IsAISoldier)) {
-            this.scoreboardUI = new ScoreboardUI(player);
+            this.scoreboardUI = new MultiTeamScoreHUD(player);
         }
         
         if (DEBUG_MODE) {

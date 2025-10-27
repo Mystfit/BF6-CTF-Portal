@@ -3,7 +3,10 @@
 
 param(
     [Parameter(Mandatory=$true)]
-    [string]$OutputFile
+    [string]$OutputFile,
+    
+    [Parameter(Mandatory=$false)]
+    [string]$FileOrder
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,57 +19,38 @@ Write-Host "CTF TypeScript Compiler" -ForegroundColor Cyan
 Write-Host "======================" -ForegroundColor Cyan
 Write-Host ""
 
-# Define file order by dependency level
-# Files are concatenated in this exact order to ensure declarations come before usage
-$FileOrder = @{
-    # Level 0: Constants, enums, and basic type definitions (no dependencies)
-    0 = @(
-        # Main constants file should be first
-        "imports.ts"
-        "CTF.ts"
-    )
+# Load file order from external file
+if ([string]::IsNullOrEmpty($FileOrder)) {
+    # Default to FileOrder.ps1 in the same directory as this script
+    $FileOrder = Join-Path $ScriptDir "FileOrder.ps1"
+}
+
+# Resolve the FileOrder path (handle relative paths)
+if (-not [System.IO.Path]::IsPathRooted($FileOrder)) {
+    $FileOrder = Join-Path $ScriptDir $FileOrder
+}
+
+if (-not (Test-Path $FileOrder)) {
+    Write-Error "FileOrder file not found: $FileOrder"
+    exit 1
+}
+
+Write-Host "Loading file order from: $FileOrder" -ForegroundColor Cyan
+
+try {
+    # Load the FileOrder hashtable from the external file
+    $FileOrderData = & $FileOrder
     
-    # Level 1: Utility classes and namespaces (minimal dependencies)
-    1 = @(
-        "Utility/Colour.ts",
-        "Utility/Math.ts"
-    )
+    if ($null -eq $FileOrderData -or $FileOrderData -isnot [hashtable]) {
+        Write-Error "FileOrder file must return a hashtable"
+        exit 1
+    }
     
-    # Level 2: Core infrastructure (uses Level 0-1)
-    2 = @(
-        "Utility/Raycasts.ts",
-        "Utility/Animation.ts"
-    )
-    
-    # Level 3: Game data classes (uses Level 0-2)
-    3 = @(
-        "Game/JSPlayer.ts"
-    )
-    
-    # Level 4: Entity classes (uses Level 0-3)
-    4 = @(
-        "Entities/Flag.ts",
-        "Entities/CaptureZone.ts"
-    )
-    
-    # Level 5: Configuration (uses Level 0-4)
-    5 = @(
-        "Game/GameModeConfig.ts",
-        "Game/Configs/ClassicCTF.ts",
-        "Game/Configs/FourTeamCTF.ts"
-    )
-    
-    # Level 6: UI classes (uses most other classes)
-    6 = @(
-        "UI/ScoreHUD.ts",
-        "UI/Scoreboard.ts",
-        "UI/FlagIcon.ts"
-    )
-    
-    # Level 7: Game logic (uses everything)
-    7 = @(
-        "Game/TeamBalance.ts"
-    )
+    Write-Host "Successfully loaded file order configuration" -ForegroundColor Green
+    Write-Host ""
+} catch {
+    Write-Error "Failed to load FileOrder file: $_"
+    exit 1
 }
 
 # Files to exclude from concatenation
@@ -141,11 +125,12 @@ try {
     Write-Host ""
     
     # Process each dependency level in order
-    foreach ($level in 0..7) {
-        if ($FileOrder[$level]) {
+    $maxLevel = ($FileOrderData.Keys | Measure-Object -Maximum).Maximum
+    foreach ($level in 0..$maxLevel) {
+        if ($FileOrderData[$level]) {
             Write-Host "Level $level (Dependency Tier $level):" -ForegroundColor Yellow
             
-            foreach ($file in $FileOrder[$level]) {
+            foreach ($file in $FileOrderData[$level]) {
                 if (Write-FileToOutput -FilePath $file -Writer $writer) {
                     $addedFiles += $file
                     $filesAdded++
@@ -173,7 +158,7 @@ try {
             }
         }
         Write-Host ""
-        Write-Host "⚠️  Please add these files to the correct dependency level in Compile.ps1" -ForegroundColor Red
+        Write-Host "⚠️  Please add these files to the correct dependency level in $FileOrder" -ForegroundColor Red
         Write-Host ""
     }
     
