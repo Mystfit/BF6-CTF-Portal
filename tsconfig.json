@@ -5,8 +5,9 @@
             "../../code/mod"
         ],
         "paths": {
-            "modlib": ["../../code/modlib"]
+            "modlib": ["../../code/modlib"],
         },
         "outDir": "dist",
-    }
+    },
+    "include": ["**/*", "./external/**/*", "Sources/globals.d.ts"]
 }

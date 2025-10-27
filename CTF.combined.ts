@@ -1,3 +1,7 @@
+﻿//@ts-ignore
+import * as modlib from 'modlib';
+
+
 try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof Error) console.log(`Script line offset: ${error.stack}`);};
 /* 
  * Capture the Flag Game Mode
@@ -200,6 +204,483 @@ let team4: mod.Team;
 let lastTickTime: number = 0;
 let lastSecondUpdateTime: number = 0;
 
+// Utility
+const ZERO_VEC = mod.CreateVector(0, 0, 0);
+const ONE_VEC = mod.CreateVector(1, 1, 1);
+
+// Dynamic state management
+let teams: Map<number, mod.Team> = new Map();
+let teamConfigs: Map<number, TeamConfig> = new Map();
+let teamScores: Map<number, number> = new Map();
+let flags: Map<number, Flag> = new Map();
+let captureZones: Map<number, CaptureZone> = new Map();
+
+
+//==============================================================================================
+// MAIN GAME LOOP
+//==============================================================================================
+
+export async function OnGameModeStarted() {
+    console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
+
+    // Initialize legacy team references (still needed for backwards compatibility)
+    teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
+    team1 = mod.GetTeam(TeamID.TEAM_1);
+    team2 = mod.GetTeam(TeamID.TEAM_2);
+    team3 = mod.GetTeam(TeamID.TEAM_3);
+    team4 = mod.GetTeam(TeamID.TEAM_4);
+
+    await mod.Wait(1);
+
+    // Load game mode configuration
+    const config = FourTeamCTF; //Create4TeamNeutralCTFConfig();
+    LoadGameModeConfig(config);
+
+    // Set up initial player scores using JSPlayer
+    let players = mod.AllPlayers();
+    let numPlayers = mod.CountOf(players);
+    for (let i = 0; i < numPlayers; i++) {
+        let loopPlayer = mod.ValueInArray(players, i);
+        if(mod.IsPlayerValid(loopPlayer)){
+            JSPlayer.get(loopPlayer); // Create JSPlayer instance
+        }
+    }
+
+    // Enable HQs for configured teams
+    for (const teamConfig of config.teams) {
+        if (teamConfig.hqId) {
+            mod.EnableHQ(mod.GetHQ(teamConfig.hqId), true);
+        }
+    }
+
+    // Start game
+    gameStarted = true;
+    
+    // Start update loops
+    TickUpdate();
+    SecondUpdate();
+    
+    console.log("CTF: Game initialized and started");
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_initialized));
+
+    RefreshScoreboard();
+}
+
+async function TickUpdate(): Promise<void> {
+    while (gameStarted) {
+        await mod.Wait(TICK_RATE);
+
+        let currentTime = GetCurrentTime();
+        let timeDelta = currentTime - lastTickTime;
+        // console.log(`Fast tick delta ${timeDelta}`);
+        
+        // Update all flag carrier positions
+        for (const [flagId, flag] of flags.entries()) {
+            flag.FastUpdate(timeDelta);
+        }
+        
+        // Update all players UI instances
+        JSPlayer.getAllAsArray().forEach(jsPlayer => {
+            jsPlayer.scoreboardUI?.refresh();
+        });
+
+        lastTickTime = currentTime;
+    }
+}
+
+async function SecondUpdate(): Promise<void> {
+    while (gameStarted) {
+        await mod.Wait(1);
+
+        let currentTime = GetCurrentTime();
+        let timeDelta = currentTime - lastTickTime;
+        // console.log(`Second tick delta ${timeDelta}`);
+        
+        // // Check auto-return timers for all flags
+        // for (const [flagId, flagData] of flags.entries()) {
+        //     flagData.CheckAutoReturn();
+        // }
+        
+        // Periodic team balance check
+        if (TEAM_AUTO_BALANCE) {
+            CheckAndBalanceTeams();
+        }
+
+        // Periodically update scoreboard for players
+        RefreshScoreboard();
+
+        // Check time limit
+        if (mod.GetMatchTimeRemaining() <= 0) {
+            EndGameByTime();
+        }
+
+        // Slow update for flags
+        for(let [flagID, flag] of flags){
+            flag.SlowUpdate(timeDelta);
+        }
+
+        lastSecondUpdateTime = currentTime;
+    }
+}
+
+
+//==============================================================================================
+// EVENT HANDLERS
+//==============================================================================================
+
+export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
+    if (DEBUG_MODE) {
+        console.log(`Player joined: ${mod.GetObjId(eventPlayer)}`);
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
+    }
+
+    // Make sure we create a JSPlayer for our new player
+    JSPlayer.get(eventPlayer);
+
+    // Trigger team balance check
+    CheckAndBalanceTeams();
+
+    // Refresh scoreboard to update new player team entry and score
+    RefreshScoreboard();
+}
+
+export function OnPlayerLeaveGame(playerId: number): void {
+    // Check if leaving player was carrying any flag
+    for (const [flagId, flagData] of flags.entries()) {
+        if (flagData.carrierPlayer && mod.GetObjId(flagData.carrierPlayer) === playerId) {
+            // Drop each flag at its current position
+            flagData.DropFlag(flagData.currentPosition);
+        }
+    }
+    
+    if (DEBUG_MODE) {
+        console.log(`Player left: ${playerId}`);
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_left, playerId));
+    }
+
+    // Remove JSPlayer instance
+    JSPlayer.removeInvalidJSPlayers(playerId);
+}
+
+export function OnPlayerDeployed(eventPlayer: mod.Player): void {
+    // Players spawn at their team's HQ
+    if (DEBUG_MODE) {
+        const teamId = mod.GetObjId(mod.GetTeam(eventPlayer));
+        // console.log(`Player ${mod.GetObjId(eventPlayer)} deployed on team ${teamId}`);
+    }
+
+    // If we don't have a JSPlayer by now, we really should create one
+    JSPlayer.get(eventPlayer);
+}
+
+export function OnPlayerDied(
+    eventPlayer: mod.Player,
+    eventOtherPlayer: mod.Player,
+    eventDeathType: mod.DeathType,
+    eventWeaponUnlock: mod.WeaponUnlock
+): void {
+    // If player was carrying a flag, drop it
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
+    
+        // Increment flag carrier kill score
+    let killer = JSPlayer.get(eventOtherPlayer);
+    if(killer && IsCarryingAnyFlag(eventPlayer))
+        killer.score.flag_carrier_kills += 1;
+
+    // Drop all flags on death
+    DropAllFlags(eventPlayer);
+}
+
+export function OnPlayerInteract(
+    eventPlayer: mod.Player, 
+    eventInteractPoint: mod.InteractPoint
+): void {
+    const interactId = mod.GetObjId(eventInteractPoint);
+    const playerTeamId = mod.GetObjId(mod.GetTeam(eventPlayer));
+
+    // Check all flags dynamically for interactions
+    for(let flag of flags){
+        let flagData = flag[1];
+        // Check if we're interacting with this flag
+        if(flagData.flagInteractionPoint){
+            if(interactId == mod.GetObjId(flagData.flagInteractionPoint)){
+                HandleFlagInteraction(eventPlayer, playerTeamId, flagData);
+                return;
+            }
+        }
+    }
+}
+
+export function OnPlayerEnterAreaTrigger(
+    eventPlayer: mod.Player, 
+    eventAreaTrigger: mod.AreaTrigger
+): void {
+    const triggerId = mod.GetObjId(eventAreaTrigger);
+    const playerTeamId = mod.GetObjId(mod.GetTeam(eventPlayer));
+    
+    if (DEBUG_MODE) {
+        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.on_capture_zone_entered, eventPlayer, playerTeamId, triggerId))
+        console.log(`Player ${mod.GetObjId(eventPlayer)} entered area trigger ${triggerId}`);
+    }
+    
+    for(const [teamId, captureZone] of captureZones.entries()){
+        console.log(`Checking if we entered capture zone ${captureZone.captureZoneID} area trigger for team ${teamId}`);
+        if(captureZone.areaTrigger){
+            if(triggerId === mod.GetObjId(captureZone.areaTrigger)){
+                console.log(`Entered capture zone ${captureZone.captureZoneID} area trigger for team ${teamId}`);
+                captureZone.HandleCaptureZoneEntry(eventPlayer);
+            }
+        }
+    }
+}
+
+export function OnPlayerExitAreaTrigger(
+    eventPlayer: mod.Player, 
+    eventAreaTrigger: mod.AreaTrigger
+): void {
+    const triggerId = mod.GetObjId(eventAreaTrigger);
+    
+    if (DEBUG_MODE) {
+        console.log(`Player ${mod.GetObjId(eventPlayer)} exited area trigger ${triggerId}`);
+        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_exit_trigger, eventPlayer, mod.GetObjId(eventAreaTrigger)))
+    }
+}
+
+export function OnPlayerEnterVehicle(
+    eventPlayer: mod.Player,
+    eventVehicle: mod.Vehicle
+): void {
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_player_enter_vehicle));
+
+    // Check if player is carrying a flag
+    if (IsCarryingAnyFlag(eventPlayer)) {
+        if (DEBUG_MODE) {
+            console.log("Flag carrier entered vehicle");
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.carrier_enter_vehicle));
+        }
+
+        ForceToPassengerSeat(eventPlayer, eventVehicle);
+    }
+}
+
+export function OnPlayerEnterVehicleSeat(
+    eventPlayer: mod.Player,
+    eventVehicle: mod.Vehicle,
+    eventSeat: mod.Object
+): void {
+    // If player is carrying flag and in driver seat, force to passenger
+    if (IsCarryingAnyFlag(eventPlayer)) {      
+        if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
+            if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat))
+            ForceToPassengerSeat(eventPlayer, eventVehicle);
+        }
+    }
+}
+
+export function OnGameModeEnding(): void {
+    gameStarted = false;
+    console.log("CTF: Game ending");
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_ending))
+}
+
+
+//==============================================================================================
+// GAME LOGIC FUNCTIONS
+//==============================================================================================
+
+function RefreshScoreboard(){
+    for(let jsPlayer of JSPlayer.getAllAsArray()){
+        UpdatePlayerScoreboard(jsPlayer.player);
+    }
+}
+
+function UpdatePlayerScoreboard(player: mod.Player){
+    let jsPlayer = JSPlayer.get(player);
+    let teamId = modlib.getTeamId(mod.GetTeam(player));
+    if(jsPlayer){
+        if(teams.size >= 2){
+            mod.SetScoreboardPlayerValues(player, teamId, jsPlayer.score.captures, jsPlayer.score.capture_assists, jsPlayer.score.flag_carrier_kills);
+        } else {
+            mod.SetScoreboardPlayerValues(player, jsPlayer.score.captures, jsPlayer.score.capture_assists, jsPlayer.score.flag_carrier_kills);
+        }
+    }
+}
+
+function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam: mod.Team): void {
+    // Set player score using JSPlayer
+    let jsPlayer = JSPlayer.get(scoringPlayer);
+    if (jsPlayer) {
+        jsPlayer.score.captures += 1;
+        UpdatePlayerScoreboard(scoringPlayer);
+        
+        if (DEBUG_MODE) {
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(
+                mod.stringkeys.player_score, 
+                jsPlayer.score.captures, 
+                jsPlayer.score.capture_assists));
+        }
+    }
+
+    // Increment team score in dynamic scores map
+    let scoringTeamId = mod.GetObjId(scoringTeam);
+    let currentScore = teamScores.get(scoringTeamId) ?? 0;
+    currentScore++;
+    teamScores.set(scoringTeamId, currentScore);
+    
+    // Update game mode score
+    mod.SetGameModeScore(scoringTeam, currentScore);
+    
+    // Notify players
+    if (DEBUG_MODE) {
+        console.log(`Team ${scoringTeamId} scored! New score: ${currentScore}`);
+    }
+
+    // Play VFX at scoring team's flag base
+    const scoringTeamFlag = flags.get(scoringTeamId);
+    if (scoringTeamFlag) {
+        CaptureFeedback(scoringTeamFlag.homePosition);
+        
+        // Play audio
+        let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
+        if(capturingTeamVO){
+            let vo_flag = DEFAULT_TEAM_VO_FLAGS.get(capturedFlag.teamId);
+            mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCaptured, vo_flag ?? mod.VoiceOverFlags.Alpha, scoringTeam);
+        }
+    }
+
+    // Return all captured flags to their home spawners
+    GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => flag.ResetFlag());
+    
+    // Check win condition
+    if (currentScore >= GAMEMODE_TARGET_SCORE) {
+        EndGameByScore(scoringTeamId);
+    }
+}
+
+function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
+    const seatCount = mod.GetVehicleSeatCount(vehicle);
+    
+    // Try to find an empty passenger seat
+    for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
+        if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
+            mod.ForcePlayerToSeat(player, vehicle, i);
+            if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
+            return;
+        }
+    }
+    
+    // No passenger seats available, force exit
+    mod.ForcePlayerExitVehicle(player, vehicle);
+    if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
+}
+
+function EndGameByScore(winningTeamId: number): void {
+    gameStarted = false;
+    
+    const winningTeam = mod.GetTeam(winningTeamId);
+    const teamName = winningTeamId === 1 ? "Blue" : "Red";
+    
+    console.log(`Game ended - Team ${winningTeamId} wins by score`);
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_score, winningTeamId))
+    mod.EndGameMode(winningTeam);    
+}
+
+function EndGameByTime(): void {
+    gameStarted = false;
+    // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_time));
+    console.log(`Game ended by time limit`);
+    
+    // Determine winner by score
+    // if (team1Score > team2Score) {
+    //     mod.EndGameMode(team1);
+    // } else if (team2Score > team1Score) {
+    //     mod.EndGameMode(team2);
+    // } else {
+    //     mod.EndGameMode(mod.GetTeam(0)); // Draw
+    // }
+}
+
+//==============================================================================================
+// UTILITY FUNCTIONS
+//==============================================================================================
+
+function GetCurrentTime(): number {
+    //return mod.GetMatchTimeElapsed();
+    return Date.now() / 1000;
+}
+
+function GetRandomInt(max: number): number {
+    return Math.floor(Math.random() * max);
+}
+
+function GetTeamName(team: mod.Team): string {
+    let teamName = teamConfigs.get(mod.GetObjId(team))?.name;
+    if(teamName){
+        return teamName;
+    }
+
+    let teamId = mod.GetObjId(team);
+    return DEFAULT_TEAM_NAMES.get(teamId) ?? mod.stringkeys.neutral_team_name;
+}
+
+// New multi-team helper functions
+function GetOpposingTeams(teamId: number): number[] {
+    const opposing: number[] = [];
+    for (const [id, team] of teams.entries()) {
+        if (id !== teamId && id !== 0) { // Exclude self and neutral
+            opposing.push(id);
+        }
+    }
+    return opposing;
+}
+
+function GetTeamColorById(teamId: number): mod.Vector {
+    // Check if we have a config for this team
+    const config = teamConfigs.get(teamId);
+    if (config?.color) {
+        return config.color;
+    }
+
+    return DEFAULT_TEAM_COLOURS.get(teamId) ?? NEUTRAL_COLOR;
+}
+
+function GetTeamColor(team: mod.Team): mod.Vector {
+    return GetTeamColorById(mod.GetObjId(team));
+}
+
+function GetTeamDroppedColor(team: mod.Team): mod.Vector {
+    return GetTeamColorById(mod.GetObjId(team) );
+}
+
+export function GetPlayersInTeam(team: mod.Team) {
+    const allPlayers = mod.AllPlayers();
+    const n = mod.CountOf(allPlayers);
+    let teamMembers = [];
+
+    for (let i = 0; i < n; i++) {
+        let player = mod.ValueInArray(allPlayers, i) as mod.Player;
+        if (mod.GetObjId(mod.GetTeam(player)) == mod.GetObjId(team)) {
+            teamMembers.push(player);
+        }
+    }
+    return teamMembers;
+}
+
+
+// Godot flag IDs
+// --------------
+
+function CaptureFeedback(pos: mod.Vector): void {
+    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
+    mod.EnableVFX(vfx, true);
+    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
+    mod.EnableSFX(sfx, true);
+    mod.PlaySound(sfx, 100);
+}
+
 
 //==============================================================================================
 // COLOR & UTILITY CLASSES
@@ -246,6 +727,110 @@ const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
     [TeamID.TEAM_6, new rgba(233, 249, 6, 1).NormalizeToLinear().AsModVector3()],
     [TeamID.TEAM_7, new rgba(133, 133, 133, 1).NormalizeToLinear().AsModVector3()]
 ]);
+
+
+export namespace Math2 {
+    export class Vec3 {
+        x: number = 0;
+        y: number = 0;
+        z: number = 0;
+
+        constructor(x: number, y: number, z:number){
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        static FromVector(vector: mod.Vector): Vec3 {
+            return new Vec3(mod.XComponentOf(vector), mod.YComponentOf(vector), mod.ZComponentOf(vector));
+        }
+
+        ToVector(): mod.Vector {
+            return mod.CreateVector(this.x, this.y, this.z);
+        }
+
+        Subtract(other:Vec3): Vec3 {
+            return new Vec3(this.x - other.x, this.y - other.y, this.z - other.z);
+        }
+
+        Multiply(other:Vec3): Vec3 {
+            return new Vec3(this.x * other.x, this.y * other.y, this.z * other.z);
+        }
+
+        MultiplyScalar(scalar:number): Vec3 {
+            return new Vec3(this.x * scalar, this.y * scalar, this.z * scalar);
+        }
+
+        Add(other:Vec3): Vec3 {
+            return new Vec3(this.x + other.x, this.y + other.y, this.z + other.z);
+        }
+    }
+}
+
+/**
+ * Linear interpolation between two vectors
+ * @param start Starting vector
+ * @param end Ending vector
+ * @param alpha Interpolation factor (0.0 = start, 1.0 = end)
+ * @returns Interpolated vector between start and end
+ */
+function LerpVector(start: mod.Vector, end: mod.Vector, alpha: number): mod.Vector {
+    // Clamp alpha to [0, 1] range
+    alpha = Math.max(0, Math.min(1, alpha));
+    
+    // Linear interpolation formula: result = start + (end - start) * alpha
+    // Which is equivalent to: result = start * (1 - alpha) + end * alpha
+    const startFloat = Math2.Vec3.FromVector(start);
+    const endFloat = Math2.Vec3.FromVector(end);
+    const delta = endFloat.Subtract(startFloat);
+    const scaledDelta = delta.MultiplyScalar(alpha);
+    const final = startFloat.Add(scaledDelta);
+    return final.ToVector();
+}
+
+function InterpolatePoints(points: mod.Vector[], numPoints:number): mod.Vector[] {
+    if(points.length < 2){
+        console.log("Need 1+ points to interpolate");
+        return points;
+    }
+
+    let interpolatedPoints: mod.Vector[] = [];
+    for(let [pointIdx, point] of points.entries()){
+        if(pointIdx < points.length - 1){
+            // Get current and next point
+            let currentPoint = points[pointIdx];
+            let nextPoint = points[pointIdx + 1];
+            interpolatedPoints.push(currentPoint);
+
+            for(let interpIdx = 1; interpIdx < numPoints; ++interpIdx){
+                let alpha: number = interpIdx / numPoints;
+                let interpVector = LerpVector(currentPoint, nextPoint, alpha);
+                console.log(`${interpIdx} | Start: ${VectorToString(currentPoint)}, End: ${VectorToString(nextPoint)}, Alpha: ${alpha}, Interp: ${VectorToString(interpVector)}}`);
+                interpolatedPoints.push(interpVector);
+            }
+
+            interpolatedPoints.push(nextPoint);
+        }
+    }
+
+    return interpolatedPoints;
+}
+
+
+function VectorToString(v: mod.Vector): string {
+    return `X: ${mod.XComponentOf(v)}, Y: ${mod.YComponentOf(v)}, Z: ${mod.ZComponentOf(v)}`
+}
+
+function VectorLength(vec: mod.Vector): number{
+    return Math.sqrt(VectorLengthSquared(vec));
+}
+
+function VectorLengthSquared(vec: mod.Vector): number{
+    let xLength = mod.XComponentOf(vec);
+    let yLength = mod.YComponentOf(vec);
+    let zLength = mod.ZComponentOf(vec);
+    return Math.sqrt((xLength * xLength) + (yLength * yLength) + (zLength * yLength));
+}
 
 
 //==============================================================================================
@@ -857,6 +1442,17 @@ class RaycastManager {
 // Global raycast manager instance
 const raycastManager = new RaycastManager();
 
+
+// Capture all async raycast events and handle them with the raycast manager
+export function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector): void {
+    raycastManager.handleHit(eventPlayer, eventPoint, eventNormal);
+}
+
+export function OnRayCastMissed(eventPlayer: mod.Player): void {
+    raycastManager.handleMiss(eventPlayer);
+}
+
+
 //==============================================================================================
 // ANIMATION MANAGER
 //==============================================================================================
@@ -1182,11 +1778,6 @@ class AnimationManager {
 // Global animation manager instance
 const animationManager = new AnimationManager();
 
-// Utility
-const ZERO_VEC = mod.CreateVector(0, 0, 0);
-const ONE_VEC = mod.CreateVector(1, 1, 1);
-
-
 //==============================================================================================
 // PLAYERSCORE CLASS
 //==============================================================================================
@@ -1293,178 +1884,6 @@ class JSPlayer {
         return Object.values(this.#allJsPlayers);
     }
 }
-
-//==============================================================================================
-// CONFIGURATION INTERFACES
-//==============================================================================================
-
-interface TeamConfig {
-    teamId: number;
-    name?: string;
-    color?: mod.Vector;
-    hqId?: number;  // Optional, for future refactoring
-    captureZones?: CaptureZoneConfig[] // Array of capture points for this team
-}
-
-interface FlagConfig {
-    flagId: number;
-    owningTeamId: TeamID;
-    allowedCapturingTeams?: number[];  // Empty = any opposing team can capture
-    customColor?: mod.Vector;  // Optional color override
-    spawnObjectId?: number;
-}
-
-interface GameModeConfig {
-    teams: TeamConfig[];
-    flags: FlagConfig[];
-}
-
-// Dynamic state management
-let teams: Map<number, mod.Team> = new Map();
-let teamConfigs: Map<number, TeamConfig> = new Map();
-let teamScores: Map<number, number> = new Map();
-let flags: Map<number, Flag> = new Map();
-let captureZones: Map<number, CaptureZone> = new Map();
-
-
-
-//==============================================================================================
-// CAPTURE ZONE CLASS
-//==============================================================================================
-
-class CaptureZoneConfig {
-    team: mod.Team;
-    captureZoneID?: number;
-    captureZoneSpatialObjId?: number;
-
-    constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
-        this.team = team;
-        this.captureZoneID = captureZoneID;
-        this.captureZoneSpatialObjId;
-    }
-}
-
-class CaptureZone {
-    readonly team: mod.Team;
-    readonly teamId: number;
-    readonly areaTrigger: mod.AreaTrigger | undefined;
-    readonly captureZoneID?: number;
-    readonly captureZoneSpatialObjId?: number;
-    readonly iconPosition: mod.Vector;
-    readonly baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
-
-    constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
-        this.team = team;
-        this.teamId = mod.GetObjId(team);
-        this.captureZoneID = captureZoneID ? captureZoneID : GetDefaultFlagCaptureZoneAreaTriggerIdForTeam(team);
-        this.captureZoneSpatialObjId = captureZoneSpatialObjId ? captureZoneSpatialObjId : GetDefaultFlagCaptureZoneSpatialIdForTeam(this.team);
-        this.iconPosition = ZERO_VEC;
-
-        this.areaTrigger = this.captureZoneID ? mod.GetAreaTrigger(this.captureZoneID) : undefined;
-        if(!this.areaTrigger)
-            console.log(`Could not find team ${this.teamId} area trigger for capture zone ID ${this.captureZoneID}`);
-
-        if(this.captureZoneSpatialObjId){
-            let captureZoneSpatialObj = mod.GetSpatialObject(this.captureZoneSpatialObjId);
-            if(captureZoneSpatialObj)
-            {
-                // Get our world icon position for this capture zone
-                this.iconPosition = mod.Add(mod.GetObjectPosition(captureZoneSpatialObj), mod.CreateVector(0.0, FLAG_ICON_HEIGHT_OFFSET, 0.0));
-
-                // Create world icons for our team         
-                this.baseIcons = new Map();
-                let teamIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
-                mod.SetWorldIconOwner(teamIcon, team);
-                mod.EnableWorldIconText(teamIcon, true);
-                mod.EnableWorldIconImage(teamIcon, true);
-                this.baseIcons.set(mod.GetObjId(team), teamIcon);
-                
-                // Create world icons for opposing teams        
-                let opposingTeams = GetOpposingTeams(mod.GetObjId(team));
-                if(opposingTeams.length && team){
-                    for(let opposingTeam of opposingTeams){
-                        let opposingIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
-                        mod.SetWorldIconOwner(opposingIcon, mod.GetTeam(opposingTeam));
-                        mod.EnableWorldIconText(opposingIcon, true);
-                        mod.EnableWorldIconImage(opposingIcon, true);
-                        this.baseIcons.set(opposingTeam, opposingIcon);
-                    }
-                }
-
-                this.UpdateIcons();
-            } else {
-                console.log(`Can't create WorldIcon for ${this.teamId} capture zone. Spatial object ${captureZoneSpatialObj} returned for id ${this.captureZoneSpatialObjId}}`);
-            }
-        } else {
-            console.log(`Can't create WorldIcon for ${this.teamId} capture zone. Spatial object ID was ${this.captureZoneSpatialObjId}`);
-        }
-    }
-
-    UpdateIcons(){
-        if(this.baseIcons){
-            for(let [targetTeamId, icon] of this.baseIcons.entries()){
-                if(targetTeamId == this.teamId){
-                    // Icon is for capture zone owner
-                } else {
-                    // Icon is for opposing team
-                }
-                mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)));
-                mod.SetWorldIconImage(icon, mod.WorldIconImages.Triangle);
-                mod.SetWorldIconColor(icon, GetTeamColorById(this.teamId));
-                mod.SetWorldIconPosition(icon, this.iconPosition);
-            }
-        }
-    } 
-
-    HandleCaptureZoneEntry(player: mod.Player): void 
-    {
-        let jsPlayer = JSPlayer.get(player);
-        let playerTeamId = mod.GetObjId(mod.GetTeam(player));
-
-        GetCarriedFlags(player).forEach((flag:Flag) => {
-            // Check if player is carrying an enemy flag
-            if (!flag) {
-                if (DEBUG_MODE) {
-                    console.log(`Could not find a held flag for the provided player ${mod.GetObjId(player)}`);
-                }
-                return;
-            }
-            
-            // Verify the flag is owned by an opposing team
-            if (flag.owningTeamId === playerTeamId) {
-                if (DEBUG_MODE) {
-                    console.log(`Player ${mod.GetObjId(player)} entered their teams capture zone but doesn't have the enemy flag`);
-                    // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.not_carrying_flag, player));
-                }
-                return;
-            }
-            
-            // Verify player entered the capture zone for their own team
-            if (this.teamId !== playerTeamId) {
-                if (DEBUG_MODE) {
-                    console.log(`Players team ${playerTeamId} but entered wrong capture zone ${this.teamId}`);
-                }
-                return;
-            }
-            
-            // Check if own flag is at home (get player's team flag)
-            const ownFlag = flags.get(playerTeamId);
-            if (ownFlag && !ownFlag.isAtHome) {
-                mod.DisplayHighlightedWorldLogMessage(
-                    mod.Message(mod.stringkeys.waiting_for_flag_return),
-                    player
-                );
-                return;
-            }
-        
-            // Team Score!
-            ScoreCapture(player, flag, this.team);
-        });
-
-        
-    }
-}
-
 
 //==============================================================================================
 // FLAG CLASS
@@ -1722,7 +2141,7 @@ class Flag {
             DEBUG_MODE, 5);                         // Use DEBUG_MODE for visualization
         
         // Move validation location slightly away from the hit location in direction of the hit normal
-        let groundLocationAdjusted = mod.Add(flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position, mod.Multiply(flagPath.hitNormal ?? ZERO_VEC, 0.5));
+        let groundLocationAdjusted: mod.Vector = mod.Add(flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position, mod.Multiply(flagPath.hitNormal ?? ZERO_VEC, 0.5));
         
         // Adjust flag spawn location to make sure it's not clipping into a wall
         const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck(
@@ -1779,7 +2198,7 @@ class Flag {
             let interpolatedFlagPathPoints = InterpolatePoints(adjustedFlagPathPoints, numInterPoints);
             await animationManager.AnimateAlongPath(this.flagProp, interpolatedFlagPathPoints, {
                 speed: 400,
-                onProgress: (progress, position) => mod.MoveVFX(this.flagHomeVFX, position, ZERO_VEC) 
+                onProgress: (progress: number, position: mod.Vector) => mod.MoveVFX(this.flagHomeVFX, position, ZERO_VEC) 
             }).catch((reason: any) => {
                 console.log(`Animation path failed with reason ${reason}`);
             });
@@ -2078,132 +2497,265 @@ class Flag {
     }
 }
 
+function HandleFlagInteraction(
+    player: mod.Player, 
+    playerTeamId: number, 
+    flag: Flag
+): void {
+    
+    if (DEBUG_MODE) {
+        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.red_flag_position, mod.XComponentOf(flagData.homePosition), mod.YComponentOf(flagData.homePosition), mod.ZComponentOf(flagData.homePosition)));
+    }
 
-//==============================================================================================
-// CONFIGURATION LOADING
-//==============================================================================================
-
-function CreateClassicCTFConfig(): GameModeConfig {
-    // Default 2-team CTF configuration for backwards compatibility
-    return {
-        teams: [
-            { 
-                teamId: TeamID.TEAM_1, 
-                name: mod.stringkeys.purple_team_name, 
-                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
-                hqId: TEAM1_HQ_ID, 
-                captureZones: [
-                    {
-                        team: team1
-                    }
-                ]
-            },
-            { 
-                teamId: TeamID.TEAM_2, 
-                name: mod.stringkeys.orange_team_name, 
-                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
-                hqId: TEAM2_HQ_ID,
-                captureZones: [
-                    {
-                        team: team2
-                    }
-                ]
+    // Enemy team trying to take flag
+    if (playerTeamId !== flag.teamId) {
+        if (flag.isAtHome || (flag.isDropped && flag.canBePickedUp)) {
+            flag.PickupFlag(player);
+        } else if (flag.isDropped && !flag.canBePickedUp) {
+            if(DEBUG_MODE){
+                mod.DisplayHighlightedWorldLogMessage(
+                    mod.Message(mod.stringkeys.waiting_to_take_flag),
+                    player
+                );
             }
-        ],
-        flags: [
-            {
-                flagId: 1,
-                owningTeamId: TeamID.TEAM_1,
-                //allowedCapturingTeams: [], // Empty = all opposing teams
-            },
-            {
-                flagId: 2,
-                owningTeamId: TeamID.TEAM_2,
-                //allowedCapturingTeams: [], // Empty = all opposing teams
-            }
-        ]
-    };
+        }
+    }
+    // Own team trying to return dropped flag
+    else if (playerTeamId === flag.teamId && flag.isDropped) {
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
+        flag.PlayFlagReturnedSFX();
+        flag.ReturnFlag();
+    }
 }
 
-function Create4TeamNeutralCTFConfig(): GameModeConfig {
-    // 4 way CTF
-    return {
-        teams: [
-            { 
-                teamId: 1, 
-                name: mod.stringkeys.purple_team_name, 
-                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
-                hqId: TEAM1_HQ_ID,
-                captureZones: [
-                    {
-                        team: team1
-                    }
-                ]
-            },
-            { 
-                teamId: 2, 
-                name: mod.stringkeys.orange_team_name, 
-                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
-                hqId: TEAM2_HQ_ID,
-                captureZones: [
-                    {
-                        team: team2
-                    }
-                ]
-            },
-            { teamId: 3, 
-                name: mod.stringkeys.green_team_name, 
-                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_3), 
-                hqId: TEAM3_HQ_ID,
-                captureZones: [
-                    {
-                        team: team3
-                    }
-                ]
-            },
-            { 
-                teamId: 4, 
-                name: mod.stringkeys.blue_team_name, 
-                color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_4), 
-                hqId: TEAM4_HQ_ID,
-                captureZones: [
-                    {
-                        team: team4
-                    }
-                ]
-            }
-        ],
-        flags: [
-            {
-                flagId: 1,
-                owningTeamId: TeamID.TEAM_1,
-                //allowedCapturingTeams: [], // Empty = all opposing teams
-            },
-            {
-                flagId: 2,
-                owningTeamId: TeamID.TEAM_2,
-                //allowedCapturingTeams: [], // Empty = all opposing teams
-            },
-            {
-                flagId: 3,
-                owningTeamId: TeamID.TEAM_3,
-                //allowedCapturingTeams: [], // Empty = all opposing teams
-            },
-            {
-                flagId: 4,
-                owningTeamId: TeamID.TEAM_4,
-                //allowedCapturingTeams: [], // Empty = all opposing teams
-            }
-            // {
-            //     flagId: 5,
-            //     owningTeamId: TeamID.TEAM_NEUTRAL,
-            //     allowedCapturingTeams: [], // Empty = all opposing teams
-            //     spawnObjectId: GetDefaultFlagSpawnIdForTeam(teamNeutral)
-            // }
-        ]
-    };
+
+function GetFlagTeamIdOffset(team: mod.Team): number {
+    let teamID = mod.GetObjId(team);
+    return TEAM_ID_START_OFFSET + (teamID * TEAM_ID_STRIDE_OFFSET);
 }
 
+function GetDefaultFlagSpawnIdForTeam(team: mod.Team): number {
+    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_SPAWN_ID_OFFSET;
+}
+
+function DropAllFlags(player: mod.Player){
+    let playerPos = mod.GetSoldierState(player, mod.SoldierStateVector.GetPosition);
+    let playerPosX = mod.XComponentOf(playerPos);
+    let playerPosY = mod.YComponentOf(playerPos);
+    let playerPosZ = mod.ZComponentOf(playerPos);
+    let flagDropRadius = FLAG_DROP_RING_RADIUS;
+
+    let carriedFlags = GetCarriedFlags(player);
+    let angleInc = Math.PI * 2.0 / carriedFlags.length;
+
+    let numFlags = carriedFlags;
+
+    //Create a ring of coordinates
+    for(let i = 0; i < carriedFlags.length; ++i){
+        let angle = i * angleInc;
+        let x = flagDropRadius * Math.cos(angle);
+        let z = flagDropRadius * Math.sin(angle);
+        carriedFlags[i].DropFlag(mod.Add(playerPos, mod.CreateVector(x, 0.0, z)));
+    }
+}
+
+function GetCarriedFlags(player: mod.Player): Flag[] {
+    return Array.from(flags.values()).filter((flag: Flag) => {
+        if(!flag.carrierPlayer || !flag.isBeingCarried) return false;
+        return mod.Equals(flag.carrierPlayer, player);
+    }
+    );
+}
+
+function IsCarryingAnyFlag(player: mod.Player): boolean {
+    // Check all flags dynamically
+    for (const [flagId, flagData] of flags.entries()) {
+        if (flagData.carrierPlayer && mod.Equals(flagData.carrierPlayer, player)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function GetOpposingTeamsForFlag(flagData: Flag): number[] {
+    // If flag has specific allowed capturing teams, return those
+    if (flagData.allowedCapturingTeams.length > 0) {
+        return flagData.allowedCapturingTeams;
+    }
+    
+    // Otherwise return all teams except the flag owner
+    return GetOpposingTeams(flagData.owningTeamId);
+}
+
+//==============================================================================================
+// CAPTURE ZONE CLASS
+//==============================================================================================
+
+class CaptureZone {
+    readonly team: mod.Team;
+    readonly teamId: number;
+    readonly areaTrigger: mod.AreaTrigger | undefined;
+    readonly captureZoneID?: number;
+    readonly captureZoneSpatialObjId?: number;
+    readonly iconPosition: mod.Vector;
+    readonly baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
+
+    constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
+        this.team = team;
+        this.teamId = mod.GetObjId(team);
+        this.captureZoneID = captureZoneID ? captureZoneID : GetDefaultFlagCaptureZoneAreaTriggerIdForTeam(team);
+        this.captureZoneSpatialObjId = captureZoneSpatialObjId ? captureZoneSpatialObjId : GetDefaultFlagCaptureZoneSpatialIdForTeam(this.team);
+        this.iconPosition = ZERO_VEC;
+
+        this.areaTrigger = this.captureZoneID ? mod.GetAreaTrigger(this.captureZoneID) : undefined;
+        if(!this.areaTrigger)
+            console.log(`Could not find team ${this.teamId} area trigger for capture zone ID ${this.captureZoneID}`);
+
+        if(this.captureZoneSpatialObjId){
+            let captureZoneSpatialObj = mod.GetSpatialObject(this.captureZoneSpatialObjId);
+            if(captureZoneSpatialObj)
+            {
+                // Get our world icon position for this capture zone
+                this.iconPosition = mod.Add(mod.GetObjectPosition(captureZoneSpatialObj), mod.CreateVector(0.0, FLAG_ICON_HEIGHT_OFFSET, 0.0));
+
+                // Create world icons for our team         
+                this.baseIcons = new Map();
+                let teamIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
+                mod.SetWorldIconOwner(teamIcon, team);
+                mod.EnableWorldIconText(teamIcon, true);
+                mod.EnableWorldIconImage(teamIcon, true);
+                this.baseIcons.set(mod.GetObjId(team), teamIcon);
+                
+                // Create world icons for opposing teams        
+                let opposingTeams = GetOpposingTeams(mod.GetObjId(team));
+                if(opposingTeams.length && team){
+                    for(let opposingTeam of opposingTeams){
+                        let opposingIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
+                        mod.SetWorldIconOwner(opposingIcon, mod.GetTeam(opposingTeam));
+                        mod.EnableWorldIconText(opposingIcon, true);
+                        mod.EnableWorldIconImage(opposingIcon, true);
+                        this.baseIcons.set(opposingTeam, opposingIcon);
+                    }
+                }
+
+                this.UpdateIcons();
+            } else {
+                console.log(`Can't create WorldIcon for ${this.teamId} capture zone. Spatial object ${captureZoneSpatialObj} returned for id ${this.captureZoneSpatialObjId}}`);
+            }
+        } else {
+            console.log(`Can't create WorldIcon for ${this.teamId} capture zone. Spatial object ID was ${this.captureZoneSpatialObjId}`);
+        }
+    }
+
+    UpdateIcons(){
+        if(this.baseIcons){
+            for(let [targetTeamId, icon] of this.baseIcons.entries()){
+                if(targetTeamId == this.teamId){
+                    // Icon is for capture zone owner
+                } else {
+                    // Icon is for opposing team
+                }
+                mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)));
+                mod.SetWorldIconImage(icon, mod.WorldIconImages.Triangle);
+                mod.SetWorldIconColor(icon, GetTeamColorById(this.teamId));
+                mod.SetWorldIconPosition(icon, this.iconPosition);
+            }
+        }
+    } 
+
+    HandleCaptureZoneEntry(player: mod.Player): void 
+    {
+        let jsPlayer = JSPlayer.get(player);
+        let playerTeamId = mod.GetObjId(mod.GetTeam(player));
+
+        GetCarriedFlags(player).forEach((flag:Flag) => {
+            // Check if player is carrying an enemy flag
+            if (!flag) {
+                if (DEBUG_MODE) {
+                    console.log(`Could not find a held flag for the provided player ${mod.GetObjId(player)}`);
+                }
+                return;
+            }
+            
+            // Verify the flag is owned by an opposing team
+            if (flag.owningTeamId === playerTeamId) {
+                if (DEBUG_MODE) {
+                    console.log(`Player ${mod.GetObjId(player)} entered their teams capture zone but doesn't have the enemy flag`);
+                    // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.not_carrying_flag, player));
+                }
+                return;
+            }
+            
+            // Verify player entered the capture zone for their own team
+            if (this.teamId !== playerTeamId) {
+                if (DEBUG_MODE) {
+                    console.log(`Players team ${playerTeamId} but entered wrong capture zone ${this.teamId}`);
+                }
+                return;
+            }
+            
+            // Check if own flag is at home (get player's team flag)
+            const ownFlag = flags.get(playerTeamId);
+            if (ownFlag && !ownFlag.isAtHome) {
+                mod.DisplayHighlightedWorldLogMessage(
+                    mod.Message(mod.stringkeys.waiting_for_flag_return),
+                    player
+                );
+                return;
+            }
+        
+            // Team Score!
+            ScoreCapture(player, flag, this.team);
+        });
+
+        
+    }
+}
+
+function GetDefaultFlagCaptureZoneAreaTriggerIdForTeam(team: mod.Team): number {
+    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_CAPTURE_ZONE_ID_OFFSET;
+}
+
+function GetDefaultFlagCaptureZoneSpatialIdForTeam(team: mod.Team): number {
+    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_CAPTURE_ZONE_ICON_ID_OFFSET;
+}
+
+//==============================================================================================
+// CONFIGURATION INTERFACES
+//==============================================================================================
+
+interface TeamConfig {
+    teamId: number;
+    name?: string;
+    color?: mod.Vector;
+    hqId?: number;  // Optional, for future refactoring
+    captureZones?: CaptureZoneConfig[] // Array of capture points for this team
+}
+
+interface FlagConfig {
+    flagId: number;
+    owningTeamId: TeamID;
+    allowedCapturingTeams?: number[];  // Empty = any opposing team can capture
+    customColor?: mod.Vector;  // Optional color override
+    spawnObjectId?: number;
+}
+
+class CaptureZoneConfig {
+    team: mod.Team;
+    captureZoneID?: number;
+    captureZoneSpatialObjId?: number;
+
+    constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
+        this.team = team;
+        this.captureZoneID = captureZoneID;
+        this.captureZoneSpatialObjId;
+    }
+}
+
+interface GameModeConfig {
+    teams: TeamConfig[];
+    flags: FlagConfig[];
+}
 
 function LoadGameModeConfig(config: GameModeConfig): void {
     // Clear existing data
@@ -2307,288 +2859,121 @@ function LoadGameModeConfig(config: GameModeConfig): void {
     }
 }
 
-//==============================================================================================
-// MAIN GAME LOOP
-//==============================================================================================
-
-export async function OnGameModeStarted() {
-    console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
-    if(DEBUG_MODE)
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
-
-    // Initialize legacy team references (still needed for backwards compatibility)
-    teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
-    team1 = mod.GetTeam(TeamID.TEAM_1);
-    team2 = mod.GetTeam(TeamID.TEAM_2);
-    team3 = mod.GetTeam(TeamID.TEAM_3);
-    team4 = mod.GetTeam(TeamID.TEAM_4);
-
-    await mod.Wait(1);
-
-    // Load game mode configuration
-    const config = Create4TeamNeutralCTFConfig();//Create4TeamNeutralCTFConfig();
-    LoadGameModeConfig(config);
-
-    // Set up initial player scores using JSPlayer
-    let players = mod.AllPlayers();
-    let numPlayers = mod.CountOf(players);
-    for (let i = 0; i < numPlayers; i++) {
-        let loopPlayer = mod.ValueInArray(players, i);
-        if(mod.IsPlayerValid(loopPlayer)){
-            JSPlayer.get(loopPlayer); // Create JSPlayer instance
+const ClassicCTFConfig: GameModeConfig = {
+// Default 2-team CTF configuration for backwards compatibility
+    teams: [
+        { 
+            teamId: TeamID.TEAM_1, 
+            name: mod.stringkeys.purple_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
+            hqId: TEAM1_HQ_ID, 
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_1)  // Get team directly instead of using uninitialized variable
+                }
+            ]
+        },
+        { 
+            teamId: TeamID.TEAM_2, 
+            name: mod.stringkeys.orange_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
+            hqId: TEAM2_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_2)  // Get team directly instead of using uninitialized variable
+                }
+            ]
         }
-    }
-
-    // Enable HQs for configured teams
-    for (const teamConfig of config.teams) {
-        if (teamConfig.hqId) {
-            mod.EnableHQ(mod.GetHQ(teamConfig.hqId), true);
+    ],
+    flags: [
+        {
+            flagId: 1,
+            owningTeamId: TeamID.TEAM_1,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        },
+        {
+            flagId: 2,
+            owningTeamId: TeamID.TEAM_2,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
         }
-    }
-
-    // Start game
-    gameStarted = true;
-    
-    // Start update loops
-    TickUpdate();
-    SecondUpdate();
-    
-    console.log("CTF: Game initialized and started");
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_initialized));
-
-    RefreshScoreboard();
+    ]
 }
 
-function RefreshScoreboard(){
-    for(let jsPlayer of JSPlayer.getAllAsArray()){
-        UpdatePlayerScoreboard(jsPlayer.player);
-    }
-}
 
-async function TickUpdate(): Promise<void> {
-    while (gameStarted) {
-        await mod.Wait(TICK_RATE);
-
-        let currentTime = GetCurrentTime();
-        let timeDelta = currentTime - lastTickTime;
-        // console.log(`Fast tick delta ${timeDelta}`);
-        
-        // Update all flag carrier positions
-        for (const [flagId, flag] of flags.entries()) {
-            flag.FastUpdate(timeDelta);
+const FourTeamCTF: GameModeConfig = {
+    teams: [
+        { 
+            teamId: 1, 
+            name: mod.stringkeys.purple_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
+            hqId: TEAM1_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_1)  // Get team directly
+                }
+            ]
+        },
+        { 
+            teamId: 2, 
+            name: mod.stringkeys.orange_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
+            hqId: TEAM2_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_2)  // Get team directly
+                }
+            ]
+        },
+        { teamId: 3, 
+            name: mod.stringkeys.green_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_3), 
+            hqId: TEAM3_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_3)  // Get team directly
+                }
+            ]
+        },
+        { 
+            teamId: 4, 
+            name: mod.stringkeys.blue_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_4), 
+            hqId: TEAM4_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_4)  // Get team directly
+                }
+            ]
         }
-        
-        // Update all players UI instances
-        JSPlayer.getAllAsArray().forEach(jsPlayer => {
-            jsPlayer.scoreboardUI?.refresh();
-        });
-
-        lastTickTime = currentTime;
-    }
-}
-
-async function SecondUpdate(): Promise<void> {
-    while (gameStarted) {
-        await mod.Wait(1);
-
-        let currentTime = GetCurrentTime();
-        let timeDelta = currentTime - lastTickTime;
-        // console.log(`Second tick delta ${timeDelta}`);
-        
-        // // Check auto-return timers for all flags
-        // for (const [flagId, flagData] of flags.entries()) {
-        //     flagData.CheckAutoReturn();
+    ],
+    flags: [
+        {
+            flagId: 1,
+            owningTeamId: TeamID.TEAM_1,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        },
+        {
+            flagId: 2,
+            owningTeamId: TeamID.TEAM_2,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        },
+        {
+            flagId: 3,
+            owningTeamId: TeamID.TEAM_3,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        },
+        {
+            flagId: 4,
+            owningTeamId: TeamID.TEAM_4,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        }
+        // {
+        //     flagId: 5,
+        //     owningTeamId: TeamID.TEAM_NEUTRAL,
+        //     allowedCapturingTeams: [], // Empty = all opposing teams
+        //     spawnObjectId: GetDefaultFlagSpawnIdForTeam(teamNeutral)
         // }
-        
-        // Periodic team balance check
-        if (TEAM_AUTO_BALANCE) {
-            CheckAndBalanceTeams();
-        }
-
-        // Periodically update scoreboard for players
-        RefreshScoreboard();
-
-        // Check time limit
-        if (mod.GetMatchTimeRemaining() <= 0) {
-            EndGameByTime();
-        }
-
-        // Slow update for flags
-        for(let [flagID, flag] of flags){
-            flag.SlowUpdate(timeDelta);
-        }
-
-        lastSecondUpdateTime = currentTime;
-    }
-}
-
-
-//==============================================================================================
-// EVENT HANDLERS
-//==============================================================================================
-
-export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
-    if (DEBUG_MODE) {
-        console.log(`Player joined: ${mod.GetObjId(eventPlayer)}`);
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
-    }
-
-    // Make sure we create a JSPlayer for our new player
-    JSPlayer.get(eventPlayer);
-
-    // Trigger team balance check
-    CheckAndBalanceTeams();
-
-    // Refresh scoreboard to update new player team entry and score
-    RefreshScoreboard();
-}
-
-export function OnPlayerLeaveGame(playerId: number): void {
-    // Check if leaving player was carrying any flag
-    for (const [flagId, flagData] of flags.entries()) {
-        if (flagData.carrierPlayer && mod.GetObjId(flagData.carrierPlayer) === playerId) {
-            // Drop each flag at its current position
-            flagData.DropFlag(flagData.currentPosition);
-        }
-    }
-    
-    if (DEBUG_MODE) {
-        console.log(`Player left: ${playerId}`);
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_left, playerId));
-    }
-
-    // Remove JSPlayer instance
-    JSPlayer.removeInvalidJSPlayers(playerId);
-}
-
-export function OnPlayerDeployed(eventPlayer: mod.Player): void {
-    // Players spawn at their team's HQ
-    if (DEBUG_MODE) {
-        const teamId = mod.GetObjId(mod.GetTeam(eventPlayer));
-        // console.log(`Player ${mod.GetObjId(eventPlayer)} deployed on team ${teamId}`);
-    }
-
-    // If we don't have a JSPlayer by now, we really should create one
-    JSPlayer.get(eventPlayer);
-}
-
-export function OnPlayerDied(
-    eventPlayer: mod.Player,
-    eventOtherPlayer: mod.Player,
-    eventDeathType: mod.DeathType,
-    eventWeaponUnlock: mod.WeaponUnlock
-): void {
-    // If player was carrying a flag, drop it
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
-    
-        // Increment flag carrier kill score
-    let killer = JSPlayer.get(eventOtherPlayer);
-    if(killer && IsCarryingAnyFlag(eventPlayer))
-        killer.score.flag_carrier_kills += 1;
-
-    // Drop all flags on death
-    DropAllFlags(eventPlayer);
-}
-
-export function OnPlayerInteract(
-    eventPlayer: mod.Player, 
-    eventInteractPoint: mod.InteractPoint
-): void {
-    const interactId = mod.GetObjId(eventInteractPoint);
-    const playerTeamId = mod.GetObjId(mod.GetTeam(eventPlayer));
-
-    // Check all flags dynamically for interactions
-    for(let flag of flags){
-        let flagData = flag[1];
-        // Check if we're interacting with this flag
-        if(flagData.flagInteractionPoint){
-            if(interactId == mod.GetObjId(flagData.flagInteractionPoint)){
-                HandleFlagInteraction(eventPlayer, playerTeamId, flagData);
-                return;
-            }
-        }
-    }
-}
-
-export function OnPlayerEnterAreaTrigger(
-    eventPlayer: mod.Player, 
-    eventAreaTrigger: mod.AreaTrigger
-): void {
-    const triggerId = mod.GetObjId(eventAreaTrigger);
-    const playerTeamId = mod.GetObjId(mod.GetTeam(eventPlayer));
-    
-    if (DEBUG_MODE) {
-        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.on_capture_zone_entered, eventPlayer, playerTeamId, triggerId))
-        console.log(`Player ${mod.GetObjId(eventPlayer)} entered area trigger ${triggerId}`);
-    }
-    
-    for(const [teamId, captureZone] of captureZones.entries()){
-        console.log(`Checking if we entered capture zone ${captureZone.captureZoneID} area trigger for team ${teamId}`);
-        if(captureZone.areaTrigger){
-            if(triggerId === mod.GetObjId(captureZone.areaTrigger)){
-                console.log(`Entered capture zone ${captureZone.captureZoneID} area trigger for team ${teamId}`);
-                captureZone.HandleCaptureZoneEntry(eventPlayer);
-            }
-        }
-    }
-}
-
-export function OnPlayerExitAreaTrigger(
-    eventPlayer: mod.Player, 
-    eventAreaTrigger: mod.AreaTrigger
-): void {
-    const triggerId = mod.GetObjId(eventAreaTrigger);
-    
-    if (DEBUG_MODE) {
-        console.log(`Player ${mod.GetObjId(eventPlayer)} exited area trigger ${triggerId}`);
-        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_exit_trigger, eventPlayer, mod.GetObjId(eventAreaTrigger)))
-    }
-}
-
-export function OnPlayerEnterVehicle(
-    eventPlayer: mod.Player,
-    eventVehicle: mod.Vehicle
-): void {
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_player_enter_vehicle));
-
-    // Check if player is carrying a flag
-    if (IsCarryingAnyFlag(eventPlayer)) {
-        if (DEBUG_MODE) {
-            console.log("Flag carrier entered vehicle");
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.carrier_enter_vehicle));
-        }
-
-        ForceToPassengerSeat(eventPlayer, eventVehicle);
-    }
-}
-
-export function OnPlayerEnterVehicleSeat(
-    eventPlayer: mod.Player,
-    eventVehicle: mod.Vehicle,
-    eventSeat: mod.Object
-): void {
-    // If player is carrying flag and in driver seat, force to passenger
-    if (IsCarryingAnyFlag(eventPlayer)) {      
-        if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
-            if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat))
-            ForceToPassengerSeat(eventPlayer, eventVehicle);
-        }
-    }
-}
-
-export function OnGameModeEnding(): void {
-    gameStarted = false;
-    console.log("CTF: Game ending");
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_ending))
-}
-
-export function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector): void {
-    raycastManager.handleHit(eventPlayer, eventPoint, eventNormal);
-}
-
-export function OnRayCastMissed(eventPlayer: mod.Player): void {
-    raycastManager.handleMiss(eventPlayer);
+    ]
 }
 
 
@@ -2842,145 +3227,310 @@ class ScoreboardUI {
 }
 
 
+
+
 //==============================================================================================
-// GAME LOGIC FUNCTIONS
+// FLAG ICON UI CLASS
 //==============================================================================================
 
-function HandleFlagInteraction(
-    player: mod.Player, 
-    playerTeamId: number, 
-    flag: Flag
-): void {
-    
-    if (DEBUG_MODE) {
-        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.red_flag_position, mod.XComponentOf(flagData.homePosition), mod.YComponentOf(flagData.homePosition), mod.ZComponentOf(flagData.homePosition)));
-    }
+/**
+ * FlagIcon - A custom UI widget that renders a flag icon using containers
+ * 
+ * Creates a flag icon composed of:
+ * - A pole (vertical rectangle at the left)
+ * - A flag (rectangle at the top)
+ * 
+ * Supports two rendering modes:
+ * - Filled: Solid color fill (2 containers)
+ * - Outline: Border-only rendering (6 containers)
+ * 
+ * Flag proportions (inspired by classic flag design):
+ * - Pole: ~10% width, ~60% height (extends below flag)
+ * - Flag: ~90% width, ~60% height (top portion only)
+ */
 
-    // Enemy team trying to take flag
-    if (playerTeamId !== flag.teamId) {
-        if (flag.isAtHome || (flag.isDropped && flag.canBePickedUp)) {
-            flag.PickupFlag(player);
-        } else if (flag.isDropped && !flag.canBePickedUp) {
-            if(DEBUG_MODE){
-                mod.DisplayHighlightedWorldLogMessage(
-                    mod.Message(mod.stringkeys.waiting_to_take_flag),
-                    player
-                );
-            }
-        }
-    }
-    // Own team trying to return dropped flag
-    else if (playerTeamId === flag.teamId && flag.isDropped) {
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
-        flag.PlayFlagReturnedSFX();
-        flag.ReturnFlag();
-    }
+interface FlagIconParams {
+    name: string;
+    position: mod.Vector;
+    size: mod.Vector;           // Total flag size [width, height]
+    anchor: mod.UIAnchor;
+    parent: mod.UIWidget;
+    visible?: boolean;
+    color?: mod.Vector;         // Flag color (default: white)
+    alpha?: number;             // Flag alpha (default: 1.0)
+    outline?: boolean;          // Render as outline (default: false)
+    outlineThickness?: number;  // Outline thickness in pixels (default: 2)
+    teamId?: mod.Team;
+    playerId?: mod.Player;
 }
 
-function UpdatePlayerScoreboard(player: mod.Player){
-    let jsPlayer = JSPlayer.get(player);
-    let teamId = modlib.getTeamId(mod.GetTeam(player));
-    if(jsPlayer){
-        if(teams.size >= 2){
-            mod.SetScoreboardPlayerValues(player, teamId, jsPlayer.score.captures, jsPlayer.score.capture_assists, jsPlayer.score.flag_carrier_kills);
+class FlagIcon {
+    private rootContainer: mod.UIWidget;
+    private poleContainer: mod.UIWidget;
+    private flagContainers: mod.UIWidget[] = [];
+    
+    private readonly params: FlagIconParams;
+    private isOutline: boolean;
+    
+    // Flag proportions
+    private readonly POLE_WIDTH_RATIO = 0.1;
+    private readonly POLE_HEIGHT_RATIO = 0.6;
+    private readonly FLAG_WIDTH_RATIO = 0.9;
+    private readonly FLAG_HEIGHT_RATIO = 0.6;
+    
+    constructor(params: FlagIconParams) {
+        this.params = params;
+        this.isOutline = params.outline ?? false;
+        
+        // Create root container
+        this.rootContainer = this.createRootContainer();
+        
+        // Create flag components based on mode
+        this.poleContainer = this.createPole();
+        if (this.isOutline) {
+            this.createOutlineFlag();
         } else {
-            mod.SetScoreboardPlayerValues(player, jsPlayer.score.captures, jsPlayer.score.capture_assists, jsPlayer.score.flag_carrier_kills);
+            this.createFilledFlag();
         }
     }
-}
-
-function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam: mod.Team): void {
-    // Set player score using JSPlayer
-    let jsPlayer = JSPlayer.get(scoringPlayer);
-    if (jsPlayer) {
-        jsPlayer.score.captures += 1;
-        UpdatePlayerScoreboard(scoringPlayer);
+    
+    private createRootContainer(): mod.UIWidget {
+        const root = modlib.ParseUI({
+            type: "Container",
+            name: this.params.name,
+            position: this.params.position,
+            size: this.params.size,
+            anchor: this.params.anchor,
+            parent: this.params.parent,
+            visible: this.params.visible ?? true,
+            bgAlpha: 0, // Transparent background
+            teamId: this.params.teamId,
+            playerId: this.params.playerId
+        })!;
         
-        if (DEBUG_MODE) {
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(
-                mod.stringkeys.player_score, 
-                jsPlayer.score.captures, 
-                jsPlayer.score.capture_assists));
-        }
+        return root;
     }
-
-    // Increment team score in dynamic scores map
-    let scoringTeamId = mod.GetObjId(scoringTeam);
-    let currentScore = teamScores.get(scoringTeamId) ?? 0;
-    currentScore++;
-    teamScores.set(scoringTeamId, currentScore);
     
-    // Update game mode score
-    mod.SetGameModeScore(scoringTeam, currentScore);
-    
-    // Notify players
-    if (DEBUG_MODE) {
-        console.log(`Team ${scoringTeamId} scored! New score: ${currentScore}`);
-    }
-
-    // Play VFX at scoring team's flag base
-    const scoringTeamFlag = flags.get(scoringTeamId);
-    if (scoringTeamFlag) {
-        CaptureFeedback(scoringTeamFlag.homePosition);
+    private createPole(): mod.UIWidget {
+        const totalWidth = mod.XComponentOf(this.params.size);
+        const totalHeight = mod.YComponentOf(this.params.size);
         
-        // Play audio
-        let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
-        if(capturingTeamVO){
-            let vo_flag = DEFAULT_TEAM_VO_FLAGS.get(capturedFlag.teamId);
-            mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCaptured, vo_flag ?? mod.VoiceOverFlags.Alpha, scoringTeam);
+        const poleWidth = totalWidth * this.POLE_WIDTH_RATIO;
+        const poleHeight = totalHeight * this.POLE_HEIGHT_RATIO;
+        
+        // Position pole at bottom-left, extending down
+        const poleX = 0;
+        const poleY = totalHeight - poleHeight;
+        
+        const pole = modlib.ParseUI({
+            type: "Container",
+            name: `${this.params.name}_pole`,
+            position: [poleX, poleY],
+            size: [poleWidth, poleHeight],
+            anchor: mod.UIAnchor.TopLeft,
+            parent: this.rootContainer,
+            visible: true,
+            bgColor: this.params.color ?? [1, 1, 1],
+            bgAlpha: this.params.alpha ?? 1.0,
+            bgFill: mod.UIBgFill.Solid,
+            padding: 0
+        })!;
+        
+        return pole;
+    }
+    
+    private createFilledFlag(): void {
+        const totalWidth = mod.XComponentOf(this.params.size);
+        const totalHeight = mod.YComponentOf(this.params.size);
+        
+        const flagWidth = totalWidth * this.FLAG_WIDTH_RATIO;
+        const flagHeight = totalHeight * this.FLAG_HEIGHT_RATIO;
+        
+        // Position flag at top-right
+        const flagX = totalWidth - flagWidth;
+        const flagY = 0;
+        
+        const flag = modlib.ParseUI({
+            type: "Container",
+            name: `${this.params.name}_flag`,
+            position: [flagX, flagY],
+            size: [flagWidth, flagHeight],
+            anchor: mod.UIAnchor.TopLeft,
+            parent: this.rootContainer,
+            visible: true,
+            bgColor: this.params.color ?? [1, 1, 1],
+            bgAlpha: this.params.alpha ?? 1.0,
+            bgFill: mod.UIBgFill.Solid,
+            padding: 0
+        })!;
+        
+        this.flagContainers = [flag];
+    }
+    
+    private createOutlineFlag(): void {
+        const totalWidth = mod.XComponentOf(this.params.size);
+        const totalHeight = mod.YComponentOf(this.params.size);
+        const thickness = this.params.outlineThickness ?? 2;
+        
+        const flagWidth = totalWidth * this.FLAG_WIDTH_RATIO;
+        const flagHeight = totalHeight * this.FLAG_HEIGHT_RATIO;
+        const flagX = totalWidth - flagWidth;
+        const flagY = 0;
+        
+        const color = this.params.color ?? [1, 1, 1];
+        const alpha = this.params.alpha ?? 1.0;
+        
+        // Top border
+        const topBorder = modlib.ParseUI({
+            type: "Container",
+            name: `${this.params.name}_flag_top`,
+            position: [flagX, flagY],
+            size: [flagWidth, thickness],
+            anchor: mod.UIAnchor.TopLeft,
+            parent: this.rootContainer,
+            visible: true,
+            bgColor: color,
+            bgAlpha: alpha,
+            bgFill: mod.UIBgFill.Solid,
+            padding: 0
+        })!;
+        
+        // Bottom border
+        const bottomBorder = modlib.ParseUI({
+            type: "Container",
+            name: `${this.params.name}_flag_bottom`,
+            position: [flagX, flagY + flagHeight - thickness],
+            size: [flagWidth, thickness],
+            anchor: mod.UIAnchor.TopLeft,
+            parent: this.rootContainer,
+            visible: true,
+            bgColor: color,
+            bgAlpha: alpha,
+            bgFill: mod.UIBgFill.Solid,
+            padding: 0
+        })!;
+        
+        // Left border
+        const leftBorder = modlib.ParseUI({
+            type: "Container",
+            name: `${this.params.name}_flag_left`,
+            position: [flagX, flagY],
+            size: [thickness, flagHeight],
+            anchor: mod.UIAnchor.TopLeft,
+            parent: this.rootContainer,
+            visible: true,
+            bgColor: color,
+            bgAlpha: alpha,
+            bgFill: mod.UIBgFill.Solid,
+            padding: 0
+        })!;
+        
+        // Right border
+        const rightBorder = modlib.ParseUI({
+            type: "Container",
+            name: `${this.params.name}_flag_right`,
+            position: [flagX + flagWidth - thickness, flagY],
+            size: [thickness, flagHeight],
+            anchor: mod.UIAnchor.TopLeft,
+            parent: this.rootContainer,
+            visible: true,
+            bgColor: color,
+            bgAlpha: alpha,
+            bgFill: mod.UIBgFill.Solid,
+            padding: 0
+        })!;
+        
+        this.flagContainers = [topBorder, bottomBorder, leftBorder, rightBorder];
+    }
+    
+    /**
+     * Toggle between filled and outline rendering modes
+     */
+    ToggleOutline(): void {
+        // Delete existing flag containers
+        this.flagContainers.forEach(container => {
+            mod.DeleteUIWidget(container);
+        });
+        this.flagContainers = [];
+        
+        // Toggle mode and recreate flag
+        this.isOutline = !this.isOutline;
+        
+        if (this.isOutline) {
+            this.createOutlineFlag();
+        } else {
+            this.createFilledFlag();
         }
     }
-
-    // Return all captured flags to their home spawners
-    GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => flag.ResetFlag());
     
-    // Check win condition
-    if (currentScore >= GAMEMODE_TARGET_SCORE) {
-        EndGameByScore(scoringTeamId);
+    /**
+     * Update the flag color and optionally the alpha
+     */
+    SetColor(color: mod.Vector, alpha?: number): void {
+        const newAlpha = alpha ?? this.params.alpha ?? 1.0;
+        
+        // Update pole
+        mod.SetUIWidgetBgColor(this.poleContainer, color);
+        mod.SetUIWidgetBgAlpha(this.poleContainer, newAlpha);
+        
+        // Update flag containers
+        this.flagContainers.forEach(container => {
+            mod.SetUIWidgetBgColor(container, color);
+            mod.SetUIWidgetBgAlpha(container, newAlpha);
+        });
+        
+        // Store new values
+        this.params.color = color;
+        this.params.alpha = newAlpha;
     }
-}
-
-function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
-    const seatCount = mod.GetVehicleSeatCount(vehicle);
     
-    // Try to find an empty passenger seat
-    for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
-        if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
-            mod.ForcePlayerToSeat(player, vehicle, i);
-            if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
-            return;
-        }
+    /**
+     * Move the entire flag to a new position
+     */
+    SetPosition(position: mod.Vector): void {
+        mod.SetUIWidgetPosition(this.rootContainer, position);
+        this.params.position = position;
     }
     
-    // No passenger seats available, force exit
-    mod.ForcePlayerExitVehicle(player, vehicle);
-    if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
-}
-
-function EndGameByScore(winningTeamId: number): void {
-    gameStarted = false;
+    /**
+     * Change the parent widget
+     */
+    SetParent(parent: mod.UIWidget): void {
+        mod.SetUIWidgetParent(this.rootContainer, parent);
+        this.params.parent = parent;
+    }
     
-    const winningTeam = mod.GetTeam(winningTeamId);
-    const teamName = winningTeamId === 1 ? "Blue" : "Red";
+    /**
+     * Show or hide the flag
+     */
+    SetVisible(visible: boolean): void {
+        mod.SetUIWidgetVisible(this.rootContainer, visible);
+    }
     
-    console.log(`Game ended - Team ${winningTeamId} wins by score`);
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_score, winningTeamId))
-    mod.EndGameMode(winningTeam);    
-}
-
-function EndGameByTime(): void {
-    gameStarted = false;
-    // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_time));
-    console.log(`Game ended by time limit`);
+    /**
+     * Clean up all UI widgets
+     */
+    Destroy(): void {
+        // Delete flag containers
+        this.flagContainers.forEach(container => {
+            mod.DeleteUIWidget(container);
+        });
+        
+        // Delete pole
+        mod.DeleteUIWidget(this.poleContainer);
+        
+        // Delete root container
+        mod.DeleteUIWidget(this.rootContainer);
+        
+        this.flagContainers = [];
+    }
     
-    // Determine winner by score
-    // if (team1Score > team2Score) {
-    //     mod.EndGameMode(team1);
-    // } else if (team2Score > team1Score) {
-    //     mod.EndGameMode(team2);
-    // } else {
-    //     mod.EndGameMode(mod.GetTeam(0)); // Draw
-    // }
+    /**
+     * Get the root container widget
+     */
+    GetRootWidget(): mod.UIWidget {
+        return this.rootContainer;
+    }
 }
 
 //==============================================================================================
@@ -3065,266 +3615,3 @@ async function CheckAndBalanceTeams(): Promise<void> {
     balanceInProgress = false;
 }
 
-//==============================================================================================
-// UTILITY FUNCTIONS
-//==============================================================================================
-
-function GetCurrentTime(): number {
-    //return mod.GetMatchTimeElapsed();
-    return Date.now() / 1000;
-}
-
-function GetRandomInt(max: number): number {
-    return Math.floor(Math.random() * max);
-}
-
-function VectorToString(v: mod.Vector): string {
-    return `X: ${mod.XComponentOf(v)}, Y: ${mod.YComponentOf(v)}, Z: ${mod.ZComponentOf(v)}`
-}
-
-function VectorLength(vec: mod.Vector): number{
-    return Math.sqrt(VectorLengthSquared(vec));
-}
-
-function VectorLengthSquared(vec: mod.Vector): number{
-    let xLength = mod.XComponentOf(vec);
-    let yLength = mod.YComponentOf(vec);
-    let zLength = mod.ZComponentOf(vec);
-    return Math.sqrt((xLength * xLength) + (yLength * yLength) + (zLength * yLength));
-}
-
-function GetTeamName(team: mod.Team): string {
-    let teamName = teamConfigs.get(mod.GetObjId(team))?.name;
-    if(teamName){
-        return teamName;
-    }
-
-    let teamId = mod.GetObjId(team);
-    return DEFAULT_TEAM_NAMES.get(teamId) ?? mod.stringkeys.neutral_team_name;
-}
-
-// New multi-team helper functions
-function GetOpposingTeams(teamId: number): number[] {
-    const opposing: number[] = [];
-    for (const [id, team] of teams.entries()) {
-        if (id !== teamId && id !== 0) { // Exclude self and neutral
-            opposing.push(id);
-        }
-    }
-    return opposing;
-}
-
-function GetOpposingTeamsForFlag(flagData: Flag): number[] {
-    // If flag has specific allowed capturing teams, return those
-    if (flagData.allowedCapturingTeams.length > 0) {
-        return flagData.allowedCapturingTeams;
-    }
-    
-    // Otherwise return all teams except the flag owner
-    return GetOpposingTeams(flagData.owningTeamId);
-}
-
-function GetTeamColorById(teamId: number): mod.Vector {
-    // Check if we have a config for this team
-    const config = teamConfigs.get(teamId);
-    if (config?.color) {
-        return config.color;
-    }
-
-    return DEFAULT_TEAM_COLOURS.get(teamId) ?? NEUTRAL_COLOR;
-}
-
-function GetTeamColor(team: mod.Team): mod.Vector {
-    return GetTeamColorById(mod.GetObjId(team));
-}
-
-function GetTeamDroppedColor(team: mod.Team): mod.Vector {
-    return GetTeamColorById(mod.GetObjId(team) );
-}
-
-function IsCarryingAnyFlag(player: mod.Player): boolean {
-    // Check all flags dynamically
-    for (const [flagId, flagData] of flags.entries()) {
-        if (flagData.carrierPlayer && mod.Equals(flagData.carrierPlayer, player)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-function DropAllFlags(player: mod.Player){
-    let playerPos = mod.GetSoldierState(player, mod.SoldierStateVector.GetPosition);
-    let playerPosX = mod.XComponentOf(playerPos);
-    let playerPosY = mod.YComponentOf(playerPos);
-    let playerPosZ = mod.ZComponentOf(playerPos);
-    let flagDropRadius = FLAG_DROP_RING_RADIUS;
-
-    let carriedFlags = GetCarriedFlags(player);
-    let angleInc = Math.PI * 2.0 / carriedFlags.length;
-
-    let numFlags = carriedFlags;
-
-    //Create a ring of coordinates
-    for(let i = 0; i < carriedFlags.length; ++i){
-        let angle = i * angleInc;
-        let x = flagDropRadius * Math.cos(angle);
-        let z = flagDropRadius * Math.sin(angle);
-        carriedFlags[i].DropFlag(mod.Add(playerPos, mod.CreateVector(x, 0.0, z)));
-    }
-}
-
-function GetCarriedFlags(player: mod.Player): Flag[] {
-    return Array.from(flags.values()).filter((flag: Flag) => {
-        if(!flag.carrierPlayer || !flag.isBeingCarried) return false;
-        return mod.Equals(flag.carrierPlayer, player);
-    }
-    );
-}
-
-export function GetPlayersInTeam(team: mod.Team) {
-    const allPlayers = mod.AllPlayers();
-    const n = mod.CountOf(allPlayers);
-    let teamMembers = [];
-
-    for (let i = 0; i < n; i++) {
-        let player = mod.ValueInArray(allPlayers, i) as mod.Player;
-        if (mod.GetObjId(mod.GetTeam(player)) == mod.GetObjId(team)) {
-            teamMembers.push(player);
-        }
-    }
-    return teamMembers;
-}
-
-
-// Godot flag IDs
-// --------------
-
-function GetFlagTeamIdOffset(team: mod.Team): number {
-    let teamID = mod.GetObjId(team);
-    return TEAM_ID_START_OFFSET + (teamID * TEAM_ID_STRIDE_OFFSET);
-}
-
-function GetDefaultFlagCaptureZoneAreaTriggerIdForTeam(team: mod.Team): number {
-    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_CAPTURE_ZONE_ID_OFFSET;
-}
-
-function GetDefaultFlagSpawnIdForTeam(team: mod.Team): number {
-    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_SPAWN_ID_OFFSET;
-}
-
-function GetDefaultFlagCaptureZoneSpatialIdForTeam(team: mod.Team): number {
-    return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_CAPTURE_ZONE_ICON_ID_OFFSET;
-}
-
-function CaptureFeedback(pos: mod.Vector): void {
-    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
-    mod.EnableVFX(vfx, true);
-    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
-    mod.EnableSFX(sfx, true);
-    mod.PlaySound(sfx, 100);
-}
-
-// Helper function to parse JSON from in strings.json
-// Data in strings.json should look similar to "data": "{ \"test\": 20,\"notTest\": 30 }"
-function getStringValue(stringKey: string): any {
-    // @ts-ignore
-    const obj = mod?.strings;
-    return obj?.[stringKey];
-}
-
-function NormalizeColour(r:number, g:number, b:number): [number, number, number] {
-    return [r/255.0, g/255.0, b/255.0]
-}
-
-/**
- * Linear interpolation between two vectors
- * @param start Starting vector
- * @param end Ending vector
- * @param alpha Interpolation factor (0.0 = start, 1.0 = end)
- * @returns Interpolated vector between start and end
- */
-function LerpVector(start: mod.Vector, end: mod.Vector, alpha: number): mod.Vector {
-    // Clamp alpha to [0, 1] range
-    alpha = Math.max(0, Math.min(1, alpha));
-    
-    // Linear interpolation formula: result = start + (end - start) * alpha
-    // Which is equivalent to: result = start * (1 - alpha) + end * alpha
-    const startFloat = Math2.Vec3.FromVector(start);
-    const endFloat = Math2.Vec3.FromVector(end);
-    const delta = endFloat.Subtract(startFloat);
-    const scaledDelta = delta.MultiplyScalar(alpha);
-    const final = startFloat.Add(scaledDelta);
-    return final.ToVector();
-}
-
-function InterpolatePoints(points: mod.Vector[], numPoints:number): mod.Vector[] {
-    if(points.length < 2){
-        console.log("Need 1+ points to interpolate");
-        return points;
-    }
-
-    let interpolatedPoints: mod.Vector[] = [];
-    for(let [pointIdx, point] of points.entries()){
-        if(pointIdx < points.length - 1){
-            // Get current and next point
-            let currentPoint = points[pointIdx];
-            let nextPoint = points[pointIdx + 1];
-            interpolatedPoints.push(currentPoint);
-
-            for(let interpIdx = 1; interpIdx < numPoints; ++interpIdx){
-                let alpha: number = interpIdx / numPoints;
-                let interpVector = LerpVector(currentPoint, nextPoint, alpha);
-                console.log(`${interpIdx} | Start: ${VectorToString(currentPoint)}, End: ${VectorToString(nextPoint)}, Alpha: ${alpha}, Interp: ${VectorToString(interpVector)}}`);
-                interpolatedPoints.push(interpVector);
-            }
-
-            interpolatedPoints.push(nextPoint);
-        }
-    }
-
-    return interpolatedPoints;
-}
-
-interface Vec3 {
-    x: number,
-    y: number,
-    z: number
-}
-
-namespace Math2 {
-    export class Vec3 {
-        x: number = 0;
-        y: number = 0;
-        z: number = 0;
-
-        constructor(x: number, y: number, z:number){
-            this.x = x;
-            this.y = y;
-            this.z = z;
-        }
-
-        static FromVector(vector: mod.Vector): Vec3 {
-            return new Vec3(mod.XComponentOf(vector), mod.YComponentOf(vector), mod.ZComponentOf(vector));
-        }
-
-        ToVector(): mod.Vector {
-            return mod.CreateVector(this.x, this.y, this.z);
-        }
-
-        Subtract(other:Vec3): Vec3 {
-            return new Vec3(this.x - other.x, this.y - other.y, this.z - other.z);
-        }
-
-        Multiply(other:Vec3): Vec3 {
-            return new Vec3(this.x * other.x, this.y * other.y, this.z * other.z);
-        }
-
-        MultiplyScalar(scalar:number): Vec3 {
-            return new Vec3(this.x * scalar, this.y * scalar, this.z * scalar);
-        }
-
-        Add(other:Vec3): Vec3 {
-            return new Vec3(this.x + other.x, this.y + other.y, this.z + other.z);
-        }
-    }
-}
