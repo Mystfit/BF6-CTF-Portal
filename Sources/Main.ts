@@ -70,7 +70,7 @@ const VERSION = [1, 2, 0];
 // CONFIGURATION
 //==============================================================================================
 
-const DEBUG_MODE = false;                                            // Print extra debug messages
+const DEBUG_MODE = true;                                            // Print extra debug messages
 
 // Game Settings
 const GAMEMODE_TARGET_SCORE = 5;                                     // Points needed to win
@@ -231,7 +231,7 @@ export async function OnGameModeStarted() {
     await mod.Wait(1);
 
     // Load game mode configuration
-    const config = FourTeamCTF; //Create4TeamNeutralCTFConfig();
+    let config = FourTeamCTFConfig;
     LoadGameModeConfig(config);
 
     // Set up initial player scores using JSPlayer
@@ -667,6 +667,6 @@ function CaptureFeedback(pos: mod.Vector): void {
     let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
     mod.EnableVFX(vfx, true);
     let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
-    mod.EnableSFX(sfx, true);
-    mod.PlaySound(sfx, 100);
+    // mod.EnableSFX(sfx, true);
+    mod.PlaySound(sfx, 1);
 }

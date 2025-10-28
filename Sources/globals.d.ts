@@ -332,7 +332,6 @@ declare interface BaseScoreboardHUD {
     readonly player: mod.Player;
     readonly playerId: number;
     readonly rootWidget: mod.UIWidget | undefined;
-
     create(): void;
     refresh(): void;
     close(): void;
@@ -400,6 +399,10 @@ declare class FlagIcon {
     SetVisible(visible: boolean): void;
     Destroy(): void;
     GetRootWidget(): mod.UIWidget;
+}
+
+declare class ScoreTicker {
+
 }
 
 // ============================================================================
@@ -493,8 +496,8 @@ declare function RefreshScoreboard(): void;
 // ============================================================================
 
 declare function LoadGameModeConfig(config: GameModeConfig): void;
-declare const ClassicCTF: GameModeConfig;
-declare const FourTeamCTF: GameModeConfig;
+declare const ClassicCTFConfig: GameModeConfig;
+declare const FourTeamCTFConfig: GameModeConfig;
 
 // ============================================================================
 // FLAG/ZONE HELPER FUNCTIONS

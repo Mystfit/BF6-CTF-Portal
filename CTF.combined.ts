@@ -1,12 +1,10 @@
-﻿//@ts-ignore
-import * as modlib from 'modlib';
-
+﻿
 
 try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof Error) console.log(`Script line offset: ${error.stack}`);};
 /* 
  * Capture the Flag Game Mode
  * 
- * Two teams compete to capture the enemy flag and return it to their base.
+ * Two (or more) teams compete to capture the enemy flag and return it to their base.
  * First team to reach the target score wins.
  * Author: Mystfit and Claude Sonnet 4.5 (20250929).
  */
@@ -74,7 +72,7 @@ const VERSION = [1, 2, 0];
 // CONFIGURATION
 //==============================================================================================
 
-const DEBUG_MODE = false;                                            // Print extra debug messages
+const DEBUG_MODE = true;                                            // Print extra debug messages
 
 // Game Settings
 const GAMEMODE_TARGET_SCORE = 5;                                     // Points needed to win
@@ -235,7 +233,7 @@ export async function OnGameModeStarted() {
     await mod.Wait(1);
 
     // Load game mode configuration
-    const config = FourTeamCTF; //Create4TeamNeutralCTFConfig();
+    let config = FourTeamCTFConfig;
     LoadGameModeConfig(config);
 
     // Set up initial player scores using JSPlayer
@@ -295,13 +293,7 @@ async function SecondUpdate(): Promise<void> {
         await mod.Wait(1);
 
         let currentTime = GetCurrentTime();
-        let timeDelta = currentTime - lastTickTime;
-        // console.log(`Second tick delta ${timeDelta}`);
-        
-        // // Check auto-return timers for all flags
-        // for (const [flagId, flagData] of flags.entries()) {
-        //     flagData.CheckAutoReturn();
-        // }
+        let timeDelta = currentTime - lastTickTime;        
         
         // Periodic team balance check
         if (TEAM_AUTO_BALANCE) {
@@ -677,8 +669,8 @@ function CaptureFeedback(pos: mod.Vector): void {
     let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
     mod.EnableVFX(vfx, true);
     let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
-    mod.EnableSFX(sfx, true);
-    mod.PlaySound(sfx, 100);
+    // mod.EnableSFX(sfx, true);
+    mod.PlaySound(sfx, 1);
 }
 
 
@@ -728,6 +720,10 @@ const DEFAULT_TEAM_COLOURS = new Map<number, mod.Vector>([
     [TeamID.TEAM_7, new rgba(133, 133, 133, 1).NormalizeToLinear().AsModVector3()]
 ]);
 
+
+//==============================================================================================
+// MATH FUNCTIONS
+//==============================================================================================
 
 export namespace Math2 {
     export class Vec3 {
@@ -849,6 +845,7 @@ function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean
 //==============================================================================================
 // RAYCAST MANAGER
 //==============================================================================================
+
 /**
  * RaycastManager - Asynchronous raycast queue system
  * 
@@ -995,7 +992,9 @@ class RaycastManager {
      * @param point The hit point
      * @param normal The surface normal
      */
-    handleHit(player: mod.Player, point: mod.Vector, normal: mod.Vector): void {
+    async handleHit(player: mod.Player, point: mod.Vector, normal: mod.Vector): Promise<void> {
+        if(DEBUG_MODE) console.log("Start of handleHit");
+
         if (this.queue.length === 0) {
             if (DEBUG_MODE) {
                 console.log('Warning: Received OnRayCastHit but queue is empty');
@@ -1003,13 +1002,20 @@ class RaycastManager {
             return;
         }
 
+        if(DEBUG_MODE) console.log("Popping raycast request");
         // Pop the first request from the queue (FIFO)
         const request = this.queue.shift()!;
         
+        if(DEBUG_MODE) console.log("Before raycast viz");
         // Visualize if debug was enabled for this raycast
         if (request.debug && request.start && request.stop) {
             this.VisualizeRaycast(request.start, point, request.debugDuration || 5, true);
         }
+        if(DEBUG_MODE) console.log("After raycast viz");
+        
+        // Defer promise resolution to break out of event handler call stack
+        // This prevents deadlocks when subsequent raycasts are called immediately after awaiting
+        await mod.Wait(0);
         
         // Resolve the promise with hit result
         request.resolve({
@@ -1019,13 +1025,14 @@ class RaycastManager {
             normal: normal,
             ID: request.id
         });
+        if(DEBUG_MODE) console.log("After raycast resolve");
     }
 
     /**
      * Handle a raycast miss event from OnRayCastMissed
      * @param player The player from the event
      */
-    handleMiss(player: mod.Player): void {
+    async handleMiss(player: mod.Player): Promise<void> {
         if (this.queue.length === 0) {
             if (DEBUG_MODE) {
                 console.log('Warning: Received OnRayCastMissed but queue is empty');
@@ -1040,6 +1047,10 @@ class RaycastManager {
         if (request.debug && request.start && request.stop) {
             this.VisualizeRaycast(request.start, request.stop, request.debugDuration || 5, false);
         }
+        
+        // Defer promise resolution to break out of event handler call stack
+        // This prevents deadlocks when subsequent raycasts are called immediately after awaiting
+        await mod.Wait(0);
         
         // Resolve the promise with miss result
         request.resolve({
@@ -1263,7 +1274,8 @@ class RaycastManager {
         let hitNormal: mod.Vector | undefined;
         
         arcPoints.push(currentPos);
-        
+
+        if(DEBUG_MODE) console.log("Start of projectile raycast")
         while (totalDistance < distance && !hit) {
             const gravityVec = mod.Multiply(mod.DownVector(), gravity * timeStep);
             currentVelocity = mod.Add(currentVelocity, gravityVec);
@@ -1271,8 +1283,9 @@ class RaycastManager {
             const displacement = mod.Multiply(currentVelocity, timeStep);
             const nextPos = mod.Add(currentPos, displacement);
             
+            if(DEBUG_MODE) console.log(`Before projectile raycast. ${VectorToString(currentPos), VectorToString(nextPos)}`);
             const rayResult = await this.cast(currentPos, nextPos);
-            
+            if(DEBUG_MODE) console.log(`After projectile raycast. Hit: ${rayResult.hit} ${VectorToString(rayResult.point ?? mod.CreateVector(0,0,0))}`);
             if (rayResult.hit && rayResult.point) {
                 hit = true;
                 hitPosition = rayResult.point;
@@ -1287,11 +1300,14 @@ class RaycastManager {
             rayIds.push(rayResult.ID);
             
             totalDistance += VectorLength(displacement);
+            if(DEBUG_MODE) console.log(`End of projectile raycast loop iteration`);
         }
         
         // Visualize arc path if debug is enabled (yellow by default)
         if (debug && arcPoints.length > 0) {
+            if(DEBUG_MODE) console.log(`Before projectile viz`);
             this.VisualizePoints(arcPoints, undefined, debugDuration, rayIds);
+            if(DEBUG_MODE) console.log(`After projectile viz`);
         }
         
         return {
@@ -1362,7 +1378,7 @@ class RaycastManager {
             for (const direction of directions) {
                 const rayEnd = mod.Add(currentPosition, mod.Multiply(direction, checkRadius));
                 const rayResult = await raycastManager.cast(currentPosition, rayEnd, debug);
-                
+
                 if (rayResult.hit && rayResult.point) {
                     foundCollision = true;
                     collisionCount++;
@@ -1411,6 +1427,7 @@ class RaycastManager {
         const downwardRayStart = mod.Add(currentPosition, mod.CreateVector(0, SPAWN_VALIDATION_HEIGHT_OFFSET, 0));
         const downwardRayEnd = mod.Add(downwardRayStart, mod.Multiply(mod.DownVector(), downwardDistance));
         const groundResult = await raycastManager.cast(downwardRayStart, downwardRayEnd, debug);
+
         console.log(`Looking for spawn location using downward ray start: ${VectorToString(downwardRayStart)}, ray end: ${VectorToString(downwardRayEnd)}`);
 
         let finalPosition = currentPosition;
@@ -1457,18 +1474,23 @@ const raycastManager = new RaycastManager();
 
 
 // Capture all async raycast events and handle them with the raycast manager
-export function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector): void {
+export async function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector): Promise<void> {
+    if(DEBUG_MODE) console.log("Received raycast hit");
     raycastManager.handleHit(eventPlayer, eventPoint, eventNormal);
+    if(DEBUG_MODE) console.log("After handled raycast hit");
 }
 
-export function OnRayCastMissed(eventPlayer: mod.Player): void {
+export async function OnRayCastMissed(eventPlayer: mod.Player): Promise<void> {
+    if(DEBUG_MODE) console.log("Received raycast miss");
     raycastManager.handleMiss(eventPlayer);
+    if(DEBUG_MODE) console.log("After handled raycast miss");
 }
 
 
 //==============================================================================================
 // ANIMATION MANAGER
 //==============================================================================================
+
 /**
  * AnimationManager - Asynchronous object animation system
  * 
@@ -1792,7 +1814,7 @@ class AnimationManager {
 const animationManager = new AnimationManager();
 
 //==============================================================================================
-// PLAYERSCORE CLASS
+// JSPLAYER CLASS
 //==============================================================================================
 
 class PlayerScore {
@@ -1806,11 +1828,6 @@ class PlayerScore {
         this.flag_carrier_kills = flag_carrier_kills
     }
 }
-
-
-//==============================================================================================
-// JSPLAYER CLASS
-//==============================================================================================
 
 class JSPlayer {
     // Player game attributes
@@ -2064,8 +2081,8 @@ class Flag {
 
         // Play pickup SFX
         let pickupSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureStartedByFriendly_OneShot2D, this.homePosition, ZERO_VEC);
-        mod.EnableSFX(pickupSfx, true);
-        mod.PlaySound(pickupSfx, 100);
+        // mod.EnableSFX(pickupSfx, true);
+        mod.PlaySound(pickupSfx, 1);
 
         // Remove flag prop
         if (this.flagProp) {
@@ -2140,7 +2157,7 @@ class Flag {
         // Clear the flag carrier at this point since we shouldn't need it
         this.carrierPlayer = null;
 
-
+        if(DEBUG_MODE) console.log("Before flagPath");
         // Calculate projectile path for flag arc
         let flagPath = await raycastManager.ProjectileRaycast(
             mod.Add(
@@ -2152,6 +2169,7 @@ class Flag {
             5,                                      // Sample rate
             9.8,                                    // gravity
             DEBUG_MODE, 5);                         // Use DEBUG_MODE for visualization
+        if(DEBUG_MODE) console.log("After flagPath");
         
         // Move validation location slightly away from the hit location in direction of the hit normal
         let groundLocationAdjusted: mod.Vector = mod.Add(flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position, mod.Multiply(flagPath.hitNormal ?? ZERO_VEC, 0.5));
@@ -2165,6 +2183,8 @@ class Flag {
             SPAWN_VALIDATION_MAX_ITERATIONS,    // Adjustment iterations, in case we don't find a valid location
             DEBUG_MODE                          // Debug
         );
+
+        if(DEBUG_MODE) console.log("const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck");
 
         let endRayCastID: number = RaycastManager.GetID();
         if(DEBUG_MODE){
@@ -2184,6 +2204,9 @@ class Flag {
         // Use the validated position if valid, otherwise use the adjusted ground location from projectile path
         const startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;
 
+        if(DEBUG_MODE) console.log("const startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;");
+
+
         // Flag rotation based on facing direction
         // TODO: replace with facing angle and hit normal
         let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
@@ -2193,16 +2216,21 @@ class Flag {
 
         // Finally spawn the flag
         this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);
+
+        if(DEBUG_MODE) console.log("this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);");
+
         
         // If we're using an MCOM, disable it to hide the objective marker
         let mcom: mod.MCOM = this.flagProp as mod.MCOM;
         if(mcom)
             mod.EnableGameModeObjective(mcom, false);
 
+        if(DEBUG_MODE) console.log("tmod.EnableGameModeObjective(mcom, false);");
+
         // Play yeet SFX
         let yeetSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Soldier_Ragdoll_OnDeath_OneShot3D, this.currentPosition, ZERO_VEC);
-        mod.EnableSFX(yeetSfx, true);
-        mod.PlaySound(yeetSfx, 100);
+        // mod.EnableSFX(yeetSfx, true);
+        mod.PlaySound(yeetSfx, 1);
 
         // Animate prop into position
         if(this.flagProp){
@@ -2216,6 +2244,7 @@ class Flag {
                 console.log(`Animation path failed with reason ${reason}`);
             });
         }
+        if(DEBUG_MODE) console.log("await animationManager.AnimateAlongPath(this.flagProp, interpolatedFlagPathPoints");
 
         // Update the position of the flag interaction point
         this.UpdateFlagInteractionPoint();
@@ -2238,8 +2267,8 @@ class Flag {
 
         // Play drop SFX
         let dropSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureNeutralize_OneShot2D, this.currentPosition, ZERO_VEC);
-        mod.EnableSFX(dropSfx, true);
-        mod.PlaySound(dropSfx, 100);
+        // mod.EnableSFX(dropSfx, true);
+        mod.PlaySound(dropSfx, 1);
 
         // Play drop VO
         let friendlyVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
@@ -2447,8 +2476,8 @@ class Flag {
     async PlayFlagAlarm(): Promise<void>{
         this.alarmSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Alarm, this.currentPosition, ZERO_VEC);
         if(this.alarmSFX){
-            mod.EnableSFX(this.alarmSFX, true);
-            mod.PlaySound(this.alarmSFX, 100, this.currentPosition, 100);
+            // mod.EnableSFX(this.alarmSFX, true);
+            mod.PlaySound(this.alarmSFX, 1, this.currentPosition, 100);
         }
         // Stop flag sound after a duration
         await mod.Wait(FLAG_SFX_DURATION);
@@ -2487,8 +2516,8 @@ class Flag {
 
         // Play returned SFX
         let pickupSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_ObjetiveUnlockReveal_OneShot2D, this.homePosition, ZERO_VEC);
-        mod.EnableSFX(pickupSfx, true);
-        mod.PlaySound(pickupSfx, 100);
+        // mod.EnableSFX(pickupSfx, true);
+        mod.PlaySound(pickupSfx, 1);
 
         // Play VO for flag owning team
         let flagOwningTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
@@ -2734,7 +2763,7 @@ function GetDefaultFlagCaptureZoneSpatialIdForTeam(team: mod.Team): number {
 }
 
 //==============================================================================================
-// CONFIGURATION INTERFACES
+// GAMEMODE CONFIGURATION AND LOADING 
 //==============================================================================================
 
 interface TeamConfig {
@@ -2872,8 +2901,11 @@ function LoadGameModeConfig(config: GameModeConfig): void {
     }
 }
 
+//==============================================================================================
+// CLASSIC 2-TEAM CTF CONFIG
+//==============================================================================================
+
 const ClassicCTFConfig: GameModeConfig = {
-// Default 2-team CTF configuration for backwards compatibility
     teams: [
         { 
             teamId: TeamID.TEAM_1, 
@@ -2913,7 +2945,11 @@ const ClassicCTFConfig: GameModeConfig = {
 }
 
 
-const FourTeamCTF: GameModeConfig = {
+//==============================================================================================
+// MULTI TEAM CTF CONFIG
+//==============================================================================================
+
+const FourTeamCTFConfig: GameModeConfig = {
     teams: [
         { 
             teamId: 1, 
@@ -2990,6 +3026,10 @@ const FourTeamCTF: GameModeConfig = {
 }
 
 
+//==============================================================================================
+// BASE SCORE HUD
+//==============================================================================================
+
 interface BaseScoreboardHUD {
     readonly player: mod.Player;
     readonly playerId: number;
@@ -3001,10 +3041,33 @@ interface BaseScoreboardHUD {
     isOpen(): boolean;
 }
 
+class ScoreTicker implements BaseScoreboardHUD {
+    player: mod.Player;
+    playerId: number;
+    rootWidget: mod.UIWidget | undefined;
 
+    constructor(player: mod.Player) {
+        this.player = player;
+        this.playerId = mod.GetObjId(player);
+    }
+    
+    create(): void {
+        throw new Error("Method not implemented.");
+    }
+    refresh(): void {
+        throw new Error("Method not implemented.");
+    }
+    close(): void {
+        throw new Error("Method not implemented.");
+    }
+    isOpen(): boolean {
+        throw new Error("Method not implemented.");
+    }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+}
 
 //==============================================================================================
-// UI HELPER FUNCTIONS
+// MULTI 2+ TEAM CTF HUD
 //==============================================================================================
 
 /**
@@ -3018,10 +3081,6 @@ function BuildFlagStatus(flag: Flag): mod.Message {
     if (flag.isDropped) return mod.Message(mod.stringkeys.scoreUI_flag_status_dropped);
     return mod.Message(mod.stringkeys.scoreUI_flag_status_home); // Default to home
 }
-
-//==============================================================================================
-// UI CLASSES
-//==============================================================================================
 
 /**
  * TeamColumnWidget - Displays a single team's score and flag status
@@ -3282,6 +3341,10 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
     }
 }
 
+
+//==============================================================================================
+// CLASSIC 2-TEAM CTF HUD
+//==============================================================================================
 
 /**
  * ScoreboardUI - Main scoring interface for CTF

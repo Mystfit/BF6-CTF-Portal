@@ -164,8 +164,8 @@ class Flag {
 
         // Play pickup SFX
         let pickupSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureStartedByFriendly_OneShot2D, this.homePosition, ZERO_VEC);
-        mod.EnableSFX(pickupSfx, true);
-        mod.PlaySound(pickupSfx, 100);
+        // mod.EnableSFX(pickupSfx, true);
+        mod.PlaySound(pickupSfx, 1);
 
         // Remove flag prop
         if (this.flagProp) {
@@ -240,7 +240,7 @@ class Flag {
         // Clear the flag carrier at this point since we shouldn't need it
         this.carrierPlayer = null;
 
-
+        if(DEBUG_MODE) console.log("Before flagPath");
         // Calculate projectile path for flag arc
         let flagPath = await raycastManager.ProjectileRaycast(
             mod.Add(
@@ -252,6 +252,7 @@ class Flag {
             5,                                      // Sample rate
             9.8,                                    // gravity
             DEBUG_MODE, 5);                         // Use DEBUG_MODE for visualization
+        if(DEBUG_MODE) console.log("After flagPath");
         
         // Move validation location slightly away from the hit location in direction of the hit normal
         let groundLocationAdjusted: mod.Vector = mod.Add(flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position, mod.Multiply(flagPath.hitNormal ?? ZERO_VEC, 0.5));
@@ -265,6 +266,8 @@ class Flag {
             SPAWN_VALIDATION_MAX_ITERATIONS,    // Adjustment iterations, in case we don't find a valid location
             DEBUG_MODE                          // Debug
         );
+
+        if(DEBUG_MODE) console.log("const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck");
 
         let endRayCastID: number = RaycastManager.GetID();
         if(DEBUG_MODE){
@@ -284,6 +287,9 @@ class Flag {
         // Use the validated position if valid, otherwise use the adjusted ground location from projectile path
         const startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;
 
+        if(DEBUG_MODE) console.log("const startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;");
+
+
         // Flag rotation based on facing direction
         // TODO: replace with facing angle and hit normal
         let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
@@ -293,16 +299,21 @@ class Flag {
 
         // Finally spawn the flag
         this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);
+
+        if(DEBUG_MODE) console.log("this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);");
+
         
         // If we're using an MCOM, disable it to hide the objective marker
         let mcom: mod.MCOM = this.flagProp as mod.MCOM;
         if(mcom)
             mod.EnableGameModeObjective(mcom, false);
 
+        if(DEBUG_MODE) console.log("tmod.EnableGameModeObjective(mcom, false);");
+
         // Play yeet SFX
         let yeetSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Soldier_Ragdoll_OnDeath_OneShot3D, this.currentPosition, ZERO_VEC);
-        mod.EnableSFX(yeetSfx, true);
-        mod.PlaySound(yeetSfx, 100);
+        // mod.EnableSFX(yeetSfx, true);
+        mod.PlaySound(yeetSfx, 1);
 
         // Animate prop into position
         if(this.flagProp){
@@ -316,6 +327,7 @@ class Flag {
                 console.log(`Animation path failed with reason ${reason}`);
             });
         }
+        if(DEBUG_MODE) console.log("await animationManager.AnimateAlongPath(this.flagProp, interpolatedFlagPathPoints");
 
         // Update the position of the flag interaction point
         this.UpdateFlagInteractionPoint();
@@ -338,8 +350,8 @@ class Flag {
 
         // Play drop SFX
         let dropSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureNeutralize_OneShot2D, this.currentPosition, ZERO_VEC);
-        mod.EnableSFX(dropSfx, true);
-        mod.PlaySound(dropSfx, 100);
+        // mod.EnableSFX(dropSfx, true);
+        mod.PlaySound(dropSfx, 1);
 
         // Play drop VO
         let friendlyVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
@@ -547,8 +559,8 @@ class Flag {
     async PlayFlagAlarm(): Promise<void>{
         this.alarmSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Alarm, this.currentPosition, ZERO_VEC);
         if(this.alarmSFX){
-            mod.EnableSFX(this.alarmSFX, true);
-            mod.PlaySound(this.alarmSFX, 100, this.currentPosition, 100);
+            // mod.EnableSFX(this.alarmSFX, true);
+            mod.PlaySound(this.alarmSFX, 1, this.currentPosition, 100);
         }
         // Stop flag sound after a duration
         await mod.Wait(FLAG_SFX_DURATION);
@@ -587,8 +599,8 @@ class Flag {
 
         // Play returned SFX
         let pickupSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_ObjetiveUnlockReveal_OneShot2D, this.homePosition, ZERO_VEC);
-        mod.EnableSFX(pickupSfx, true);
-        mod.PlaySound(pickupSfx, 100);
+        // mod.EnableSFX(pickupSfx, true);
+        mod.PlaySound(pickupSfx, 1);
 
         // Play VO for flag owning team
         let flagOwningTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);

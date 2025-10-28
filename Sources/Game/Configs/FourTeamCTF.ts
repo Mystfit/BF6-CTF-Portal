@@ -2,7 +2,7 @@
 // MULTI TEAM CTF CONFIG
 //==============================================================================================
 
-const FourTeamCTF: GameModeConfig = {
+const FourTeamCTFConfig: GameModeConfig = {
     teams: [
         { 
             teamId: 1, 

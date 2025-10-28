@@ -148,7 +148,9 @@ class RaycastManager {
      * @param point The hit point
      * @param normal The surface normal
      */
-    handleHit(player: mod.Player, point: mod.Vector, normal: mod.Vector): void {
+    async handleHit(player: mod.Player, point: mod.Vector, normal: mod.Vector): Promise<void> {
+        if(DEBUG_MODE) console.log("Start of handleHit");
+
         if (this.queue.length === 0) {
             if (DEBUG_MODE) {
                 console.log('Warning: Received OnRayCastHit but queue is empty');
@@ -156,13 +158,20 @@ class RaycastManager {
             return;
         }
 
+        if(DEBUG_MODE) console.log("Popping raycast request");
         // Pop the first request from the queue (FIFO)
         const request = this.queue.shift()!;
         
+        if(DEBUG_MODE) console.log("Before raycast viz");
         // Visualize if debug was enabled for this raycast
         if (request.debug && request.start && request.stop) {
             this.VisualizeRaycast(request.start, point, request.debugDuration || 5, true);
         }
+        if(DEBUG_MODE) console.log("After raycast viz");
+        
+        // Defer promise resolution to break out of event handler call stack
+        // This prevents deadlocks when subsequent raycasts are called immediately after awaiting
+        await mod.Wait(0);
         
         // Resolve the promise with hit result
         request.resolve({
@@ -172,13 +181,14 @@ class RaycastManager {
             normal: normal,
             ID: request.id
         });
+        if(DEBUG_MODE) console.log("After raycast resolve");
     }
 
     /**
      * Handle a raycast miss event from OnRayCastMissed
      * @param player The player from the event
      */
-    handleMiss(player: mod.Player): void {
+    async handleMiss(player: mod.Player): Promise<void> {
         if (this.queue.length === 0) {
             if (DEBUG_MODE) {
                 console.log('Warning: Received OnRayCastMissed but queue is empty');
@@ -193,6 +203,10 @@ class RaycastManager {
         if (request.debug && request.start && request.stop) {
             this.VisualizeRaycast(request.start, request.stop, request.debugDuration || 5, false);
         }
+        
+        // Defer promise resolution to break out of event handler call stack
+        // This prevents deadlocks when subsequent raycasts are called immediately after awaiting
+        await mod.Wait(0);
         
         // Resolve the promise with miss result
         request.resolve({
@@ -416,7 +430,8 @@ class RaycastManager {
         let hitNormal: mod.Vector | undefined;
         
         arcPoints.push(currentPos);
-        
+
+        if(DEBUG_MODE) console.log("Start of projectile raycast")
         while (totalDistance < distance && !hit) {
             const gravityVec = mod.Multiply(mod.DownVector(), gravity * timeStep);
             currentVelocity = mod.Add(currentVelocity, gravityVec);
@@ -424,8 +439,9 @@ class RaycastManager {
             const displacement = mod.Multiply(currentVelocity, timeStep);
             const nextPos = mod.Add(currentPos, displacement);
             
+            if(DEBUG_MODE) console.log(`Before projectile raycast. ${VectorToString(currentPos), VectorToString(nextPos)}`);
             const rayResult = await this.cast(currentPos, nextPos);
-            
+            if(DEBUG_MODE) console.log(`After projectile raycast. Hit: ${rayResult.hit} ${VectorToString(rayResult.point ?? mod.CreateVector(0,0,0))}`);
             if (rayResult.hit && rayResult.point) {
                 hit = true;
                 hitPosition = rayResult.point;
@@ -440,11 +456,14 @@ class RaycastManager {
             rayIds.push(rayResult.ID);
             
             totalDistance += VectorLength(displacement);
+            if(DEBUG_MODE) console.log(`End of projectile raycast loop iteration`);
         }
         
         // Visualize arc path if debug is enabled (yellow by default)
         if (debug && arcPoints.length > 0) {
+            if(DEBUG_MODE) console.log(`Before projectile viz`);
             this.VisualizePoints(arcPoints, undefined, debugDuration, rayIds);
+            if(DEBUG_MODE) console.log(`After projectile viz`);
         }
         
         return {
@@ -515,7 +534,7 @@ class RaycastManager {
             for (const direction of directions) {
                 const rayEnd = mod.Add(currentPosition, mod.Multiply(direction, checkRadius));
                 const rayResult = await raycastManager.cast(currentPosition, rayEnd, debug);
-                
+
                 if (rayResult.hit && rayResult.point) {
                     foundCollision = true;
                     collisionCount++;
@@ -564,6 +583,7 @@ class RaycastManager {
         const downwardRayStart = mod.Add(currentPosition, mod.CreateVector(0, SPAWN_VALIDATION_HEIGHT_OFFSET, 0));
         const downwardRayEnd = mod.Add(downwardRayStart, mod.Multiply(mod.DownVector(), downwardDistance));
         const groundResult = await raycastManager.cast(downwardRayStart, downwardRayEnd, debug);
+
         console.log(`Looking for spawn location using downward ray start: ${VectorToString(downwardRayStart)}, ray end: ${VectorToString(downwardRayEnd)}`);
 
         let finalPosition = currentPosition;
@@ -610,10 +630,14 @@ const raycastManager = new RaycastManager();
 
 
 // Capture all async raycast events and handle them with the raycast manager
-export function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector): void {
+export async function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector): Promise<void> {
+    if(DEBUG_MODE) console.log("Received raycast hit");
     raycastManager.handleHit(eventPlayer, eventPoint, eventNormal);
+    if(DEBUG_MODE) console.log("After handled raycast hit");
 }
 
-export function OnRayCastMissed(eventPlayer: mod.Player): void {
+export async function OnRayCastMissed(eventPlayer: mod.Player): Promise<void> {
+    if(DEBUG_MODE) console.log("Received raycast miss");
     raycastManager.handleMiss(eventPlayer);
+    if(DEBUG_MODE) console.log("After handled raycast miss");
 }
