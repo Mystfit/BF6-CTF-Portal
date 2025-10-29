@@ -203,13 +203,14 @@ class Flag {
         }
     }
     
-    async DropFlag(position?: mod.Vector, direction?: mod.Vector, dropDistance: number = FLAG_DROP_DISTANCE): Promise<void> {
+    async DropFlag(position?: mod.Vector, direction?: mod.Vector, dropDistance: number = FLAG_DROP_DISTANCE, useProjectileThrow?: boolean): Promise<void> {
         if (!this.isBeingCarried) return;
 
         this.isAtHome = false;
         this.isBeingCarried = false;
         this.isDropped = true;
         this.canBePickedUp = false;
+        useProjectileThrow = useProjectileThrow ?? FLAG_ENABLE_ARC_THROW;
         let facingDir: mod.Vector = ZERO_VEC;
         let throwDirectionAndSpeed: mod.Vector = ZERO_VEC;
         let startRaycastID: number = RaycastManager.GetID();    // For debugging how many rays we're using
@@ -238,44 +239,67 @@ class Flag {
         }
         
         // Clear the flag carrier at this point since we shouldn't need it
-        this.carrierPlayer = null;
+        let startPosition: mod.Vector;
+        let adjustedFlagPathPoints: mod.Vector[];
+        if(useProjectileThrow)
+        {
+            // Use fancy flag toss spawn location discovery and animation
+            if(DEBUG_MODE) console.log("Before flagPath");
+            // Calculate projectile path for flag arc
+            let flagPath = await RaycastManager.ProjectileRaycast(
+                mod.Add(
+                    mod.Add(position, mod.CreateVector(0.0, SOLDIER_HEIGHT, 0.0)),     // Start above soldier head to avoid self collisions
+                    mod.Multiply(facingDir, 0.75)        // Start projectile arc away from player to avoid intersections
+                ),
+                throwDirectionAndSpeed,                 // Velocity
+                FLAG_DROP_RAYCAST_DISTANCE,             // Max drop distance
+                5,                                      // Sample rate
+                this.carrierPlayer,                     // Origin player
+                9.8,                                    // gravity
+                DEBUG_MODE, 5);                         // Use DEBUG_MODE for visualization
+            if(DEBUG_MODE) console.log("After flagPath");
+            
+            // Move validation location slightly away from the hit location in direction of the hit normal
+            let groundLocationAdjusted: mod.Vector = mod.Add(flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position, mod.Multiply(flagPath.hitNormal ?? ZERO_VEC, 0.5));
+            
+            // Adjust flag spawn location to make sure it's not clipping into a wall
+            const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck(
+                groundLocationAdjusted,             // Hit location, vertically adjusted upwards to avoid clipping into the ground plane
+                FLAG_COLLISION_RADIUS,              // Collision radius of the flag that is safe to spawn it in
+                SPAWN_VALIDATION_DIRECTIONS,        // How many direction rays to cast around the object
+                FLAG_DROP_RAYCAST_DISTANCE,         // How far down to look for a valid ground location
+                SPAWN_VALIDATION_MAX_ITERATIONS,    // Adjustment iterations, in case we don't find a valid location
+                DEBUG_MODE                          // Debug
+            );
 
-        if(DEBUG_MODE) console.log("Before flagPath");
-        // Calculate projectile path for flag arc
-        let flagPath = await raycastManager.ProjectileRaycast(
-            mod.Add(
-                mod.Add(position, mod.CreateVector(0.0, SOLDIER_HEIGHT, 0.0)),     // Start above soldier head to avoid self collisions
-                mod.Multiply(facingDir, 0.75)        // Start projectile arc away from player to avoid intersections
-            ),
-            throwDirectionAndSpeed,                 // Velocity
-            FLAG_DROP_RAYCAST_DISTANCE,             // Max drop distance
-            5,                                      // Sample rate
-            9.8,                                    // gravity
-            DEBUG_MODE, 5);                         // Use DEBUG_MODE for visualization
-        if(DEBUG_MODE) console.log("After flagPath");
-        
-        // Move validation location slightly away from the hit location in direction of the hit normal
-        let groundLocationAdjusted: mod.Vector = mod.Add(flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position, mod.Multiply(flagPath.hitNormal ?? ZERO_VEC, 0.5));
-        
-        // Adjust flag spawn location to make sure it's not clipping into a wall
-        const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck(
-            groundLocationAdjusted,             // Hit location, vertically adjusted upwards to avoid clipping into the ground plane
-            FLAG_COLLISION_RADIUS,              // Collision radius of the flag that is safe to spawn it in
-            SPAWN_VALIDATION_DIRECTIONS,        // How many direction rays to cast around the object
-            FLAG_DROP_RAYCAST_DISTANCE,         // How far down to look for a valid ground location
-            SPAWN_VALIDATION_MAX_ITERATIONS,    // Adjustment iterations, in case we don't find a valid location
-            DEBUG_MODE                          // Debug
-        );
+            let endRayCastID: number = RaycastManager.GetID();
+            if(DEBUG_MODE){
+                console.log(`Flag drop took ${endRayCastID - startRaycastID} raycasts to complete`);
+                if (!validatedFlagSpawn.isValid) {
+                    console.log(`Warning: FindValidGroundPosition could not find valid location`);
+                }
+            }
+
+            // Use the validated position if valid, otherwise use the adjusted ground location from projectile path
+            startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;
+            adjustedFlagPathPoints = flagPath.arcPoints.slice(0, -2).concat([startPosition]);
+
+        } else {
+            // Use fallback 2-ray ground discovery
+            // let offsetHeight = mod.Add(position, mod.CreateVector(0.0, SOLDIER_HALF_HEIGHT, 0.0));
+            // let groundHit = await RaycastManager.FindValidGroundPosition(
+            //     offsetHeight, 
+            //     direction, 
+            //     2.5, 
+            //     1, 
+            //     FLAG_TERRAIN_RAYCAST_SUPPORT ? FLAG_DROP_RAYCAST_DISTANCE : -SOLDIER_HALF_HEIGHT, 
+            //     true, 5
+            // );
+            startPosition = position;
+            adjustedFlagPathPoints = [startPosition];
+        }
 
         if(DEBUG_MODE) console.log("const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck");
-
-        let endRayCastID: number = RaycastManager.GetID();
-        if(DEBUG_MODE){
-            console.log(`Flag drop took ${endRayCastID - startRaycastID} raycasts to complete`);
-            if (!validatedFlagSpawn.isValid) {
-                console.log(`Warning: FindValidGroundPosition could not find valid location`);
-            }
-        }
 
         // Remove old flag if it exists - it shouldn't but lets make sure
         try{
@@ -284,8 +308,6 @@ class Flag {
         } catch(error: unknown){
             console.log("Couldn't unspawn flag prop");
         }
-        // Use the validated position if valid, otherwise use the adjusted ground location from projectile path
-        const startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;
 
         if(DEBUG_MODE) console.log("const startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;");
 
@@ -315,9 +337,11 @@ class Flag {
         // mod.EnableSFX(yeetSfx, true);
         mod.PlaySound(yeetSfx, 1);
 
+        // Clear the carrierPlayer when the flag has left the player
+        this.carrierPlayer = null;
+
         // Animate prop into position
-        if(this.flagProp){
-            let adjustedFlagPathPoints = flagPath.arcPoints.slice(0, -2).concat([startPosition]);
+        if(this.flagProp && useProjectileThrow){
             let numInterPoints = 3;
             let interpolatedFlagPathPoints = InterpolatePoints(adjustedFlagPathPoints, numInterPoints);
             await animationManager.AnimateAlongPath(this.flagProp, interpolatedFlagPathPoints, {

@@ -83,6 +83,8 @@ declare const FLAG_SPAWN_HEIGHT_OFFSET: number;
 declare const FLAG_COLLISION_RADIUS: number;
 declare const FLAG_DROP_RAYCAST_DISTANCE: number;
 declare const FLAG_DROP_RING_RADIUS: number;
+declare const FLAG_ENABLE_ARC_THROW: boolean;
+declare const FLAG_TERRAIN_RAYCAST_SUPPORT: boolean;
 declare const SOLDIER_HALF_HEIGHT: number;
 declare const SOLDIER_HEIGHT: number;
 declare const SPAWN_VALIDATION_DIRECTIONS: number;
@@ -164,7 +166,7 @@ interface RaycastResult {
     hit: boolean;
     ID: number;
     player?: mod.Player;
-    point?: mod.Vector;
+    point: mod.Vector;
     normal?: mod.Vector;
 }
 
@@ -303,14 +305,15 @@ declare class CaptureZone {
 }
 
 declare class RaycastManager {
-    cast(start: mod.Vector, stop: mod.Vector, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
-    castWithPlayer(player: mod.Player, start: mod.Vector, stop: mod.Vector, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
+    static Get(): RaycastManager;
+    static cast(start: mod.Vector, stop: mod.Vector, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
+    static castWithPlayer(player: mod.Player, start: mod.Vector, stop: mod.Vector, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
     handleHit(player: mod.Player, point: mod.Vector, normal: mod.Vector): void;
     handleMiss(player: mod.Player): void;
     getQueueLength(): number;
-    VisualizePoints(points: mod.Vector[], color?: mod.Vector, debugDuration?: number, rayIds?: number[], iconImage?: mod.WorldIconImages): Promise<void>;
-    ProjectileRaycast(startPosition: mod.Vector, velocity: mod.Vector, distance: number, sampleRate: number, gravity?: number, debug?: boolean, debugDuration?: number): Promise<ProjectileRaycastResult>;
-    static FindValidGroundPosition(startPosition: mod.Vector, direction: mod.Vector, forwardDistance: number, collisionRadius: number, downwardDistance: number, debug?: boolean, debugDuration?: number): Promise<mod.Vector>;
+    static VisualizePoints(points: mod.Vector[], color?: mod.Vector, debugDuration?: number, rayIds?: number[], iconImage?: mod.WorldIconImages): Promise<void>;
+    static ProjectileRaycast(startPosition: mod.Vector, velocity: mod.Vector, distance: number, sampleRate: number, player?:mod.Player | null, gravity?: number, debug?: boolean, debugDuration?: number): Promise<ProjectileRaycastResult>;
+    static FindValidGroundPosition(startPosition: mod.Vector, direction: mod.Vector, forwardDistance: number, collisionRadius: number, downwardDistance: number, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
     static ValidateSpawnLocationWithRadialCheck(centerPosition: mod.Vector, checkRadius: number, numDirections: number, downwardDistance: number, maxIterations?: number, debug?: boolean): Promise<ValidatedSpawnResult>;
     static GetID(): number;
     static GetNextID(): number;

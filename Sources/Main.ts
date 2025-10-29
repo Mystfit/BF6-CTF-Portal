@@ -105,6 +105,8 @@ const FLAG_SPAWN_HEIGHT_OFFSET = 0.5;                               // Height of
 const FLAG_COLLISION_RADIUS = 1;                                    // Safety radius to prevent spawning inside objects
 const FLAG_DROP_RAYCAST_DISTANCE = 100;                             // Maximum distance for downward raycast when dropping
 const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
+const FLAG_ENABLE_ARC_THROW = false;                                // Enable flag throwing
+const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
 const SOLDIER_HEIGHT = 2;                                           // Full soldier height
 
@@ -231,7 +233,7 @@ export async function OnGameModeStarted() {
     await mod.Wait(1);
 
     // Load game mode configuration
-    let config = FourTeamCTFConfig;
+    let config = ClassicCTFConfig;
     LoadGameModeConfig(config);
 
     // Set up initial player scores using JSPlayer
