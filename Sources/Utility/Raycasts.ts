@@ -20,7 +20,7 @@ interface RaycastResult {
     hit: boolean;           // true if OnRayCastHit fired, false if OnRayCastMissed
     ID: number             // Unique ID for this raycast result
     player?: mod.Player;    // The player who cast the ray (may be undefined for non-player raycasts)
-    point?: mod.Vector;     // Hit point (only when hit=true)
+    point: mod.Vector;      // Hit point or end of ray if no hit was found
     normal?: mod.Vector;    // Surface normal (only when hit=true)
 }
 
@@ -31,8 +31,8 @@ interface RaycastRequest {
     reject: (error: any) => void;              // Promise reject function
     debug?: boolean;        // Whether to visualize this raycast
     debugDuration?: number; // Duration for debug visualization
-    start?: mod.Vector;     // Start position (for visualization)
-    stop?: mod.Vector;      // End position (for visualization)
+    start: mod.Vector;     // Start position (for visualization)
+    stop: mod.Vector;      // End position (for visualization)
 }
 
 interface ProjectileRaycastResult {
@@ -48,9 +48,21 @@ interface ValidatedSpawnResult {
     isValid: boolean;
 }
 
+interface ProjectilePoint {
+    position: mod.Vector;
+    rayId: number;
+    hit: boolean;
+    hitNormal?: mod.Vector;
+    isLast: boolean;
+}
+
 class RaycastManager {
     private queue: RaycastRequest[] = [];
     private static ids: number = 0;
+
+    static Get(): RaycastManager{
+        return raycastManager;
+    }
 
     static GetID(): number {
         return RaycastManager.ids;
@@ -68,7 +80,7 @@ class RaycastManager {
      * @param debugDuration Duration in seconds for debug visualization (default: 5)
      * @returns Promise that resolves with raycast result
      */
-    cast(start: mod.Vector, stop: mod.Vector, debug: boolean = false, debugDuration: number = 5): Promise<RaycastResult> {
+    static cast(start: mod.Vector, stop: mod.Vector, debug: boolean = false, debugDuration: number = 5): Promise<RaycastResult> {
         return new Promise<RaycastResult>(async (resolve, reject) => {
             try {
                 // Validate parameters
@@ -79,7 +91,7 @@ class RaycastManager {
                 
                 // Add request to queue with debug info
                 let id = RaycastManager.GetNextID();
-                this.queue.push({ 
+                RaycastManager.Get().queue.push({ 
                     player: undefined, 
                     id, 
                     resolve, 
@@ -89,6 +101,11 @@ class RaycastManager {
                     start,
                     stop
                 });
+                
+                if(DEBUG_MODE) {
+                    const rayLength = VectorLength(Math2.Vec3.FromVector(stop).Subtract(Math2.Vec3.FromVector(start)).ToVector());
+                    console.log(`[Raycast ${id}] Casting ray - Start: ${VectorToString(start)}, End: ${VectorToString(stop)}, Length: ${rayLength.toFixed(2)}`);
+                }
                 
                 // Call the actual raycast function
                 mod.RayCast(start, stop);
@@ -107,7 +124,7 @@ class RaycastManager {
      * @param debugDuration Duration in seconds for debug visualization (default: 5)
      * @returns Promise that resolves with raycast result
      */
-    castWithPlayer(player: mod.Player, start: mod.Vector, stop: mod.Vector, debug: boolean = false, debugDuration: number = 5): Promise<RaycastResult> {
+    static castWithPlayer(player: mod.Player, start: mod.Vector, stop: mod.Vector, debug: boolean = false, debugDuration: number = 5): Promise<RaycastResult> {
         return new Promise<RaycastResult>(async (resolve, reject) => {
             try {
                 // Validate parameters
@@ -123,7 +140,7 @@ class RaycastManager {
                 
                 // Add request to queue with debug info
                 let id = RaycastManager.GetNextID();
-                this.queue.push({ 
+                RaycastManager.Get().queue.push({ 
                     player, 
                     id, 
                     resolve, 
@@ -133,6 +150,11 @@ class RaycastManager {
                     start,
                     stop
                 });
+                
+                if(DEBUG_MODE) {
+                    const rayLength = VectorLength(Math2.Vec3.FromVector(stop).Subtract(Math2.Vec3.FromVector(start)).ToVector());
+                    console.log(`[Raycast ${id}] Casting ray with player - Start: ${VectorToString(start)}, End: ${VectorToString(stop)}, Length: ${rayLength.toFixed(2)}`);
+                }
                 
                 // Call the actual raycast function
                 mod.RayCast(player, start, stop);
@@ -161,6 +183,13 @@ class RaycastManager {
         if(DEBUG_MODE) console.log("Popping raycast request");
         // Pop the first request from the queue (FIFO)
         const request = this.queue.shift()!;
+        
+        if(DEBUG_MODE) {
+            const distanceTraveled = request.start && request.stop 
+                ? VectorLength(Math2.Vec3.FromVector(point).Subtract(Math2.Vec3.FromVector(request.start)).ToVector())
+                : 0;
+            console.log(`[Raycast ${request.id}] HIT - Start: ${request.start ? VectorToString(request.start) : "unknown"}, Hit: ${VectorToString(point)}, Distance: ${distanceTraveled.toFixed(2)}`);
+        }
         
         if(DEBUG_MODE) console.log("Before raycast viz");
         // Visualize if debug was enabled for this raycast
@@ -199,6 +228,13 @@ class RaycastManager {
         // Pop the first request from the queue (FIFO)
         const request = this.queue.shift()!;
         
+        if(DEBUG_MODE) {
+            const rayLength = request.start && request.stop
+                ? VectorLength(Math2.Vec3.FromVector(request.stop).Subtract(Math2.Vec3.FromVector(request.start)).ToVector())
+                : 0;
+            console.log(`[Raycast ${request.id}] MISS - Start: ${request.start ? VectorToString(request.start) : "unknown"}, End: ${request.stop ? VectorToString(request.stop) : "unknown"}, Length: ${rayLength.toFixed(2)}`);
+        }
+        
         // Visualize if debug was enabled for this raycast
         if (request.debug && request.start && request.stop) {
             this.VisualizeRaycast(request.start, request.stop, request.debugDuration || 5, false);
@@ -212,6 +248,7 @@ class RaycastManager {
         request.resolve({
             hit: false,
             player: player,
+            point: request.stop,
             ID: request.id
         });
     }
@@ -339,17 +376,17 @@ class RaycastManager {
         downwardDistance: number,
         debug: boolean = false,
         debugDuration: number = 5
-    ): Promise<mod.Vector> {
+    ): Promise<RaycastResult> {
         let highPosition = startPosition;
         
         // Cast forward to check for obstacles
-        let forwardHit: RaycastResult = {hit: false, ID:-1};
+        let forwardHit: RaycastResult = {hit: false, ID:-1, point: ZERO_VEC};
         
         if (direction) {
             // Don't let ray start inside the starting object
             let forwardRayStart = mod.Add(startPosition, mod.Multiply(direction, 1));
             let forwardRayEnd = mod.Add(forwardRayStart, mod.Multiply(direction, forwardDistance));
-            forwardHit = await raycastManager.cast(forwardRayStart, forwardRayEnd);
+            forwardHit = await RaycastManager.cast(forwardRayStart, forwardRayEnd);
             highPosition = forwardHit.point ?? forwardRayEnd;
             
             // Visualize forward ray (blue)
@@ -372,12 +409,11 @@ class RaycastManager {
         
         // Cast downward to find ground
         let downwardRayEnd = mod.Add(downwardRayStart, mod.Multiply(mod.DownVector(), downwardDistance));
-        let downHit = await raycastManager.cast(downwardRayStart, downwardRayEnd);
-        
-        const finalPosition = downHit.hit ? (downHit.point ?? startPosition) : startPosition;
+        let downHit = await RaycastManager.cast(downwardRayStart, downwardRayEnd);
         
         // Visualize downward ray (green) and final position (red)
         if (debug) {
+            const finalPosition = downHit.hit ? (downHit.point ?? startPosition) : startPosition;
             const greenColor = new rgba(0, 255, 0, 1).NormalizeToLinear().AsModVector3();
             const redColor = new rgba(255, 0, 0, 1).NormalizeToLinear().AsModVector3();
             await raycastManager.VisualizePoints([downwardRayStart, finalPosition], greenColor, debugDuration);
@@ -388,8 +424,7 @@ class RaycastManager {
             console.log(`Downward raycast - Hit: ${downHit.hit}, Location: ${downHit.point ? VectorToString(downHit.point) : "none"}`);
         }
         
-        // Return ground position if found, otherwise return start position
-        return finalPosition;
+        return downHit;
         
         // End normal downward ray ground check
         //-------------------------------------
@@ -409,11 +444,12 @@ class RaycastManager {
         // return validatedResult.position;
     }
 
-    async ProjectileRaycast(
+    static async ProjectileRaycast(
         startPosition: mod.Vector,
         velocity: mod.Vector,
         distance: number,
         sampleRate: number,
+        player?: mod.Player | null,
         gravity: number = 9.8,
         debug: boolean = false,
         debugDuration: number = 5
@@ -431,17 +467,25 @@ class RaycastManager {
         
         arcPoints.push(currentPos);
 
-        if(DEBUG_MODE) console.log("Start of projectile raycast")
+        if(DEBUG_MODE) console.log(`[ProjectileRaycast] Starting - Position: ${VectorToString(startPosition)}, Velocity: ${VectorToString(velocity)}, MaxDistance: ${distance}, SampleRate: ${sampleRate}, Gravity: ${gravity}`);
+        
+        let iteration = 0;
         while (totalDistance < distance && !hit) {
+            iteration++;
             const gravityVec = mod.Multiply(mod.DownVector(), gravity * timeStep);
             currentVelocity = mod.Add(currentVelocity, gravityVec);
             
             const displacement = mod.Multiply(currentVelocity, timeStep);
             const nextPos = mod.Add(currentPos, displacement);
             
-            if(DEBUG_MODE) console.log(`Before projectile raycast. ${VectorToString(currentPos), VectorToString(nextPos)}`);
-            const rayResult = await this.cast(currentPos, nextPos);
-            if(DEBUG_MODE) console.log(`After projectile raycast. Hit: ${rayResult.hit} ${VectorToString(rayResult.point ?? mod.CreateVector(0,0,0))}`);
+            if(DEBUG_MODE) {
+                console.log(`[ProjectileRaycast] Iteration ${iteration} - From: ${VectorToString(currentPos)} To: ${VectorToString(nextPos)}, TotalDist: ${totalDistance.toFixed(2)}`);
+            }
+
+            const rayResult = player ? await this.castWithPlayer(player, currentPos, nextPos) :  await RaycastManager.cast(currentPos, nextPos);
+            if(DEBUG_MODE) {
+                console.log(`[ProjectileRaycast] Iteration ${iteration} - Result: ${rayResult.hit ? "HIT" : "MISS"} at ${VectorToString(rayResult.point ?? nextPos)}`);
+            }
             if (rayResult.hit && rayResult.point) {
                 hit = true;
                 hitPosition = rayResult.point;
@@ -456,13 +500,16 @@ class RaycastManager {
             rayIds.push(rayResult.ID);
             
             totalDistance += VectorLength(displacement);
-            if(DEBUG_MODE) console.log(`End of projectile raycast loop iteration`);
+        }
+        
+        if(DEBUG_MODE) {
+            console.log(`[ProjectileRaycast] Complete - Total iterations: ${iteration}, Final hit: ${hit}, Total distance: ${totalDistance.toFixed(2)}, Hit position: ${hitPosition ? VectorToString(hitPosition) : "none"}`);
         }
         
         // Visualize arc path if debug is enabled (yellow by default)
         if (debug && arcPoints.length > 0) {
             if(DEBUG_MODE) console.log(`Before projectile viz`);
-            this.VisualizePoints(arcPoints, undefined, debugDuration, rayIds);
+            RaycastManager.Get().VisualizePoints(arcPoints, undefined, debugDuration, rayIds);
             if(DEBUG_MODE) console.log(`After projectile viz`);
         }
         
@@ -473,6 +520,201 @@ class RaycastManager {
             hitPosition,
             hitNormal
         };
+    }
+
+    /**
+     * Generator version of ProjectileRaycast that yields points as they are calculated
+     * This allows concurrent animation while raycasts are still being performed
+     * 
+     * @param startPosition Starting position for the projectile
+     * @param velocity Initial velocity vector
+     * @param distance Maximum distance to travel
+     * @param sampleRate Number of samples per second
+     * @param player Optional player context for raycasts
+     * @param gravity Gravity acceleration (default: 9.8)
+     * @param debug Enable visualization
+     * @param interpolationSteps Number of interpolated points to yield between each raycast (default: 3, 0 = no interpolation)
+     * @param onHitDetected Optional callback when hit is detected, returns validated final position
+     * @returns AsyncGenerator that yields ProjectilePoint objects as they are calculated
+     */
+    static async *ProjectileRaycastGenerator(
+        startPosition: mod.Vector,
+        velocity: mod.Vector,
+        distance: number,
+        sampleRate: number,
+        player?: mod.Player | null,
+        gravity: number = 9.8,
+        debug: boolean = false,
+        interpolationSteps: number = 5,
+        onHitDetected?: (hitPoint: mod.Vector, hitNormal?: mod.Vector) => Promise<mod.Vector>
+    ): AsyncGenerator<ProjectilePoint> {
+        const timeStep = 1.0 / sampleRate;
+        
+        let currentPos = startPosition;
+        let currentVelocity = velocity;
+        let totalDistance = 0;
+        let hit = false;
+        
+        // Yield the starting point
+        yield {
+            position: currentPos,
+            rayId: -1,
+            hit: false,
+            isLast: false
+        };
+
+        if(DEBUG_MODE) console.log(`[ProjectileRaycastGenerator] Starting - Position: ${VectorToString(startPosition)}, Velocity: ${VectorToString(velocity)}, MaxDistance: ${distance}, SampleRate: ${sampleRate}, Gravity: ${gravity}, Interpolation: ${interpolationSteps}`);
+        
+        let iteration = 0;
+        while (totalDistance < distance && !hit) {
+            iteration++;
+            
+            // Store the starting position of this segment
+            const segmentStart = currentPos;
+            
+            // Store velocity before gravity update for proper interpolation
+            const velocityAtSegmentStart = currentVelocity;
+            
+            const gravityVec = mod.Multiply(mod.DownVector(), gravity * timeStep);
+            currentVelocity = mod.Add(currentVelocity, gravityVec);
+            
+            const displacement = mod.Multiply(currentVelocity, timeStep);
+            const nextPos = mod.Add(currentPos, displacement);
+            
+            if(DEBUG_MODE) {
+                console.log(`[ProjectileRaycastGenerator] Iteration ${iteration} - From: ${VectorToString(currentPos)} To: ${VectorToString(nextPos)}, TotalDist: ${totalDistance.toFixed(2)}`);
+            }
+
+            const rayResult = player ? await this.castWithPlayer(player, currentPos, nextPos, debug) : await RaycastManager.cast(currentPos, nextPos, debug);
+            
+            if(DEBUG_MODE) {
+                console.log(`[ProjectileRaycastGenerator] Iteration ${iteration} - Result: ${rayResult.hit ? "HIT" : "MISS"} at ${VectorToString(rayResult.point ?? nextPos)}`);
+            }
+            
+            if (rayResult.hit && rayResult.point) {
+                hit = true;
+                
+                // If hit detected callback is provided, call it to get validated position
+                let finalPosition = rayResult.point;
+                if (onHitDetected) {
+                    if(DEBUG_MODE) {
+                        console.log(`[ProjectileRaycastGenerator] Hit detected at ${VectorToString(rayResult.point)}, calling onHitDetected callback`);
+                    }
+                    finalPosition = await onHitDetected(rayResult.point, rayResult.normal);
+                    if(DEBUG_MODE) {
+                        console.log(`[ProjectileRaycastGenerator] Validated final position: ${VectorToString(finalPosition)}`);
+                    }
+                }
+                
+                // Yield interpolated points from segment start to hit point (excluding both endpoints)
+                if (interpolationSteps > 0) {
+                    // Calculate the time it takes to reach the hit point
+                    const hitVector = Math2.Vec3.FromVector(rayResult.point).Subtract(Math2.Vec3.FromVector(segmentStart)).ToVector();
+                    const hitDistance = VectorLength(hitVector);
+                    const totalSegmentDistance = VectorLength(displacement);
+                    const hitTimeFraction = totalSegmentDistance > 0 ? hitDistance / totalSegmentDistance : 0;
+                    const hitTimeStep = hitTimeFraction * timeStep;
+                    
+                    for (let i = 1; i <= interpolationSteps; i++) {
+                        const t = i / (interpolationSteps + 1);
+                        const subTimeStep = t * hitTimeStep;
+                        
+                        // Use projectile motion: position = start + velocity*time + 0.5*gravity*time²
+                        const velocityDisplacement = mod.Multiply(velocityAtSegmentStart, subTimeStep);
+                        const gravityDisplacement = mod.Multiply(mod.DownVector(), 0.5 * gravity * subTimeStep * subTimeStep);
+                        const interpPos = mod.Add(segmentStart, mod.Add(velocityDisplacement, gravityDisplacement));
+                        
+                        yield {
+                            position: interpPos,
+                            rayId: rayResult.ID,
+                            hit: false,
+                            isLast: false
+                        };
+                    }
+                }
+                
+                // If validation callback was used and position differs from hit point, yield interpolated points to validated position
+                if (onHitDetected && finalPosition !== rayResult.point) {
+                    const adjustmentDistance = VectorLength(
+                        Math2.Vec3.FromVector(finalPosition).Subtract(Math2.Vec3.FromVector(rayResult.point)).ToVector()
+                    );
+                    
+                    if (adjustmentDistance > 0.1 && interpolationSteps > 0) {
+                        if(DEBUG_MODE) {
+                            console.log(`[ProjectileRaycastGenerator] Generating ${interpolationSteps} adjustment points from hit to validated position (distance: ${adjustmentDistance.toFixed(2)})`);
+                        }
+                        
+                        // Generate interpolated points from hit point to validated position
+                        for (let i = 1; i <= interpolationSteps; i++) {
+                            const t = i / (interpolationSteps + 1);
+                            const adjustmentVector = Math2.Vec3.FromVector(finalPosition).Subtract(Math2.Vec3.FromVector(rayResult.point)).ToVector();
+                            const interpPos = mod.Add(rayResult.point, mod.Multiply(adjustmentVector, t));
+                            
+                            yield {
+                                position: interpPos,
+                                rayId: rayResult.ID,
+                                hit: false,
+                                isLast: false
+                            };
+                        }
+                    }
+                }
+                
+                // Yield the final validated position as the last point
+                yield {
+                    position: finalPosition,
+                    rayId: rayResult.ID,
+                    hit: true,
+                    hitNormal: rayResult.normal,
+                    isLast: true
+                };
+                break;
+            }
+            
+            // No hit - yield interpolated points between segment start and next position (excluding start, including end)
+            if (interpolationSteps > 0) {
+                // Generate interpolationSteps points evenly distributed, not including start but including end
+                for (let i = 1; i <= interpolationSteps + 1; i++) {
+                    const t = i / (interpolationSteps + 1);
+                    const subTimeStep = t * timeStep;
+                    
+                    // Use projectile motion: position = start + velocity*time + 0.5*gravity*time²
+                    const velocityDisplacement = mod.Multiply(velocityAtSegmentStart, subTimeStep);
+                    const gravityDisplacement = mod.Multiply(mod.DownVector(), 0.5 * gravity * subTimeStep * subTimeStep);
+                    const interpPos = mod.Add(segmentStart, mod.Add(velocityDisplacement, gravityDisplacement));
+                    
+                    yield {
+                        position: interpPos,
+                        rayId: rayResult.ID,
+                        hit: false,
+                        isLast: false
+                    };
+                }
+            } else {
+                // No interpolation - just yield the endpoint
+                yield {
+                    position: nextPos,
+                    rayId: rayResult.ID,
+                    hit: false,
+                    isLast: false
+                };
+            }
+            
+            // Update position and distance for next iteration
+            currentPos = nextPos;
+            totalDistance += VectorLength(displacement);
+        }
+        
+        // If we didn't hit anything but reached distance limit, mark the last point
+        if (!hit) {
+            if(DEBUG_MODE) {
+                console.log(`[ProjectileRaycastGenerator] Complete - Reached distance limit at ${totalDistance.toFixed(2)}`);
+            }
+        }
+        
+        if(DEBUG_MODE) {
+            console.log(`[ProjectileRaycastGenerator] Complete - Total iterations: ${iteration}, Final hit: ${hit}, Total distance: ${totalDistance.toFixed(2)}`);
+        }
     }
 
     /**
@@ -513,6 +755,7 @@ class RaycastManager {
     static async ValidateSpawnLocationWithRadialCheck(
         centerPosition: mod.Vector,
         checkRadius: number,
+        checkRadiusOffset: number,
         numDirections: number,
         downwardDistance: number,
         maxIterations: number = SPAWN_VALIDATION_MAX_ITERATIONS,
@@ -532,15 +775,16 @@ class RaycastManager {
             
             // Cast rays in all directions
             for (const direction of directions) {
+                const rayStart = mod.Add(currentPosition, mod.Multiply(direction, checkRadiusOffset));
                 const rayEnd = mod.Add(currentPosition, mod.Multiply(direction, checkRadius));
-                const rayResult = await raycastManager.cast(currentPosition, rayEnd, debug);
+                const rayResult = await RaycastManager.cast(rayStart, rayEnd, debug);
 
                 if (rayResult.hit && rayResult.point) {
                     foundCollision = true;
                     collisionCount++;
                     
                     // Calculate how much the ray penetrated into the collision radius
-                    const hitVector = Math2.Vec3.FromVector(rayResult.point).Subtract(Math2.Vec3.FromVector(currentPosition)).ToVector(); //mod.Subtract(rayResult.point, currentPosition);
+                    const hitVector = Math2.Vec3.FromVector(rayResult.point).Subtract(Math2.Vec3.FromVector(rayStart)).ToVector(); //mod.Subtract(rayResult.point, currentPosition);
                     const hitDistance = VectorLength(hitVector);
                     const penetrationDepth = checkRadius - hitDistance;
                     
@@ -582,7 +826,7 @@ class RaycastManager {
         // Add height offset to ensure ray starts above ground and doesn't clip through
         const downwardRayStart = mod.Add(currentPosition, mod.CreateVector(0, SPAWN_VALIDATION_HEIGHT_OFFSET, 0));
         const downwardRayEnd = mod.Add(downwardRayStart, mod.Multiply(mod.DownVector(), downwardDistance));
-        const groundResult = await raycastManager.cast(downwardRayStart, downwardRayEnd, debug);
+        const groundResult = await RaycastManager.cast(downwardRayStart, downwardRayEnd, debug);
 
         console.log(`Looking for spawn location using downward ray start: ${VectorToString(downwardRayStart)}, ray end: ${VectorToString(downwardRayEnd)}`);
 
@@ -630,13 +874,13 @@ const raycastManager = new RaycastManager();
 
 
 // Capture all async raycast events and handle them with the raycast manager
-export async function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector): Promise<void> {
+export function OnRayCastHit(eventPlayer: mod.Player, eventPoint: mod.Vector, eventNormal: mod.Vector) {
     if(DEBUG_MODE) console.log("Received raycast hit");
     raycastManager.handleHit(eventPlayer, eventPoint, eventNormal);
     if(DEBUG_MODE) console.log("After handled raycast hit");
 }
 
-export async function OnRayCastMissed(eventPlayer: mod.Player): Promise<void> {
+export function OnRayCastMissed(eventPlayer: mod.Player) {
     if(DEBUG_MODE) console.log("Received raycast miss");
     raycastManager.handleMiss(eventPlayer);
     if(DEBUG_MODE) console.log("After handled raycast miss");

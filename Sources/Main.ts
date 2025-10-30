@@ -81,7 +81,7 @@ const FLAG_AUTO_RETURN_TIME = 30;                                   // Seconds b
 const FLAG_SFX_DURATION = 5.0;                                      // Time delay before alarm sound shuts off
 const FLAG_ICON_HEIGHT_OFFSET = 2.5;                                // Height that the flag icon should be placed above a flag
 const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
-const FLAG_THROW_SPEED = 5;                                         // Speed in units p/s to throw a flag away a player
+const FLAG_THROW_SPEED = 6;                                         // Speed in units p/s to throw a flag away a player
 
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up
@@ -102,10 +102,11 @@ const TEAM_BALANCE_CHECK_INTERVAL = 10;                             // Check bal
 const FLAG_DROP_DISTANCE = 2.5;                                     // Distance in front of player when dropping flag
 const FLAG_INTERACTION_HEIGHT_OFFSET = 1.3;                         // Height offset for flag interaction point
 const FLAG_SPAWN_HEIGHT_OFFSET = 0.5;                               // Height offset when spawning flag above ground
-const FLAG_COLLISION_RADIUS = 1;                                    // Safety radius to prevent spawning inside objects
+const FLAG_COLLISION_RADIUS = 1.5;                                  // Safety radius to prevent spawning inside objects
+const FLAG_COLLISION_RADIUS_OFFSET = 1;                             // Safety radius to prevent spawning inside objects
 const FLAG_DROP_RAYCAST_DISTANCE = 100;                             // Maximum distance for downward raycast when dropping
 const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
-const FLAG_ENABLE_ARC_THROW = false;                                // Enable flag throwing
+const FLAG_ENABLE_ARC_THROW = true;                                 // Enable flag throwing
 const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
 const SOLDIER_HEIGHT = 2;                                           // Full soldier height

@@ -12,6 +12,14 @@
  *   await animationManager.AnimateAlongPath(object, points, { speed: 10 });
  */
 
+interface ProjectilePoint {
+    position: mod.Vector;
+    rayId: number;
+    hit: boolean;
+    hitNormal?: mod.Vector;
+    isLast: boolean;
+}
+
 interface AnimationOptions {
     speed?: number;              // Units per second (alternative to duration)
     duration?: number;           // Total duration in seconds (overrides speed)
@@ -242,6 +250,269 @@ class AnimationManager {
 
         // Return as Euler angles (pitch, yaw, roll)
         return mod.CreateVector(pitch, yaw, 0);
+    }
+
+    /**
+     * Animate an object along a path that is generated concurrently by an AsyncGenerator
+     * This allows animation to start before the full path is calculated, reducing perceived latency
+     * 
+     * @param object The object to animate
+     * @param generator AsyncGenerator that yields ProjectilePoint objects
+     * @param minBufferSize Minimum number of points to stay ahead of animation (safety buffer)
+     * @param options Animation options
+     * @returns Promise that resolves when animation completes
+     */
+    async AnimateAlongGeneratedPath(
+        object: mod.Object,
+        generator: AsyncGenerator<ProjectilePoint>,
+        minBufferSize: number,
+        options: AnimationOptions = {}
+    ): Promise<void> {
+        const objectId = mod.GetObjId(object);
+        
+        // Register active animation
+        const animation: ActiveAnimation = {
+            object,
+            objectId,
+            cancelled: false,
+            paused: false,
+            progress: 0
+        };
+        this.activeAnimations.set(objectId, animation);
+
+        const pointBuffer: ProjectilePoint[] = [];
+        let generatorComplete = false;
+        let currentPosition: mod.Vector;
+        let animationStarted = false;
+        let bufferStarvationCount = 0;
+
+        try {
+            if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
+
+            // Phase 1: Fill initial buffer (minBufferSize + 2 points)
+            const initialBufferSize = minBufferSize + 2;
+            for (let i = 0; i < initialBufferSize; i++) {
+                const result = await generator.next();
+                if (result.done) {
+                    generatorComplete = true;
+                    break;
+                }
+                pointBuffer.push(result.value);
+                
+                if(DEBUG_MODE) {
+                    console.log(`[AnimateAlongGeneratedPath] Buffered point ${i + 1}/${initialBufferSize}: ${VectorToString(result.value.position)}`);
+                }
+            }
+
+            if (pointBuffer.length < 2) {
+                console.error("AnimateAlongGeneratedPath: Not enough points generated for animation");
+                return;
+            }
+
+            // Set starting position
+            currentPosition = pointBuffer[0].position;
+            
+            if(DEBUG_MODE) {
+                console.log(`[AnimateAlongGeneratedPath] Initial buffer filled with ${pointBuffer.length} points, starting animation`);
+            }
+
+            // Phase 2: Concurrent animation and generation
+            animationStarted = true;
+            let segmentIndex = 0;
+            
+            while (pointBuffer.length > 1 || !generatorComplete) {
+                if (animation.cancelled) break;
+
+                // Check if we need to wait for more points
+                if (pointBuffer.length <= minBufferSize && !generatorComplete) {
+                    if(DEBUG_MODE) {
+                        console.log(`[AnimateAlongGeneratedPath] Buffer low (${pointBuffer.length} points), waiting for generator...`);
+                    }
+                    bufferStarvationCount++;
+                    
+                    // Try to fill buffer back up
+                    const result = await generator.next();
+                    if (result.done) {
+                        generatorComplete = true;
+                        if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+                    } else {
+                        pointBuffer.push(result.value);
+                        if(DEBUG_MODE) {
+                            console.log(`[AnimateAlongGeneratedPath] Added point to buffer: ${VectorToString(result.value.position)}`);
+                        }
+                    }
+                    continue;
+                }
+
+                // If generator is still running and buffer has room, try to add more points
+                if (!generatorComplete && pointBuffer.length < initialBufferSize * 2) {
+                    const result = await generator.next();
+                    if (result.done) {
+                        generatorComplete = true;
+                        if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+                    } else {
+                        pointBuffer.push(result.value);
+                    }
+                }
+
+                // Check if we should stop consuming points (hit detected or at end)
+                const shouldStopConsuming = generatorComplete && pointBuffer.length <= minBufferSize + 2;
+                
+                if (shouldStopConsuming) {
+                    if(DEBUG_MODE) {
+                        console.log(`[AnimateAlongGeneratedPath] Stopping animation consumption, ${pointBuffer.length} points remaining in buffer`);
+                    }
+                    break;
+                }
+
+                // Animate to next point
+                if (pointBuffer.length > 1) {
+                    const startPoint = pointBuffer.shift()!; // Remove first point
+                    const endPoint = pointBuffer[0]; // Peek at next point (don't remove yet)
+                    
+                    const segmentDistance = VectorLength(
+                        Math2.Vec3.FromVector(endPoint.position)
+                            .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                            .ToVector()
+                    );
+                    
+                    const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
+
+                    if(DEBUG_MODE) {
+                        console.log(`[AnimateAlongGeneratedPath] Animating segment ${segmentIndex}: ${VectorToString(startPoint.position)} -> ${VectorToString(endPoint.position)} (${segmentDistance.toFixed(2)} units, ${segmentDuration.toFixed(3)}s, buffer: ${pointBuffer.length})`);
+                    }
+
+                    // Calculate rotation if needed
+                    let rotation = ZERO_VEC;
+                    if (options.rotateToDirection) {
+                        rotation = this.CalculateRotationFromDirection(
+                            Math2.Vec3.FromVector(endPoint.position)
+                                .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                                .ToVector()
+                        );
+                    }
+
+                    // Animate this segment
+                    await this.AnimateBetweenPoints(
+                        object,
+                        currentPosition,
+                        endPoint.position,
+                        segmentDuration,
+                        { rotation }
+                    );
+
+                    currentPosition = endPoint.position;
+                    segmentIndex++;
+
+                    // Call progress callback
+                    if (options.onProgress) {
+                        options.onProgress(segmentIndex / (segmentIndex + pointBuffer.length), currentPosition);
+                    }
+
+                    if (options.onSegmentComplete) {
+                        options.onSegmentComplete(segmentIndex);
+                    }
+                }
+            }
+
+            // Phase 3: Animate through remaining buffered points
+            if (pointBuffer.length > 0) {
+                if(DEBUG_MODE) {
+                    console.log(`[AnimateAlongGeneratedPath] Animating through ${pointBuffer.length} remaining buffered points`);
+                }
+                
+                // Animate through all remaining points in buffer
+                while (pointBuffer.length > 0) {
+                    const startPoint = pointBuffer.shift()!;
+                    
+                    // If there's a next point, animate to it; otherwise we're at the last point
+                    if (pointBuffer.length > 0) {
+                        const endPoint = pointBuffer[0];
+                        
+                        const segmentDistance = VectorLength(
+                            Math2.Vec3.FromVector(endPoint.position)
+                                .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                                .ToVector()
+                        );
+                        
+                        const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
+                        
+                        let rotation = ZERO_VEC;
+                        if (options.rotateToDirection) {
+                            rotation = this.CalculateRotationFromDirection(
+                                Math2.Vec3.FromVector(endPoint.position)
+                                    .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                                    .ToVector()
+                            );
+                        }
+                        
+                        await this.AnimateBetweenPoints(
+                            object,
+                            currentPosition,
+                            endPoint.position,
+                            segmentDuration,
+                            { rotation }
+                        );
+                        
+                        currentPosition = endPoint.position;
+                        segmentIndex++;
+                        
+                        if (options.onProgress) {
+                            options.onProgress(1.0, currentPosition);
+                        }
+                    } else {
+                        // This was the last point - just set position directly if not already there
+                        if(DEBUG_MODE) {
+                            console.log(`[AnimateAlongGeneratedPath] Reached final point: ${VectorToString(startPoint.position)}`);
+                        }
+                        const finalDistance = VectorLength(
+                            Math2.Vec3.FromVector(startPoint.position)
+                                .Subtract(Math2.Vec3.FromVector(currentPosition))
+                                .ToVector()
+                        );
+                        
+                        if (finalDistance > 0.1) {
+                            const finalDuration = options.speed ? finalDistance / options.speed : 0.1;
+                            
+                            let finalRotation = ZERO_VEC;
+                            if (options.rotateToDirection) {
+                                finalRotation = this.CalculateRotationFromDirection(
+                                    Math2.Vec3.FromVector(startPoint.position)
+                                        .Subtract(Math2.Vec3.FromVector(currentPosition))
+                                        .ToVector()
+                                );
+                            }
+                            
+                            await this.AnimateBetweenPoints(
+                                object,
+                                currentPosition,
+                                startPoint.position,
+                                finalDuration,
+                                { rotation: finalRotation }
+                            );
+                            
+                            currentPosition = startPoint.position;
+                        }
+                    }
+                }
+            }
+
+            if(DEBUG_MODE) {
+                console.log(`[AnimateAlongGeneratedPath] Animation complete. Segments: ${segmentIndex}, Buffer starvation events: ${bufferStarvationCount}`);
+                if (bufferStarvationCount > 0) {
+                    console.log(`[AnimateAlongGeneratedPath] WARNING: Buffer was starved ${bufferStarvationCount} times. Consider increasing minBufferSize or reducing animation speed.`);
+                }
+            }
+
+            if (options.onComplete && !animation.cancelled) {
+                options.onComplete();
+            }
+        } catch (error) {
+            console.error(`[AnimateAlongGeneratedPath] Error during animation:`, error);
+            throw error;
+        } finally {
+            this.activeAnimations.delete(objectId);
+        }
     }
 
     /**

@@ -83,7 +83,7 @@ const FLAG_AUTO_RETURN_TIME = 30;                                   // Seconds b
 const FLAG_SFX_DURATION = 5.0;                                      // Time delay before alarm sound shuts off
 const FLAG_ICON_HEIGHT_OFFSET = 2.5;                                // Height that the flag icon should be placed above a flag
 const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
-const FLAG_THROW_SPEED = 5;                                         // Speed in units p/s to throw a flag away a player
+const FLAG_THROW_SPEED = 6;                                         // Speed in units p/s to throw a flag away a player
 
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up
@@ -104,10 +104,11 @@ const TEAM_BALANCE_CHECK_INTERVAL = 10;                             // Check bal
 const FLAG_DROP_DISTANCE = 2.5;                                     // Distance in front of player when dropping flag
 const FLAG_INTERACTION_HEIGHT_OFFSET = 1.3;                         // Height offset for flag interaction point
 const FLAG_SPAWN_HEIGHT_OFFSET = 0.5;                               // Height offset when spawning flag above ground
-const FLAG_COLLISION_RADIUS = 1;                                    // Safety radius to prevent spawning inside objects
+const FLAG_COLLISION_RADIUS = 1.5;                                  // Safety radius to prevent spawning inside objects
+const FLAG_COLLISION_RADIUS_OFFSET = 1;                             // Safety radius to prevent spawning inside objects
 const FLAG_DROP_RAYCAST_DISTANCE = 100;                             // Maximum distance for downward raycast when dropping
 const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
-const FLAG_ENABLE_ARC_THROW = false;                                // Enable flag throwing
+const FLAG_ENABLE_ARC_THROW = true;                                 // Enable flag throwing
 const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
 const SOLDIER_HEIGHT = 2;                                           // Full soldier height
@@ -235,7 +236,7 @@ export async function OnGameModeStarted() {
     await mod.Wait(1);
 
     // Load game mode configuration
-    let config = FourTeamCTFConfig;
+    let config = ClassicCTFConfig;
     LoadGameModeConfig(config);
 
     // Set up initial player scores using JSPlayer
@@ -894,6 +895,14 @@ interface ValidatedSpawnResult {
     isValid: boolean;
 }
 
+interface ProjectilePoint {
+    position: mod.Vector;
+    rayId: number;
+    hit: boolean;
+    hitNormal?: mod.Vector;
+    isLast: boolean;
+}
+
 class RaycastManager {
     private queue: RaycastRequest[] = [];
     private static ids: number = 0;
@@ -1361,6 +1370,201 @@ class RaycastManager {
     }
 
     /**
+     * Generator version of ProjectileRaycast that yields points as they are calculated
+     * This allows concurrent animation while raycasts are still being performed
+     * 
+     * @param startPosition Starting position for the projectile
+     * @param velocity Initial velocity vector
+     * @param distance Maximum distance to travel
+     * @param sampleRate Number of samples per second
+     * @param player Optional player context for raycasts
+     * @param gravity Gravity acceleration (default: 9.8)
+     * @param debug Enable visualization
+     * @param interpolationSteps Number of interpolated points to yield between each raycast (default: 3, 0 = no interpolation)
+     * @param onHitDetected Optional callback when hit is detected, returns validated final position
+     * @returns AsyncGenerator that yields ProjectilePoint objects as they are calculated
+     */
+    static async *ProjectileRaycastGenerator(
+        startPosition: mod.Vector,
+        velocity: mod.Vector,
+        distance: number,
+        sampleRate: number,
+        player?: mod.Player | null,
+        gravity: number = 9.8,
+        debug: boolean = false,
+        interpolationSteps: number = 5,
+        onHitDetected?: (hitPoint: mod.Vector, hitNormal?: mod.Vector) => Promise<mod.Vector>
+    ): AsyncGenerator<ProjectilePoint> {
+        const timeStep = 1.0 / sampleRate;
+        
+        let currentPos = startPosition;
+        let currentVelocity = velocity;
+        let totalDistance = 0;
+        let hit = false;
+        
+        // Yield the starting point
+        yield {
+            position: currentPos,
+            rayId: -1,
+            hit: false,
+            isLast: false
+        };
+
+        if(DEBUG_MODE) console.log(`[ProjectileRaycastGenerator] Starting - Position: ${VectorToString(startPosition)}, Velocity: ${VectorToString(velocity)}, MaxDistance: ${distance}, SampleRate: ${sampleRate}, Gravity: ${gravity}, Interpolation: ${interpolationSteps}`);
+        
+        let iteration = 0;
+        while (totalDistance < distance && !hit) {
+            iteration++;
+            
+            // Store the starting position of this segment
+            const segmentStart = currentPos;
+            
+            // Store velocity before gravity update for proper interpolation
+            const velocityAtSegmentStart = currentVelocity;
+            
+            const gravityVec = mod.Multiply(mod.DownVector(), gravity * timeStep);
+            currentVelocity = mod.Add(currentVelocity, gravityVec);
+            
+            const displacement = mod.Multiply(currentVelocity, timeStep);
+            const nextPos = mod.Add(currentPos, displacement);
+            
+            if(DEBUG_MODE) {
+                console.log(`[ProjectileRaycastGenerator] Iteration ${iteration} - From: ${VectorToString(currentPos)} To: ${VectorToString(nextPos)}, TotalDist: ${totalDistance.toFixed(2)}`);
+            }
+
+            const rayResult = player ? await this.castWithPlayer(player, currentPos, nextPos, debug) : await RaycastManager.cast(currentPos, nextPos, debug);
+            
+            if(DEBUG_MODE) {
+                console.log(`[ProjectileRaycastGenerator] Iteration ${iteration} - Result: ${rayResult.hit ? "HIT" : "MISS"} at ${VectorToString(rayResult.point ?? nextPos)}`);
+            }
+            
+            if (rayResult.hit && rayResult.point) {
+                hit = true;
+                
+                // If hit detected callback is provided, call it to get validated position
+                let finalPosition = rayResult.point;
+                if (onHitDetected) {
+                    if(DEBUG_MODE) {
+                        console.log(`[ProjectileRaycastGenerator] Hit detected at ${VectorToString(rayResult.point)}, calling onHitDetected callback`);
+                    }
+                    finalPosition = await onHitDetected(rayResult.point, rayResult.normal);
+                    if(DEBUG_MODE) {
+                        console.log(`[ProjectileRaycastGenerator] Validated final position: ${VectorToString(finalPosition)}`);
+                    }
+                }
+                
+                // Yield interpolated points from segment start to hit point (excluding both endpoints)
+                if (interpolationSteps > 0) {
+                    // Calculate the time it takes to reach the hit point
+                    const hitVector = Math2.Vec3.FromVector(rayResult.point).Subtract(Math2.Vec3.FromVector(segmentStart)).ToVector();
+                    const hitDistance = VectorLength(hitVector);
+                    const totalSegmentDistance = VectorLength(displacement);
+                    const hitTimeFraction = totalSegmentDistance > 0 ? hitDistance / totalSegmentDistance : 0;
+                    const hitTimeStep = hitTimeFraction * timeStep;
+                    
+                    for (let i = 1; i <= interpolationSteps; i++) {
+                        const t = i / (interpolationSteps + 1);
+                        const subTimeStep = t * hitTimeStep;
+                        
+                        // Use projectile motion: position = start + velocity*time + 0.5*gravity*timeÂ²
+                        const velocityDisplacement = mod.Multiply(velocityAtSegmentStart, subTimeStep);
+                        const gravityDisplacement = mod.Multiply(mod.DownVector(), 0.5 * gravity * subTimeStep * subTimeStep);
+                        const interpPos = mod.Add(segmentStart, mod.Add(velocityDisplacement, gravityDisplacement));
+                        
+                        yield {
+                            position: interpPos,
+                            rayId: rayResult.ID,
+                            hit: false,
+                            isLast: false
+                        };
+                    }
+                }
+                
+                // If validation callback was used and position differs from hit point, yield interpolated points to validated position
+                if (onHitDetected && finalPosition !== rayResult.point) {
+                    const adjustmentDistance = VectorLength(
+                        Math2.Vec3.FromVector(finalPosition).Subtract(Math2.Vec3.FromVector(rayResult.point)).ToVector()
+                    );
+                    
+                    if (adjustmentDistance > 0.1 && interpolationSteps > 0) {
+                        if(DEBUG_MODE) {
+                            console.log(`[ProjectileRaycastGenerator] Generating ${interpolationSteps} adjustment points from hit to validated position (distance: ${adjustmentDistance.toFixed(2)})`);
+                        }
+                        
+                        // Generate interpolated points from hit point to validated position
+                        for (let i = 1; i <= interpolationSteps; i++) {
+                            const t = i / (interpolationSteps + 1);
+                            const adjustmentVector = Math2.Vec3.FromVector(finalPosition).Subtract(Math2.Vec3.FromVector(rayResult.point)).ToVector();
+                            const interpPos = mod.Add(rayResult.point, mod.Multiply(adjustmentVector, t));
+                            
+                            yield {
+                                position: interpPos,
+                                rayId: rayResult.ID,
+                                hit: false,
+                                isLast: false
+                            };
+                        }
+                    }
+                }
+                
+                // Yield the final validated position as the last point
+                yield {
+                    position: finalPosition,
+                    rayId: rayResult.ID,
+                    hit: true,
+                    hitNormal: rayResult.normal,
+                    isLast: true
+                };
+                break;
+            }
+            
+            // No hit - yield interpolated points between segment start and next position (excluding start, including end)
+            if (interpolationSteps > 0) {
+                // Generate interpolationSteps points evenly distributed, not including start but including end
+                for (let i = 1; i <= interpolationSteps + 1; i++) {
+                    const t = i / (interpolationSteps + 1);
+                    const subTimeStep = t * timeStep;
+                    
+                    // Use projectile motion: position = start + velocity*time + 0.5*gravity*timeÂ²
+                    const velocityDisplacement = mod.Multiply(velocityAtSegmentStart, subTimeStep);
+                    const gravityDisplacement = mod.Multiply(mod.DownVector(), 0.5 * gravity * subTimeStep * subTimeStep);
+                    const interpPos = mod.Add(segmentStart, mod.Add(velocityDisplacement, gravityDisplacement));
+                    
+                    yield {
+                        position: interpPos,
+                        rayId: rayResult.ID,
+                        hit: false,
+                        isLast: false
+                    };
+                }
+            } else {
+                // No interpolation - just yield the endpoint
+                yield {
+                    position: nextPos,
+                    rayId: rayResult.ID,
+                    hit: false,
+                    isLast: false
+                };
+            }
+            
+            // Update position and distance for next iteration
+            currentPos = nextPos;
+            totalDistance += VectorLength(displacement);
+        }
+        
+        // If we didn't hit anything but reached distance limit, mark the last point
+        if (!hit) {
+            if(DEBUG_MODE) {
+                console.log(`[ProjectileRaycastGenerator] Complete - Reached distance limit at ${totalDistance.toFixed(2)}`);
+            }
+        }
+        
+        if(DEBUG_MODE) {
+            console.log(`[ProjectileRaycastGenerator] Complete - Total iterations: ${iteration}, Final hit: ${hit}, Total distance: ${totalDistance.toFixed(2)}`);
+        }
+    }
+
+    /**
      * Generate evenly spaced radial directions in a horizontal plane
      * 
      * @param numDirections Number of directions to generate around a circle
@@ -1398,6 +1602,7 @@ class RaycastManager {
     static async ValidateSpawnLocationWithRadialCheck(
         centerPosition: mod.Vector,
         checkRadius: number,
+        checkRadiusOffset: number,
         numDirections: number,
         downwardDistance: number,
         maxIterations: number = SPAWN_VALIDATION_MAX_ITERATIONS,
@@ -1417,15 +1622,16 @@ class RaycastManager {
             
             // Cast rays in all directions
             for (const direction of directions) {
+                const rayStart = mod.Add(currentPosition, mod.Multiply(direction, checkRadiusOffset));
                 const rayEnd = mod.Add(currentPosition, mod.Multiply(direction, checkRadius));
-                const rayResult = await RaycastManager.cast(currentPosition, rayEnd, debug);
+                const rayResult = await RaycastManager.cast(rayStart, rayEnd, debug);
 
                 if (rayResult.hit && rayResult.point) {
                     foundCollision = true;
                     collisionCount++;
                     
                     // Calculate how much the ray penetrated into the collision radius
-                    const hitVector = Math2.Vec3.FromVector(rayResult.point).Subtract(Math2.Vec3.FromVector(currentPosition)).ToVector(); //mod.Subtract(rayResult.point, currentPosition);
+                    const hitVector = Math2.Vec3.FromVector(rayResult.point).Subtract(Math2.Vec3.FromVector(rayStart)).ToVector(); //mod.Subtract(rayResult.point, currentPosition);
                     const hitDistance = VectorLength(hitVector);
                     const penetrationDepth = checkRadius - hitDistance;
                     
@@ -1541,6 +1747,14 @@ export function OnRayCastMissed(eventPlayer: mod.Player) {
  * Usage:
  *   await animationManager.AnimateAlongPath(object, points, { speed: 10 });
  */
+
+interface ProjectilePoint {
+    position: mod.Vector;
+    rayId: number;
+    hit: boolean;
+    hitNormal?: mod.Vector;
+    isLast: boolean;
+}
 
 interface AnimationOptions {
     speed?: number;              // Units per second (alternative to duration)
@@ -1775,6 +1989,269 @@ class AnimationManager {
     }
 
     /**
+     * Animate an object along a path that is generated concurrently by an AsyncGenerator
+     * This allows animation to start before the full path is calculated, reducing perceived latency
+     * 
+     * @param object The object to animate
+     * @param generator AsyncGenerator that yields ProjectilePoint objects
+     * @param minBufferSize Minimum number of points to stay ahead of animation (safety buffer)
+     * @param options Animation options
+     * @returns Promise that resolves when animation completes
+     */
+    async AnimateAlongGeneratedPath(
+        object: mod.Object,
+        generator: AsyncGenerator<ProjectilePoint>,
+        minBufferSize: number,
+        options: AnimationOptions = {}
+    ): Promise<void> {
+        const objectId = mod.GetObjId(object);
+        
+        // Register active animation
+        const animation: ActiveAnimation = {
+            object,
+            objectId,
+            cancelled: false,
+            paused: false,
+            progress: 0
+        };
+        this.activeAnimations.set(objectId, animation);
+
+        const pointBuffer: ProjectilePoint[] = [];
+        let generatorComplete = false;
+        let currentPosition: mod.Vector;
+        let animationStarted = false;
+        let bufferStarvationCount = 0;
+
+        try {
+            if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
+
+            // Phase 1: Fill initial buffer (minBufferSize + 2 points)
+            const initialBufferSize = minBufferSize + 2;
+            for (let i = 0; i < initialBufferSize; i++) {
+                const result = await generator.next();
+                if (result.done) {
+                    generatorComplete = true;
+                    break;
+                }
+                pointBuffer.push(result.value);
+                
+                if(DEBUG_MODE) {
+                    console.log(`[AnimateAlongGeneratedPath] Buffered point ${i + 1}/${initialBufferSize}: ${VectorToString(result.value.position)}`);
+                }
+            }
+
+            if (pointBuffer.length < 2) {
+                console.error("AnimateAlongGeneratedPath: Not enough points generated for animation");
+                return;
+            }
+
+            // Set starting position
+            currentPosition = pointBuffer[0].position;
+            
+            if(DEBUG_MODE) {
+                console.log(`[AnimateAlongGeneratedPath] Initial buffer filled with ${pointBuffer.length} points, starting animation`);
+            }
+
+            // Phase 2: Concurrent animation and generation
+            animationStarted = true;
+            let segmentIndex = 0;
+            
+            while (pointBuffer.length > 1 || !generatorComplete) {
+                if (animation.cancelled) break;
+
+                // Check if we need to wait for more points
+                if (pointBuffer.length <= minBufferSize && !generatorComplete) {
+                    if(DEBUG_MODE) {
+                        console.log(`[AnimateAlongGeneratedPath] Buffer low (${pointBuffer.length} points), waiting for generator...`);
+                    }
+                    bufferStarvationCount++;
+                    
+                    // Try to fill buffer back up
+                    const result = await generator.next();
+                    if (result.done) {
+                        generatorComplete = true;
+                        if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+                    } else {
+                        pointBuffer.push(result.value);
+                        if(DEBUG_MODE) {
+                            console.log(`[AnimateAlongGeneratedPath] Added point to buffer: ${VectorToString(result.value.position)}`);
+                        }
+                    }
+                    continue;
+                }
+
+                // If generator is still running and buffer has room, try to add more points
+                if (!generatorComplete && pointBuffer.length < initialBufferSize * 2) {
+                    const result = await generator.next();
+                    if (result.done) {
+                        generatorComplete = true;
+                        if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+                    } else {
+                        pointBuffer.push(result.value);
+                    }
+                }
+
+                // Check if we should stop consuming points (hit detected or at end)
+                const shouldStopConsuming = generatorComplete && pointBuffer.length <= minBufferSize + 2;
+                
+                if (shouldStopConsuming) {
+                    if(DEBUG_MODE) {
+                        console.log(`[AnimateAlongGeneratedPath] Stopping animation consumption, ${pointBuffer.length} points remaining in buffer`);
+                    }
+                    break;
+                }
+
+                // Animate to next point
+                if (pointBuffer.length > 1) {
+                    const startPoint = pointBuffer.shift()!; // Remove first point
+                    const endPoint = pointBuffer[0]; // Peek at next point (don't remove yet)
+                    
+                    const segmentDistance = VectorLength(
+                        Math2.Vec3.FromVector(endPoint.position)
+                            .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                            .ToVector()
+                    );
+                    
+                    const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
+
+                    if(DEBUG_MODE) {
+                        console.log(`[AnimateAlongGeneratedPath] Animating segment ${segmentIndex}: ${VectorToString(startPoint.position)} -> ${VectorToString(endPoint.position)} (${segmentDistance.toFixed(2)} units, ${segmentDuration.toFixed(3)}s, buffer: ${pointBuffer.length})`);
+                    }
+
+                    // Calculate rotation if needed
+                    let rotation = ZERO_VEC;
+                    if (options.rotateToDirection) {
+                        rotation = this.CalculateRotationFromDirection(
+                            Math2.Vec3.FromVector(endPoint.position)
+                                .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                                .ToVector()
+                        );
+                    }
+
+                    // Animate this segment
+                    await this.AnimateBetweenPoints(
+                        object,
+                        currentPosition,
+                        endPoint.position,
+                        segmentDuration,
+                        { rotation }
+                    );
+
+                    currentPosition = endPoint.position;
+                    segmentIndex++;
+
+                    // Call progress callback
+                    if (options.onProgress) {
+                        options.onProgress(segmentIndex / (segmentIndex + pointBuffer.length), currentPosition);
+                    }
+
+                    if (options.onSegmentComplete) {
+                        options.onSegmentComplete(segmentIndex);
+                    }
+                }
+            }
+
+            // Phase 3: Animate through remaining buffered points
+            if (pointBuffer.length > 0) {
+                if(DEBUG_MODE) {
+                    console.log(`[AnimateAlongGeneratedPath] Animating through ${pointBuffer.length} remaining buffered points`);
+                }
+                
+                // Animate through all remaining points in buffer
+                while (pointBuffer.length > 0) {
+                    const startPoint = pointBuffer.shift()!;
+                    
+                    // If there's a next point, animate to it; otherwise we're at the last point
+                    if (pointBuffer.length > 0) {
+                        const endPoint = pointBuffer[0];
+                        
+                        const segmentDistance = VectorLength(
+                            Math2.Vec3.FromVector(endPoint.position)
+                                .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                                .ToVector()
+                        );
+                        
+                        const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
+                        
+                        let rotation = ZERO_VEC;
+                        if (options.rotateToDirection) {
+                            rotation = this.CalculateRotationFromDirection(
+                                Math2.Vec3.FromVector(endPoint.position)
+                                    .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                                    .ToVector()
+                            );
+                        }
+                        
+                        await this.AnimateBetweenPoints(
+                            object,
+                            currentPosition,
+                            endPoint.position,
+                            segmentDuration,
+                            { rotation }
+                        );
+                        
+                        currentPosition = endPoint.position;
+                        segmentIndex++;
+                        
+                        if (options.onProgress) {
+                            options.onProgress(1.0, currentPosition);
+                        }
+                    } else {
+                        // This was the last point - just set position directly if not already there
+                        if(DEBUG_MODE) {
+                            console.log(`[AnimateAlongGeneratedPath] Reached final point: ${VectorToString(startPoint.position)}`);
+                        }
+                        const finalDistance = VectorLength(
+                            Math2.Vec3.FromVector(startPoint.position)
+                                .Subtract(Math2.Vec3.FromVector(currentPosition))
+                                .ToVector()
+                        );
+                        
+                        if (finalDistance > 0.1) {
+                            const finalDuration = options.speed ? finalDistance / options.speed : 0.1;
+                            
+                            let finalRotation = ZERO_VEC;
+                            if (options.rotateToDirection) {
+                                finalRotation = this.CalculateRotationFromDirection(
+                                    Math2.Vec3.FromVector(startPoint.position)
+                                        .Subtract(Math2.Vec3.FromVector(currentPosition))
+                                        .ToVector()
+                                );
+                            }
+                            
+                            await this.AnimateBetweenPoints(
+                                object,
+                                currentPosition,
+                                startPoint.position,
+                                finalDuration,
+                                { rotation: finalRotation }
+                            );
+                            
+                            currentPosition = startPoint.position;
+                        }
+                    }
+                }
+            }
+
+            if(DEBUG_MODE) {
+                console.log(`[AnimateAlongGeneratedPath] Animation complete. Segments: ${segmentIndex}, Buffer starvation events: ${bufferStarvationCount}`);
+                if (bufferStarvationCount > 0) {
+                    console.log(`[AnimateAlongGeneratedPath] WARNING: Buffer was starved ${bufferStarvationCount} times. Consider increasing minBufferSize or reducing animation speed.`);
+                }
+            }
+
+            if (options.onComplete && !animation.cancelled) {
+                options.onComplete();
+            }
+        } catch (error) {
+            console.error(`[AnimateAlongGeneratedPath] Error during animation:`, error);
+            throw error;
+        } finally {
+            this.activeAnimations.delete(objectId);
+        }
+    }
+
+    /**
      * Stop an active animation
      * @param object The object whose animation should be stopped
      */
@@ -1853,6 +2330,7 @@ class AnimationManager {
 
 // Global animation manager instance
 const animationManager = new AnimationManager();
+
 
 //==============================================================================================
 // JSPLAYER CLASS
@@ -2196,69 +2674,6 @@ class Flag {
             throwDirectionAndSpeed = mod.Multiply(direction, FLAG_THROW_SPEED);
         }
         
-        // Clear the flag carrier at this point since we shouldn't need it
-        let startPosition: mod.Vector;
-        let adjustedFlagPathPoints: mod.Vector[];
-        if(useProjectileThrow)
-        {
-            // Use fancy flag toss spawn location discovery and animation
-            if(DEBUG_MODE) console.log("Before flagPath");
-            // Calculate projectile path for flag arc
-            let flagPath = await RaycastManager.ProjectileRaycast(
-                mod.Add(
-                    mod.Add(position, mod.CreateVector(0.0, SOLDIER_HEIGHT, 0.0)),     // Start above soldier head to avoid self collisions
-                    mod.Multiply(facingDir, 0.75)        // Start projectile arc away from player to avoid intersections
-                ),
-                throwDirectionAndSpeed,                 // Velocity
-                FLAG_DROP_RAYCAST_DISTANCE,             // Max drop distance
-                5,                                      // Sample rate
-                this.carrierPlayer,                     // Origin player
-                9.8,                                    // gravity
-                DEBUG_MODE, 5);                         // Use DEBUG_MODE for visualization
-            if(DEBUG_MODE) console.log("After flagPath");
-            
-            // Move validation location slightly away from the hit location in direction of the hit normal
-            let groundLocationAdjusted: mod.Vector = mod.Add(flagPath.arcPoints[flagPath.arcPoints.length - 1] ?? position, mod.Multiply(flagPath.hitNormal ?? ZERO_VEC, 0.5));
-            
-            // Adjust flag spawn location to make sure it's not clipping into a wall
-            const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck(
-                groundLocationAdjusted,             // Hit location, vertically adjusted upwards to avoid clipping into the ground plane
-                FLAG_COLLISION_RADIUS,              // Collision radius of the flag that is safe to spawn it in
-                SPAWN_VALIDATION_DIRECTIONS,        // How many direction rays to cast around the object
-                FLAG_DROP_RAYCAST_DISTANCE,         // How far down to look for a valid ground location
-                SPAWN_VALIDATION_MAX_ITERATIONS,    // Adjustment iterations, in case we don't find a valid location
-                DEBUG_MODE                          // Debug
-            );
-
-            let endRayCastID: number = RaycastManager.GetID();
-            if(DEBUG_MODE){
-                console.log(`Flag drop took ${endRayCastID - startRaycastID} raycasts to complete`);
-                if (!validatedFlagSpawn.isValid) {
-                    console.log(`Warning: FindValidGroundPosition could not find valid location`);
-                }
-            }
-
-            // Use the validated position if valid, otherwise use the adjusted ground location from projectile path
-            startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;
-            adjustedFlagPathPoints = flagPath.arcPoints.slice(0, -2).concat([startPosition]);
-
-        } else {
-            // Use fallback 2-ray ground discovery
-            // let offsetHeight = mod.Add(position, mod.CreateVector(0.0, SOLDIER_HALF_HEIGHT, 0.0));
-            // let groundHit = await RaycastManager.FindValidGroundPosition(
-            //     offsetHeight, 
-            //     direction, 
-            //     2.5, 
-            //     1, 
-            //     FLAG_TERRAIN_RAYCAST_SUPPORT ? FLAG_DROP_RAYCAST_DISTANCE : -SOLDIER_HALF_HEIGHT, 
-            //     true, 5
-            // );
-            startPosition = position;
-            adjustedFlagPathPoints = [startPosition];
-        }
-
-        if(DEBUG_MODE) console.log("const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck");
-
         // Remove old flag if it exists - it shouldn't but lets make sure
         try{
             if (this.flagProp)
@@ -2267,49 +2682,107 @@ class Flag {
             console.log("Couldn't unspawn flag prop");
         }
 
-        if(DEBUG_MODE) console.log("const startPosition = validatedFlagSpawn.isValid ? validatedFlagSpawn.position : position;");
-
-
         // Flag rotation based on facing direction
         // TODO: replace with facing angle and hit normal
         let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
         
-        // Set final position after animation
-        this.currentPosition = startPosition;
+        // Initially spawn flag at carrier position - it will be moved by animation
+        let initialPosition = position;
+        this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
 
-        // Finally spawn the flag
-        this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);
-
-        if(DEBUG_MODE) console.log("this.flagProp = mod.SpawnObject(FLAG_PROP, this.currentPosition, flagRotation);");
-
+        if(DEBUG_MODE) console.log("this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);");
         
         // If we're using an MCOM, disable it to hide the objective marker
         let mcom: mod.MCOM = this.flagProp as mod.MCOM;
         if(mcom)
             mod.EnableGameModeObjective(mcom, false);
 
-        if(DEBUG_MODE) console.log("tmod.EnableGameModeObjective(mcom, false);");
-
         // Play yeet SFX
-        let yeetSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Soldier_Ragdoll_OnDeath_OneShot3D, this.currentPosition, ZERO_VEC);
-        // mod.EnableSFX(yeetSfx, true);
+        let yeetSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Soldier_Ragdoll_OnDeath_OneShot3D, initialPosition, ZERO_VEC);
         mod.PlaySound(yeetSfx, 1);
 
         // Clear the carrierPlayer when the flag has left the player
         this.carrierPlayer = null;
 
-        // Animate prop into position
-        if(this.flagProp && useProjectileThrow){
-            let numInterPoints = 3;
-            let interpolatedFlagPathPoints = InterpolatePoints(adjustedFlagPathPoints, numInterPoints);
-            await animationManager.AnimateAlongPath(this.flagProp, interpolatedFlagPathPoints, {
-                speed: 400,
-                onProgress: (progress: number, position: mod.Vector) => mod.MoveVFX(this.flagHomeVFX, position, ZERO_VEC) 
-            }).catch((reason: any) => {
-                console.log(`Animation path failed with reason ${reason}`);
+        // Animate flag with concurrent raycast generation
+        if(this.flagProp && useProjectileThrow) {
+            if(DEBUG_MODE) console.log("Starting concurrent flag animation");
+            
+            // Create the generator for projectile path with validation callback
+            const pathGenerator = RaycastManager.ProjectileRaycastGenerator(
+                mod.Add(
+                    mod.Add(position, mod.CreateVector(0.0, SOLDIER_HEIGHT, 0.0)),     // Start above soldier head to avoid self collisions
+                    mod.Multiply(facingDir, 0.75)        // Start projectile arc away from player to avoid intersections
+                ),
+                throwDirectionAndSpeed,                 // Velocity
+                FLAG_DROP_RAYCAST_DISTANCE,             // Max drop distance
+                3,                                      // Sample rate
+                this.carrierPlayer,                     // Origin player (now null but was set earlier)
+                9.8,                                    // gravity
+                DEBUG_MODE,                             // Debug visualization
+                5,                                      // Interpolation steps
+                async (hitPoint: mod.Vector, hitNormal?: mod.Vector) => {
+                    // This callback is called when the projectile hits something
+                    if(DEBUG_MODE) {
+                        console.log(`[DropFlag] Hit detected at ${VectorToString(hitPoint)}, validating position`);
+                    }
+                    
+                    // Move validation location slightly away from the hit location in direction of the hit normal
+                    let groundLocationAdjusted: mod.Vector = mod.Add(
+                        hitPoint, 
+                        mod.Multiply(hitNormal ?? ZERO_VEC, SPAWN_VALIDATION_HEIGHT_OFFSET)
+                    );
+                    
+                    // Adjust flag spawn location to make sure it's not clipping into a wall
+                    const validatedFlagSpawn = await RaycastManager.ValidateSpawnLocationWithRadialCheck(
+                        groundLocationAdjusted,             // Hit location, vertically adjusted upwards to avoid clipping into the ground plane
+                        FLAG_COLLISION_RADIUS,              // Collision radius of the flag that is safe to spawn it in
+                        FLAG_COLLISION_RADIUS_OFFSET,       // Offset to start rays from
+                        SPAWN_VALIDATION_DIRECTIONS,        // How many direction rays to cast around the object
+                        FLAG_DROP_RAYCAST_DISTANCE,         // How far down to look for a valid ground location
+                        SPAWN_VALIDATION_MAX_ITERATIONS,    // Adjustment iterations, in case we don't find a valid location
+                        DEBUG_MODE                          // Debug
+                    );
+
+                    let endRayCastID: number = RaycastManager.GetID();
+                    if(DEBUG_MODE){
+                        console.log(`Flag drop took ${endRayCastID - startRaycastID} raycasts to complete`);
+                        if (!validatedFlagSpawn.isValid) {
+                            console.log(`Warning: ValidateSpawnLocationWithRadialCheck could not find valid location`);
+                        }
+                    }
+
+                    // Use the validated position if valid, otherwise use the hit point
+                    return validatedFlagSpawn.isValid ? validatedFlagSpawn.position : hitPoint;
+                }
+            );
+
+            // Animate concurrently with path generation
+            await animationManager.AnimateAlongGeneratedPath(
+                this.flagProp,
+                pathGenerator,
+                6,  // minBufferSize - stay 6 points ahead of animation to avoid catching up during validation
+                {
+                    speed: 800,
+                    onProgress: (progress: number, position: mod.Vector) => {
+                        mod.MoveVFX(this.flagHomeVFX, position, ZERO_VEC);
+                    }
+                }
+            ).catch((reason: any) => {
+                console.log(`Concurrent animation path failed with reason ${reason}`);
             });
+            
+            // Update current position to final animated position
+            this.currentPosition = mod.GetObjectPosition(this.flagProp);
+            
+            if(DEBUG_MODE) console.log("Concurrent flag animation complete");
+        } else if(!useProjectileThrow) {
+            // Fallback: just set position directly
+            this.currentPosition = position;
+            if(this.flagProp) {
+                mod.SetObjectTransform(this.flagProp, mod.CreateTransform(this.currentPosition, flagRotation));
+            }
         }
-        if(DEBUG_MODE) console.log("await animationManager.AnimateAlongPath(this.flagProp, interpolatedFlagPathPoints");
 
         // Update the position of the flag interaction point
         this.UpdateFlagInteractionPoint();
@@ -2693,6 +3166,7 @@ function GetOpposingTeamsForFlag(flagData: Flag): number[] {
     // Otherwise return all teams except the flag owner
     return GetOpposingTeams(flagData.owningTeamId);
 }
+
 
 //==============================================================================================
 // CAPTURE ZONE CLASS

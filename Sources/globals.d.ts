@@ -81,6 +81,7 @@ declare const FLAG_DROP_DISTANCE: number;
 declare const FLAG_INTERACTION_HEIGHT_OFFSET: number;
 declare const FLAG_SPAWN_HEIGHT_OFFSET: number;
 declare const FLAG_COLLISION_RADIUS: number;
+declare const FLAG_COLLISION_RADIUS_OFFSET: number;
 declare const FLAG_DROP_RAYCAST_DISTANCE: number;
 declare const FLAG_DROP_RING_RADIUS: number;
 declare const FLAG_ENABLE_ARC_THROW: boolean;
@@ -178,6 +179,14 @@ interface ProjectileRaycastResult {
     hitNormal?: mod.Vector;
 }
 
+interface ProjectilePoint {
+    position: mod.Vector;
+    rayId: number;
+    hit: boolean;
+    hitNormal?: mod.Vector;
+    isLast: boolean;
+}
+
 interface ValidatedSpawnResult {
     position: mod.Vector;
     isValid: boolean;
@@ -200,6 +209,7 @@ declare class rgba {
 
 declare class AnimationManager {
     AnimateAlongPath(object: mod.Object, points: mod.Vector[], options?: any): Promise<void>;
+    AnimateAlongGeneratedPath(object: mod.Object, generator: AsyncGenerator<ProjectilePoint>, minBufferSize: number, options?: any): Promise<void>;
     AnimateToPosition(object: mod.Object, targetPos: mod.Vector, duration: number, options?: any): Promise<void>;
     StopAnimation(object: mod.Object): void;
     IsAnimating(object: mod.Object): boolean;
@@ -313,8 +323,9 @@ declare class RaycastManager {
     getQueueLength(): number;
     static VisualizePoints(points: mod.Vector[], color?: mod.Vector, debugDuration?: number, rayIds?: number[], iconImage?: mod.WorldIconImages): Promise<void>;
     static ProjectileRaycast(startPosition: mod.Vector, velocity: mod.Vector, distance: number, sampleRate: number, player?:mod.Player | null, gravity?: number, debug?: boolean, debugDuration?: number): Promise<ProjectileRaycastResult>;
+    static ProjectileRaycastGenerator(startPosition: mod.Vector, velocity: mod.Vector, distance: number, sampleRate: number, player?: mod.Player | null, gravity?: number, debug?: boolean, interpolationSteps?: number, onHitDetected?: (hitPoint: mod.Vector, hitNormal?: mod.Vector) => Promise<mod.Vector>): AsyncGenerator<ProjectilePoint>;
     static FindValidGroundPosition(startPosition: mod.Vector, direction: mod.Vector, forwardDistance: number, collisionRadius: number, downwardDistance: number, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
-    static ValidateSpawnLocationWithRadialCheck(centerPosition: mod.Vector, checkRadius: number, numDirections: number, downwardDistance: number, maxIterations?: number, debug?: boolean): Promise<ValidatedSpawnResult>;
+    static ValidateSpawnLocationWithRadialCheck(centerPosition: mod.Vector, checkRadius: number, checkRadiusOffset: number, numDirections: number, downwardDistance: number, maxIterations?: number, debug?: boolean): Promise<ValidatedSpawnResult>;
     static GetID(): number;
     static GetNextID(): number;
 }
