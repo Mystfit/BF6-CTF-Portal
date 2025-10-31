@@ -16,68 +16,37 @@ function BuildFlagStatus(flag: Flag): mod.Message {
 
 /**
  * TeamColumnWidget - Displays a single team's score and flag status
- * Encapsulates the column background, score text, and flag status text
+ * Encapsulates the score ticker and flag icon
  */
 class TeamColumnWidget {
     readonly teamId: number;
     readonly team: mod.Team;
     readonly isPlayerTeam: boolean;
-    readonly columnWidget: mod.UIWidget;
-    readonly columnWidgetOutline: mod.UIWidget;
-    readonly scoreWidget: mod.UIWidget;
+    readonly scoreTicker: ScoreTicker;
     readonly flagIcon: FlagIcon;
     readonly verticalPadding:number = 8;
     
-    constructor(team: mod.Team, position: mod.Vector, size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
+    constructor(team: mod.Team, position: number[], size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
         this.team = team;
         this.teamId = mod.GetObjId(team);
         this.isPlayerTeam = isPlayerTeam;
         
-        
-        // Create column container with team color background
-        this.columnWidget = modlib.ParseUI({
-            type: "Container",
-            parent: parent,
+        // Create score ticker with bracket indicators
+        this.scoreTicker = new ScoreTicker({
+            team: team,
             position: position,
-            size: [size[0], size[1]],
-            anchor: mod.UIAnchor.TopCenter,
-            bgFill:  mod.UIBgFill.Blur,
-            bgColor: GetTeamColorById(this.teamId),
-            bgAlpha: 0.75
-        })!;
-
-        // Create column container with team color background
-        this.columnWidgetOutline = modlib.ParseUI({
-            type: "Container",
+            size: size,
             parent: parent,
-            position: position,
-            size: [size[0], size[1]],
-            anchor: mod.UIAnchor.TopCenter,
-            bgFill:  mod.UIBgFill.OutlineThin,
-            bgColor: GetTeamColorById(this.teamId),
-            bgAlpha: 0
-        })!;
-        
-        // Create score text (top row)
-        this.scoreWidget = modlib.ParseUI({
-            type: "Text",
-            parent: this.columnWidget,
-            position: [0, 0],
-            size: [size[0], 25],
-            anchor: mod.UIAnchor.Center,
-            textAnchor: mod.UIAnchor.Center,
             textSize: 28,
-            textLabel: "",
-            textColor: VectorClampToRange(mod.Add(GetTeamColorById(this.teamId), mod.CreateVector(0.5, 0.5, 0.5)), 0, 1),
-            bgAlpha: 0,
-        })!;
+            bracketTopBottomLength: 10,
+            bracketThickness: 3
+        });
 
-        let teamColorAdditive = isPlayerTeam ? 0.5 : -0.2;
-
+        // Create flag icon below the score ticker
         let flagIconConfig: FlagIconParams = {
             name: `FlagHomeIcon_Team${this.teamId}`,
-            parent: this.columnWidget,
-            position: mod.CreateVector(0, size[1] + this.verticalPadding, 0),
+            parent: parent,
+            position: mod.CreateVector(position[0], position[1] + size[1] + this.verticalPadding, 0),
             size: mod.CreateVector(35, 35, 0),
             anchor: mod.UIAnchor.TopCenter,
             fillColor:  GetTeamColorById(this.teamId),
@@ -94,21 +63,15 @@ class TeamColumnWidget {
     
     /**
      * Update the team's score and flag status display
-     * @param score Current team score
-     * @param flagStatus Flag status message (from GetFlagStatusText)
      */
     update(): void {
-        // mod.SetUITextLabel(this.scoreWidget, mod.Message(mod.stringkeys.scoreboard_score_value, score));
-        // mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
-
-        const score = teamScores.get(this.teamId) ?? 0;
+        // Update score ticker
+        this.scoreTicker.updateScore();
 
         // Get flag status for this team
         const flag = flags.get(this.teamId);
         if(flag){
             const flagStatus = BuildFlagStatus(flag);
-            mod.SetUITextLabel(this.scoreWidget, mod.Message(score));
-            // mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
             
             // TODO: Ugly hack. This needs to be event triggered, not changed in update
             if(flag.isAtHome){
@@ -123,6 +86,13 @@ class TeamColumnWidget {
                 this.flagIcon.SetOutlineAlpha(0.75);
             }
         }
+    }
+    
+    /**
+     * Set whether this team is currently in the lead
+     */
+    setLeading(isLeading: boolean): void {
+        this.scoreTicker.setLeading(isLeading);
     }
 }
 
@@ -220,7 +190,7 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
         
         for (const [teamId, team] of teams.entries()) {
             let isPlayerTeam: boolean = mod.Equals(team, mod.GetTeam(this.player));
-            const columnPos = mod.CreateVector(currentX, 0, 0);
+            const columnPos = [currentX, 0];
             const column = new TeamColumnWidget(team, columnPos, [50, 30], this.teamRow, isPlayerTeam);
             this.teamColumns.set(teamId, column);
             currentX += columnWidth + this.COLUMN_SPACING;
@@ -250,9 +220,26 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
         mod.SetUITextColor(this.teamIndicatorText, mod.CreateVector(1,1,1));
         mod.SetUIWidgetBgColor(this.teamIndicatorContainer, teamColor);
         
+        // Determine which team is leading (if any)
+        let maxScore = -1;
+        let leadingTeams: number[] = [];
+        
+        for (const [teamId, score] of teamScores.entries()) {
+            if (score > maxScore) {
+                maxScore = score;
+                leadingTeams = [teamId];
+            } else if (score === maxScore && score > 0) {
+                leadingTeams.push(teamId);
+            }
+        }
+        
         // Update each team column
         for (const [teamId, column] of this.teamColumns.entries()) {
             column.update();
+            
+            // Show brackets only if this team is the sole leader (no ties)
+            const isLeading = leadingTeams.length === 1 && leadingTeams[0] === teamId;
+            column.setLeading(isLeading);
         }
     }
     

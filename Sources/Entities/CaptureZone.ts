@@ -8,6 +8,7 @@ class CaptureZone {
     readonly areaTrigger: mod.AreaTrigger | undefined;
     readonly captureZoneID?: number;
     readonly captureZoneSpatialObjId?: number;
+    readonly position: mod.Vector;
     readonly iconPosition: mod.Vector;
     readonly baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
 
@@ -17,6 +18,7 @@ class CaptureZone {
         this.captureZoneID = captureZoneID ? captureZoneID : GetDefaultFlagCaptureZoneAreaTriggerIdForTeam(team);
         this.captureZoneSpatialObjId = captureZoneSpatialObjId ? captureZoneSpatialObjId : GetDefaultFlagCaptureZoneSpatialIdForTeam(this.team);
         this.iconPosition = ZERO_VEC;
+        this.position = ZERO_VEC;
 
         this.areaTrigger = this.captureZoneID ? mod.GetAreaTrigger(this.captureZoneID) : undefined;
         if(!this.areaTrigger)
@@ -26,8 +28,10 @@ class CaptureZone {
             let captureZoneSpatialObj = mod.GetSpatialObject(this.captureZoneSpatialObjId);
             if(captureZoneSpatialObj)
             {
+                this.position = mod.GetObjectPosition(captureZoneSpatialObj);
+
                 // Get our world icon position for this capture zone
-                this.iconPosition = mod.Add(mod.GetObjectPosition(captureZoneSpatialObj), mod.CreateVector(0.0, FLAG_ICON_HEIGHT_OFFSET, 0.0));
+                this.iconPosition = mod.Add(this.position, mod.CreateVector(0.0, FLAG_ICON_HEIGHT_OFFSET, 0.0));
 
                 // Create world icons for our team         
                 this.baseIcons = new Map();

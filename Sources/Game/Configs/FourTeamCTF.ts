@@ -3,6 +3,7 @@
 //==============================================================================================
 
 const FourTeamCTFConfig: GameModeConfig = {
+    HUDClass: MultiTeamScoreHUD,
     teams: [
         { 
             teamId: 1, 

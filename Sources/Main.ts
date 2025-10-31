@@ -502,6 +502,21 @@ function UpdatePlayerScoreboard(player: mod.Player){
     }
 }
 
+function GetLeadingTeamIDs(): number[]{
+    let leadingTeams: number[] = [];
+    let maxScore = 0;
+    for (const [teamId, score] of teamScores.entries()) {
+        if (score > maxScore) {
+            maxScore = score;
+            leadingTeams = [teamId];
+        } else if (score === maxScore && score > 0) {
+            leadingTeams.push(teamId);
+        }
+    }
+
+    return leadingTeams;
+}
+
 function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam: mod.Team): void {
     // Set player score using JSPlayer
     let jsPlayer = JSPlayer.get(scoringPlayer);

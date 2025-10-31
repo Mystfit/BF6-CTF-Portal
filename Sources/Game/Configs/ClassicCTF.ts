@@ -3,6 +3,7 @@
 //==============================================================================================
 
 const ClassicCTFConfig: GameModeConfig = {
+    HUDClass: ClassicCTFScoreHUD,
     teams: [
         { 
             teamId: TeamID.TEAM_1, 

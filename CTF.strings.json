@@ -74,5 +74,9 @@
     "scoreUI_flag_status_home": "(  )",
     "scoreUI_flag_status_carried": "<  >",
     "scoreUI_flag_status_dropped": "[  ]",
-    "scoreUI_team_label": "Team {}"
+    "scoreUI_team_label": "Team {}",
+    "score_timer_label": "{}:{}{}",
+    "score_timer_seperator": ":",
+    "score_timer_minutes": "{}",
+    "score_timer_seconds": "{}{}"
 }

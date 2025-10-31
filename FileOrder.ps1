@@ -32,22 +32,27 @@
         "Entities/Flag.ts",
         "Entities/CaptureZone.ts"
     )
-    
-    # Level 5: Configuration (uses Level 0-4)
+
+    # Level 5: UI classes (uses most other classes)
     5 = @(
+        "UI/BaseScoreHUD.ts",
+        "UI/TickerWidget.ts",
+        "UI/ScoreTicker.ts",
+        "UI/RoundTimer.ts"
+        "UI/FlagBar.ts",
+        "UI/MultiTeamScoreHUD.ts",
+        "UI/ClassicCTFScoreHUD.ts",
+        "UI/FlagIcon.ts"
+    )
+    
+    # Level 6: Configuration (uses Level 0-4)
+    6 = @(
         "Game/GameModeConfig.ts",
         "Game/Configs/ClassicCTF.ts",
         "Game/Configs/FourTeamCTF.ts"
     )
     
-    # Level 6: UI classes (uses most other classes)
-    6 = @(
-        "UI/BaseScoreHUD.ts",
-        "UI/ScoreTicker.ts"
-        "UI/MultiTeamScoreHUD.ts",
-        "UI/ClassicCTFScoreHUD.ts",
-        "UI/FlagIcon.ts"
-    )
+
     
     # Level 7: Game logic (uses everything)
     7 = @(

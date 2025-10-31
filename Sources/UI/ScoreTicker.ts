@@ -1,24 +1,104 @@
-class ScoreTicker implements BaseScoreboardHUD {
-    player: mod.Player;
-    playerId: number;
-    rootWidget: mod.UIWidget | undefined;
+//==============================================================================================
+// SCORE TICKER - Modular team score display widget
+//==============================================================================================
 
-    constructor(player: mod.Player) {
-        this.player = player;
-        this.playerId = mod.GetObjId(player);
+interface ScoreTickerParams {
+    team: mod.Team;
+    position: number[];
+    size: number[];
+    parent: mod.UIWidget;
+    textSize?: number;
+    bracketTopBottomLength?: number;
+    bracketThickness?: number;
+}
+
+class ScoreTicker extends TickerWidget {
+    readonly team: mod.Team;
+    readonly teamId: number;
+    
+    private currentScore: number = -1;
+    private isLeading: boolean = false;
+    
+    constructor(params: ScoreTickerParams) {
+        // Get team colors before calling super
+        const teamId = mod.GetObjId(params.team);
+        const teamColor = GetTeamColorById(teamId);
+        const textColor = VectorClampToRange(
+            mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)), 
+            0, 
+            1
+        );
+        
+        // Call parent constructor with team-specific colors
+        super({
+            position: params.position,
+            size: params.size,
+            parent: params.parent,
+            textSize: params.textSize,
+            bracketTopBottomLength: params.bracketTopBottomLength,
+            bracketThickness: params.bracketThickness,
+            bgColor: teamColor,
+            textColor: textColor,
+            bgAlpha: 0.75
+        });
+        
+        this.team = params.team;
+        this.teamId = teamId;
+        
+        this.refresh();
     }
     
-    create(): void {
-        throw new Error("Method not implemented.");
+    /**
+     * Update the score display and leading indicator
+     */
+    public updateScore(): void {
+        const score = teamScores.get(this.teamId) ?? 0;
+        
+        // Only update if score has changed
+        if (this.currentScore !== score) {
+            this.currentScore = score;
+            this.updateText(mod.Message(score));
+
+            // Show brackets only if this team is the sole leader (no ties)
+            let leadingTeams = GetLeadingTeamIDs();
+            console.log(`Leading teams: ${leadingTeams.join(", ")}`);
+            if(leadingTeams.length === 1 && leadingTeams.includes(this.teamId)){
+                this.setLeading(true);
+            } else {
+                this.setLeading(false);
+            }
+        }
     }
-    refresh(): void {
-        throw new Error("Method not implemented.");
+    
+    /**
+     * Set whether this team is currently in the lead
+     * @param isLeading True if this team is leading (not tied)
+     */
+    public setLeading(isLeading: boolean): void {
+        console.log(`Score ticker leading: ${isLeading}`);
+        
+        this.isLeading = isLeading;
+        this.showBrackets(isLeading);
     }
-    close(): void {
-        throw new Error("Method not implemented.");
+    
+    /**
+     * Get the current score
+     */
+    public getScore(): number {
+        return this.currentScore;
     }
-    isOpen(): boolean {
-        throw new Error("Method not implemented.");
+    
+    /**
+     * Get the team ID
+     */
+    public getTeamId(): number {
+        return this.teamId;
     }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+    
+    /**
+     * Refresh both score and leading status
+     */
+    public refresh(): void {
+        this.updateScore();
+    }
 }

@@ -160,6 +160,7 @@ interface FlagConfig {
 interface GameModeConfig {
     teams: TeamConfig[];
     flags: FlagConfig[];
+    HUDClass?: new (player: mod.Player) => BaseScoreboardHUD;
 }
 
 // Raycast interfaces
@@ -306,6 +307,7 @@ declare class CaptureZone {
     readonly areaTrigger: mod.AreaTrigger | undefined;
     readonly captureZoneID?: number;
     readonly captureZoneSpatialObjId?: number;
+    readonly position: mod.Vector;
     readonly iconPosition: mod.Vector;
     readonly baseIcons?: Map<number, mod.WorldIcon>;
     
@@ -415,8 +417,106 @@ declare class FlagIcon {
     GetRootWidget(): mod.UIWidget;
 }
 
-declare class ScoreTicker {
+interface TickerWidgetParams {
+    position: number[];
+    size: number[];
+    parent: mod.UIWidget;
+    textSize?: number;
+    bracketTopBottomLength?: number;
+    bracketThickness?: number;
+    bgColor?: mod.Vector;
+    textColor?: mod.Vector;
+    bgAlpha?: number;
+    showProgressBar?: boolean;
+    progressValue?: number;
+    progressDirection?: 'left' | 'right';
+}
 
+declare abstract class TickerWidget {
+    readonly parent: mod.UIWidget;
+    readonly position: number[];
+    readonly size: number[];
+    readonly textSize: number;
+    readonly bracketTopBottomLength: number;
+    readonly bracketThickness: number;
+    protected bgColor: mod.Vector;
+    protected textColor: mod.Vector;
+    protected bgAlpha: number;
+    protected columnWidget: mod.UIWidget;
+    
+    constructor(params: TickerWidgetParams);
+    protected updateText(message: mod.Message): void;
+    protected showBrackets(show: boolean): void;
+    setProgressValue(value: number): void;
+    setProgressDirection(direction: 'left' | 'right'): void;
+    getProgressValue(): number;
+    abstract refresh(): void;
+}
+
+interface ScoreTickerParams {
+    team: mod.Team;
+    position: number[];
+    size: number[];
+    parent: mod.UIWidget;
+    textSize?: number;
+    bracketTopBottomLength?: number;
+    bracketThickness?: number;
+}
+
+declare class ScoreTicker extends TickerWidget {
+    readonly team: mod.Team;
+    readonly teamId: number;
+    
+    constructor(params: ScoreTickerParams);
+    updateScore(): void;
+    setLeading(isLeading: boolean): void;
+    getScore(): number;
+    getTeamId(): number;
+    refresh(): void;
+}
+
+interface RoundTimerParams {
+    position: number[];
+    size: number[];
+    parent: mod.UIWidget;
+    textSize?: number;
+    seperatorPadding?: number;
+    bracketTopBottomLength?: number;
+    bracketThickness?: number;
+    bgColor?: mod.Vector;
+    textColor?: mod.Vector;
+    bgAlpha?: number;
+}
+
+declare class RoundTimer extends TickerWidget {
+    constructor(params: RoundTimerParams);
+    updateTime(): void;
+    refresh(): void;
+}
+
+interface FlagBarParams {
+    position: number[];
+    size: number[];
+    parent: mod.UIWidget;
+    team1: mod.Team;
+    team2: mod.Team;
+    team1CaptureZonePosition: mod.Vector;
+    team2CaptureZonePosition: mod.Vector;
+    barHeight?: number;
+    barSeperatorPadding?: number;
+    flagIconSize?: number[];
+}
+
+interface FlagBarState {
+    targetProgress: number;
+    currentProgress: number;
+    velocity: number;
+}
+
+declare class FlagBar {
+    constructor(params: FlagBarParams);
+    update(flags: Map<number, Flag>, deltaTime?: number): void;
+    destroy(): void;
 }
 
 // ============================================================================
@@ -466,6 +566,7 @@ declare let teamConfigs: Map<number, TeamConfig>;
 declare let teamScores: Map<number, number>;
 declare let flags: Map<number, Flag>;
 declare let captureZones: Map<number, CaptureZone>;
+declare let currentHUDClass: (new (player: mod.Player) => BaseScoreboardHUD) | undefined;
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -498,6 +599,7 @@ declare function InterpolatePoints(points: mod.Vector[], numPoints: number): mod
 
 declare function HandleFlagInteraction(player: mod.Player, playerTeamId: number, flag: Flag): void;
 declare function UpdatePlayerScoreboard(player: mod.Player): void;
+declare function GetLeadingTeamIDs(): number[]
 declare function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam: mod.Team): void;
 declare function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void;
 declare function EndGameByScore(winningTeamId: number): void;

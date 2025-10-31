@@ -42,7 +42,9 @@ class JSPlayer {
         
         // Create scoreboard UI for human players
         if (!mod.GetSoldierState(player, mod.SoldierStateBool.IsAISoldier)) {
-            this.scoreboardUI = new MultiTeamScoreHUD(player);
+            if (currentHUDClass) {
+                this.scoreboardUI = new currentHUDClass(player);
+            }
         }
         
         if (DEBUG_MODE) {

@@ -73,7 +73,7 @@ class FlagIcon {
         
         // Set initial visibility
         this.SetFillVisible(this.params.showFill ?? true);
-        this.SetOutlineVisible(this.params.showOutline ?? false);
+        this.SetOutlineVisible(this.params.showOutline ?? true);
     }
     
     private createRootContainer(): mod.UIWidget {

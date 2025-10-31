@@ -175,6 +175,9 @@ class Flag {
 
         // Flag carriers need updated weapons
         this.RestrictCarrierWeapons(player);
+
+        // Spot the target on the minimap indefinitely
+        mod.SpotTarget(this.carrierPlayer, mod.SpotStatus.SpotInMinimap);
         
         // Show all carried icons for opposing teams
         for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
@@ -232,6 +235,9 @@ class Flag {
 
             this.RestoreCarrierWeapons(this.carrierPlayer);
             mod.RemoveUIIcon(this.carrierPlayer);
+
+            // Unspot the carrier
+            mod.SpotTarget(this.carrierPlayer, mod.SpotStatus.Unspot);
         } else {
             position = position ?? this.currentPosition;
             direction = direction ?? mod.DownVector();

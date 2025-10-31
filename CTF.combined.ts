@@ -504,6 +504,21 @@ function UpdatePlayerScoreboard(player: mod.Player){
     }
 }
 
+function GetLeadingTeamIDs(): number[]{
+    let leadingTeams: number[] = [];
+    let maxScore = 0;
+    for (const [teamId, score] of teamScores.entries()) {
+        if (score > maxScore) {
+            maxScore = score;
+            leadingTeams = [teamId];
+        } else if (score === maxScore && score > 0) {
+            leadingTeams.push(teamId);
+        }
+    }
+
+    return leadingTeams;
+}
+
 function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam: mod.Team): void {
     // Set player score using JSPlayer
     let jsPlayer = JSPlayer.get(scoringPlayer);
@@ -821,7 +836,7 @@ function VectorToString(v: mod.Vector): string {
 }
 
 function VectorLength(vec: mod.Vector): number{
-    return Math.sqrt(VectorLengthSquared(vec));
+    return Math.abs(Math.sqrt(VectorLengthSquared(vec)));
 }
 
 function VectorLengthSquared(vec: mod.Vector): number{
@@ -2376,7 +2391,9 @@ class JSPlayer {
         
         // Create scoreboard UI for human players
         if (!mod.GetSoldierState(player, mod.SoldierStateBool.IsAISoldier)) {
-            this.scoreboardUI = new MultiTeamScoreHUD(player);
+            if (currentHUDClass) {
+                this.scoreboardUI = new currentHUDClass(player);
+            }
         }
         
         if (DEBUG_MODE) {
@@ -2433,6 +2450,7 @@ class JSPlayer {
         return Object.values(this.#allJsPlayers);
     }
 }
+
 
 //==============================================================================================
 // FLAG CLASS
@@ -2611,6 +2629,9 @@ class Flag {
 
         // Flag carriers need updated weapons
         this.RestrictCarrierWeapons(player);
+
+        // Spot the target on the minimap indefinitely
+        mod.SpotTarget(this.carrierPlayer, mod.SpotStatus.SpotInMinimap);
         
         // Show all carried icons for opposing teams
         for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
@@ -2668,6 +2689,9 @@ class Flag {
 
             this.RestoreCarrierWeapons(this.carrierPlayer);
             mod.RemoveUIIcon(this.carrierPlayer);
+
+            // Unspot the carrier
+            mod.SpotTarget(this.carrierPlayer, mod.SpotStatus.Unspot);
         } else {
             position = position ?? this.currentPosition;
             direction = direction ?? mod.DownVector();
@@ -3178,6 +3202,7 @@ class CaptureZone {
     readonly areaTrigger: mod.AreaTrigger | undefined;
     readonly captureZoneID?: number;
     readonly captureZoneSpatialObjId?: number;
+    readonly position: mod.Vector;
     readonly iconPosition: mod.Vector;
     readonly baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
 
@@ -3187,6 +3212,7 @@ class CaptureZone {
         this.captureZoneID = captureZoneID ? captureZoneID : GetDefaultFlagCaptureZoneAreaTriggerIdForTeam(team);
         this.captureZoneSpatialObjId = captureZoneSpatialObjId ? captureZoneSpatialObjId : GetDefaultFlagCaptureZoneSpatialIdForTeam(this.team);
         this.iconPosition = ZERO_VEC;
+        this.position = ZERO_VEC;
 
         this.areaTrigger = this.captureZoneID ? mod.GetAreaTrigger(this.captureZoneID) : undefined;
         if(!this.areaTrigger)
@@ -3196,8 +3222,10 @@ class CaptureZone {
             let captureZoneSpatialObj = mod.GetSpatialObject(this.captureZoneSpatialObjId);
             if(captureZoneSpatialObj)
             {
+                this.position = mod.GetObjectPosition(captureZoneSpatialObj);
+
                 // Get our world icon position for this capture zone
-                this.iconPosition = mod.Add(mod.GetObjectPosition(captureZoneSpatialObj), mod.CreateVector(0.0, FLAG_ICON_HEIGHT_OFFSET, 0.0));
+                this.iconPosition = mod.Add(this.position, mod.CreateVector(0.0, FLAG_ICON_HEIGHT_OFFSET, 0.0));
 
                 // Create world icons for our team         
                 this.baseIcons = new Map();
@@ -3302,270 +3330,6 @@ function GetDefaultFlagCaptureZoneSpatialIdForTeam(team: mod.Team): number {
 }
 
 //==============================================================================================
-// GAMEMODE CONFIGURATION AND LOADING 
-//==============================================================================================
-
-interface TeamConfig {
-    teamId: number;
-    name?: string;
-    color?: mod.Vector;
-    hqId?: number;  // Optional, for future refactoring
-    captureZones?: CaptureZoneConfig[] // Array of capture points for this team
-}
-
-interface FlagConfig {
-    flagId: number;
-    owningTeamId: TeamID;
-    allowedCapturingTeams?: number[];  // Empty = any opposing team can capture
-    customColor?: mod.Vector;  // Optional color override
-    spawnObjectId?: number;
-}
-
-class CaptureZoneConfig {
-    team: mod.Team;
-    captureZoneID?: number;
-    captureZoneSpatialObjId?: number;
-
-    constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
-        this.team = team;
-        this.captureZoneID = captureZoneID;
-        this.captureZoneSpatialObjId;
-    }
-}
-
-interface GameModeConfig {
-    teams: TeamConfig[];
-    flags: FlagConfig[];
-}
-
-function LoadGameModeConfig(config: GameModeConfig): void {
-    // Clear existing data
-    teams.clear();
-    teamConfigs.clear();
-    teamScores.clear();
-    flags.clear();
-    
-    // Load team configurations
-    for (const teamConfig of config.teams) {
-        const team = mod.GetTeam(teamConfig.teamId);
-        teams.set(teamConfig.teamId, team);
-        console.log(`Loading team config for ${teamConfig.teamId}. Colour is ${teamConfig.name}`);
-        teamConfigs.set(teamConfig.teamId, teamConfig);
-        teamScores.set(teamConfig.teamId, 0);
-
-        // Store capture zones
-        if(teamConfig.captureZones){
-            for(const captureZoneConfig of teamConfig.captureZones){
-                let captureZone = new CaptureZone(
-                    captureZoneConfig.team, 
-                    captureZoneConfig.captureZoneID, 
-                    captureZoneConfig.captureZoneSpatialObjId
-                );
-                captureZones.set(teamConfig.teamId, captureZone);
-            }
-        }
-        
-        if (DEBUG_MODE) {
-            console.log(`Loaded team config: ID=${teamConfig.teamId}, Name=${teamConfig.name}`);
-        }
-    }
-    
-    // Initialize scoreboard based on team count
-    if (config.teams.length === 2) {
-        console.log(`Using CustomTwoTeams scoreboard`);
-        mod.SetScoreboardType(mod.ScoreboardType.CustomTwoTeams);
-        const team1Config = teamConfigs.get(1);
-        const team2Config = teamConfigs.get(2);
-        if (team1Config && team2Config) {
-            mod.SetScoreboardHeader(
-                mod.Message(GetTeamName(team1)), 
-                mod.Message(GetTeamName(team2))
-            );
-            mod.SetScoreboardColumnNames(
-                mod.Message(mod.stringkeys.scoreboard_captures_label), 
-                mod.Message(mod.stringkeys.scoreboard_capture_assists_label),
-                mod.Message(mod.stringkeys.scoreboard_carrier_kills_label)
-            );
-
-            // Sort by flag captures
-            //mod.SetScoreboardSorting(1);
-        }
-    } else {
-        console.log(`Using CustomFFA scoreboard`);
-        // 3+ teams: Use FFA scoreboard with Team ID as first column
-        mod.SetScoreboardType(mod.ScoreboardType.CustomFFA);
-        mod.SetScoreboardColumnNames(
-            mod.Message(mod.stringkeys.scoreboard_team_label),
-            mod.Message(mod.stringkeys.scoreboard_captures_label), 
-            mod.Message(mod.stringkeys.scoreboard_capture_assists_label),
-            mod.Message(mod.stringkeys.scoreboard_carrier_kills_label)
-        );
-        mod.SetScoreboardColumnWidths(0.2, 0.2, 0.2, 0.4);
-
-        // Sort by teamID to group players - this overload is zero indexed so the first available column is used
-        mod.SetScoreboardSorting(0, false);
-    }
-
-    // Initialize flags from config
-    for (const flagConfig of config.flags) {
-        const team = teams.get(flagConfig.owningTeamId);
-        if (!team) {
-            console.error(`Team ${flagConfig.owningTeamId} not found for flag ${flagConfig.flagId}`);
-            continue;
-        }
-        
-        // Get flag spawn position
-        const flagSpawn = mod.GetSpatialObject(flagConfig.spawnObjectId ?? GetDefaultFlagSpawnIdForTeam(mod.GetTeam(flagConfig.owningTeamId)));
-        const flagPosition = mod.GetObjectPosition(flagSpawn);
-        
-        // Create flag instance
-        const flag = new Flag(
-            team,
-            flagPosition,
-            flagConfig.flagId,
-            flagConfig.allowedCapturingTeams,
-            flagConfig.customColor
-        );
-        
-        // Store in flags Map
-        flags.set(flagConfig.flagId, flag);
-        
-        if (DEBUG_MODE) {
-            console.log(`Initialized flag ${flagConfig.flagId} for team ${flagConfig.owningTeamId} at ${VectorToString(flagPosition)}`);
-        }
-    }
-    
-    if (DEBUG_MODE) {
-        console.log(`Loaded ${config.teams.length} teams and ${config.flags.length} flags`);
-    }
-}
-
-//==============================================================================================
-// CLASSIC 2-TEAM CTF CONFIG
-//==============================================================================================
-
-const ClassicCTFConfig: GameModeConfig = {
-    teams: [
-        { 
-            teamId: TeamID.TEAM_1, 
-            name: mod.stringkeys.purple_team_name, 
-            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
-            hqId: TEAM1_HQ_ID, 
-            captureZones: [
-                {
-                    team: mod.GetTeam(TeamID.TEAM_1)  // Get team directly instead of using uninitialized variable
-                }
-            ]
-        },
-        { 
-            teamId: TeamID.TEAM_2, 
-            name: mod.stringkeys.orange_team_name, 
-            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
-            hqId: TEAM2_HQ_ID,
-            captureZones: [
-                {
-                    team: mod.GetTeam(TeamID.TEAM_2)  // Get team directly instead of using uninitialized variable
-                }
-            ]
-        }
-    ],
-    flags: [
-        {
-            flagId: 1,
-            owningTeamId: TeamID.TEAM_1,
-            //allowedCapturingTeams: [], // Empty = all opposing teams
-        },
-        {
-            flagId: 2,
-            owningTeamId: TeamID.TEAM_2,
-            //allowedCapturingTeams: [], // Empty = all opposing teams
-        }
-    ]
-}
-
-
-//==============================================================================================
-// MULTI TEAM CTF CONFIG
-//==============================================================================================
-
-const FourTeamCTFConfig: GameModeConfig = {
-    teams: [
-        { 
-            teamId: 1, 
-            name: mod.stringkeys.purple_team_name, 
-            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
-            hqId: TEAM1_HQ_ID,
-            captureZones: [
-                {
-                    team: mod.GetTeam(TeamID.TEAM_1)  // Get team directly
-                }
-            ]
-        },
-        { 
-            teamId: 2, 
-            name: mod.stringkeys.orange_team_name, 
-            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
-            hqId: TEAM2_HQ_ID,
-            captureZones: [
-                {
-                    team: mod.GetTeam(TeamID.TEAM_2)  // Get team directly
-                }
-            ]
-        },
-        { teamId: 3, 
-            name: mod.stringkeys.green_team_name, 
-            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_3), 
-            hqId: TEAM3_HQ_ID,
-            captureZones: [
-                {
-                    team: mod.GetTeam(TeamID.TEAM_3)  // Get team directly
-                }
-            ]
-        },
-        { 
-            teamId: 4, 
-            name: mod.stringkeys.blue_team_name, 
-            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_4), 
-            hqId: TEAM4_HQ_ID,
-            captureZones: [
-                {
-                    team: mod.GetTeam(TeamID.TEAM_4)  // Get team directly
-                }
-            ]
-        }
-    ],
-    flags: [
-        {
-            flagId: 1,
-            owningTeamId: TeamID.TEAM_1,
-            //allowedCapturingTeams: [], // Empty = all opposing teams
-        },
-        {
-            flagId: 2,
-            owningTeamId: TeamID.TEAM_2,
-            //allowedCapturingTeams: [], // Empty = all opposing teams
-        },
-        {
-            flagId: 3,
-            owningTeamId: TeamID.TEAM_3,
-            //allowedCapturingTeams: [], // Empty = all opposing teams
-        },
-        {
-            flagId: 4,
-            owningTeamId: TeamID.TEAM_4,
-            //allowedCapturingTeams: [], // Empty = all opposing teams
-        }
-        // {
-        //     flagId: 5,
-        //     owningTeamId: TeamID.TEAM_NEUTRAL,
-        //     allowedCapturingTeams: [], // Empty = all opposing teams
-        //     spawnObjectId: GetDefaultFlagSpawnIdForTeam(teamNeutral)
-        // }
-    ]
-}
-
-
-//==============================================================================================
 // BASE SCORE HUD
 //==============================================================================================
 
@@ -3580,30 +3344,883 @@ interface BaseScoreboardHUD {
     isOpen(): boolean;
 }
 
-class ScoreTicker implements BaseScoreboardHUD {
-    player: mod.Player;
-    playerId: number;
-    rootWidget: mod.UIWidget | undefined;
+//==============================================================================================
+// TICKER WIDGET BASE CLASS - Base class for UI widgets with position, text, background, and brackets
+//==============================================================================================
 
-    constructor(player: mod.Player) {
-        this.player = player;
-        this.playerId = mod.GetObjId(player);
+interface TickerWidgetParams {
+    position: number[];
+    size: number[];
+    parent: mod.UIWidget;
+    textSize?: number;
+    bracketTopBottomLength?: number;
+    bracketThickness?: number;
+    bgColor?: mod.Vector;
+    textColor?: mod.Vector;
+    bgAlpha?: number;
+    showProgressBar?: boolean;
+    progressValue?: number;
+    progressDirection?: 'left' | 'right';
+}
+
+abstract class TickerWidget {
+    readonly parent: mod.UIWidget;
+    readonly position: number[];
+    readonly size: number[];
+    readonly textSize: number;
+    readonly bracketTopBottomLength: number;
+    readonly bracketThickness: number;
+    protected bgColor: mod.Vector;
+    protected textColor: mod.Vector;
+    protected bgAlpha: number;
+    
+    // Main widgets
+    protected columnWidget!: mod.UIWidget;
+    protected columnWidgetOutline!: mod.UIWidget;
+    protected textWidget!: mod.UIWidget;
+    
+    // Progress bar
+    protected progressBarContainer: mod.UIWidget | undefined;
+    protected progressValue: number;
+    protected progressDirection: 'left' | 'right';
+    protected showProgressBar: boolean;
+    
+    // Leading indicator brackets (left side)
+    protected leftBracketSide: mod.UIWidget | undefined;
+    protected leftBracketTop: mod.UIWidget | undefined;
+    protected leftBracketBottom: mod.UIWidget | undefined;
+    
+    // Leading indicator brackets (right side)
+    protected rightBracketSide: mod.UIWidget | undefined;
+    protected rightBracketTop: mod.UIWidget | undefined;
+    protected rightBracketBottom: mod.UIWidget | undefined;
+    
+    constructor(params: TickerWidgetParams) {
+        this.parent = params.parent;
+        this.position = params.position ?? [0, 0];
+        this.size = params.size ?? [0, 0];
+        this.textSize = params.textSize ?? 30;
+        this.bracketTopBottomLength = params.bracketTopBottomLength ?? 8;
+        this.bracketThickness = params.bracketThickness ?? 2;
+        this.bgColor = params.bgColor ?? mod.CreateVector(0.5, 0.5, 0.5);
+        this.textColor = params.textColor ?? mod.CreateVector(1, 1, 1);
+        this.bgAlpha = params.bgAlpha ?? 0.75;
+        this.showProgressBar = params.showProgressBar ?? false;
+        this.progressValue = params.progressValue ?? 1.0;
+        this.progressDirection = params.progressDirection ?? 'left';
+        
+        this.createWidgets();
     }
     
-    create(): void {
-        throw new Error("Method not implemented.");
+    /**
+     * Create all UI widgets for the ticker
+     */
+    protected createWidgets(): void {
+        // Create column container with background color
+        this.columnWidget = modlib.ParseUI({
+            type: "Container",
+            parent: this.parent,
+            position: this.position,
+            size: [this.size[0], this.size[1]],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill: mod.UIBgFill.Blur,
+            bgColor: this.bgColor,
+            bgAlpha: this.bgAlpha
+        })!;
+
+        // Create column container with outline
+        this.columnWidgetOutline = modlib.ParseUI({
+            type: "Container",
+            parent: this.parent,
+            position: this.position,
+            size: [this.size[0], this.size[1]],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill: mod.UIBgFill.OutlineThin,
+            bgColor: this.textColor,
+            bgAlpha: 0
+        })!;
+        
+        // Create text widget
+        this.createTextWidget();
+        
+        // Create progress bar if enabled
+        if (this.showProgressBar) {
+            this.createProgressBar();
+        }
+        
+        // Create leading indicator brackets
+        this.createBrackets();
     }
-    refresh(): void {
-        throw new Error("Method not implemented.");
+    
+    /**
+     * Create the text widget - can be overridden by subclasses for custom styling
+     */
+    protected createTextWidget(): void {
+        this.textWidget = modlib.ParseUI({
+            type: "Text",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [this.size[0], 25],
+            anchor: mod.UIAnchor.Center,
+            textAnchor: mod.UIAnchor.Center,
+            textSize: this.textSize,
+            textLabel: "",
+            textColor: this.textColor,
+            bgAlpha: 0,
+        })!;
     }
-    close(): void {
-        throw new Error("Method not implemented.");
+    
+    /**
+     * Create progress bar container
+     */
+    protected createProgressBar(): void {
+        const progressWidth = this.size[0] * this.progressValue;
+        const anchor = this.progressDirection === 'left' ? mod.UIAnchor.CenterLeft : mod.UIAnchor.CenterRight;
+        
+        this.progressBarContainer = modlib.ParseUI({
+            type: "Container",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [progressWidth, this.size[1]],
+            anchor: anchor,
+            bgFill: mod.UIBgFill.Solid,
+            bgColor: this.textColor,
+            bgAlpha: 0.9
+        })!;
     }
-    isOpen(): boolean {
-        throw new Error("Method not implemented.");
+    
+    /**
+     * Set the progress bar value (0.0 to 1.0)
+     */
+    public setProgressValue(value: number): void {
+        this.progressValue = Math.max(0, Math.min(1, value));
+        
+        if (this.progressBarContainer) {
+            const progressWidth = this.size[0] * this.progressValue;
+            mod.SetUIWidgetSize(this.progressBarContainer, mod.CreateVector(progressWidth, this.size[1], 0));
+        }
     }
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
+    
+    /**
+     * Set the progress bar fill direction
+     */
+    public setProgressDirection(direction: 'left' | 'right'): void {
+        this.progressDirection = direction;
+        
+        if (this.progressBarContainer) {
+            const anchor = direction === 'left' ? mod.UIAnchor.CenterLeft : mod.UIAnchor.CenterRight;
+            mod.SetUIWidgetAnchor(this.progressBarContainer, anchor);
+        }
+    }
+    
+    /**
+     * Get the progress bar value
+     */
+    public getProgressValue(): number {
+        return this.progressValue;
+    }
+    
+    /**
+     * Create bracket indicators for highlighting
+     * Brackets form open/close square bracket shapes on each side
+     */
+    protected createBrackets(): void {
+        // LEFT BRACKETS (opening bracket [)
+        // Left side vertical bar
+        this.leftBracketSide = modlib.ParseUI({
+            type: "Container",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [this.bracketThickness, this.size[1]],
+            anchor: mod.UIAnchor.CenterLeft,
+            bgFill: mod.UIBgFill.Solid,
+            bgColor: this.textColor,
+            bgAlpha: 1
+        })!;
+        
+        // Left top horizontal bar
+        this.leftBracketTop = modlib.ParseUI({
+            type: "Container",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [this.bracketTopBottomLength, this.bracketThickness],
+            anchor: mod.UIAnchor.TopLeft,
+            bgFill: mod.UIBgFill.Solid,
+            bgColor: this.textColor,
+            bgAlpha: 1
+        })!;
+        
+        // Left bottom horizontal bar
+        this.leftBracketBottom = modlib.ParseUI({
+            type: "Container",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [this.bracketTopBottomLength, this.bracketThickness],
+            anchor: mod.UIAnchor.BottomLeft,
+            bgFill: mod.UIBgFill.Solid,
+            bgColor: this.textColor,
+            bgAlpha: 1
+        })!;
+        
+        // RIGHT BRACKETS (closing bracket ])
+        // Right side vertical bar
+        this.rightBracketSide = modlib.ParseUI({
+            type: "Container",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [this.bracketThickness, this.size[1]],
+            anchor: mod.UIAnchor.CenterRight,
+            bgFill: mod.UIBgFill.Solid,
+            bgColor: this.textColor,
+            bgAlpha: 1
+        })!;
+        
+        // Right top horizontal bar
+        this.rightBracketTop = modlib.ParseUI({
+            type: "Container",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [this.bracketTopBottomLength, this.bracketThickness],
+            anchor: mod.UIAnchor.TopRight,
+            bgFill: mod.UIBgFill.Solid,
+            bgColor: this.textColor,
+            bgAlpha: 1
+        })!;
+        
+        // Right bottom horizontal bar
+        this.rightBracketBottom = modlib.ParseUI({
+            type: "Container",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [this.bracketTopBottomLength, this.bracketThickness],
+            anchor: mod.UIAnchor.BottomRight,
+            bgFill: mod.UIBgFill.Solid,
+            bgColor: this.textColor,
+            bgAlpha: 1
+        })!;
+        
+        // Hide brackets by default
+        this.showBrackets(false);
+    }
+    
+    /**
+     * Update the text displayed in the widget
+     */
+    protected updateText(message: mod.Message): void {
+        mod.SetUITextLabel(this.textWidget, message);
+    }
+    
+    /**
+     * Show or hide the bracket indicators
+     */
+    protected showBrackets(show: boolean): void {
+        if (this.leftBracketTop) mod.SetUIWidgetVisible(this.leftBracketTop, show);
+        if (this.leftBracketSide) mod.SetUIWidgetVisible(this.leftBracketSide, show);
+        if (this.leftBracketBottom) mod.SetUIWidgetVisible(this.leftBracketBottom, show);
+        if (this.rightBracketSide) mod.SetUIWidgetVisible(this.rightBracketSide, show);
+        if (this.rightBracketTop) mod.SetUIWidgetVisible(this.rightBracketTop, show);
+        if (this.rightBracketBottom) mod.SetUIWidgetVisible(this.rightBracketBottom, show);
+    }
+    
+    /**
+     * Refresh the widget - should be implemented by subclasses
+     */
+    abstract refresh(): void;
 }
+
+
+//==============================================================================================
+// SCORE TICKER - Modular team score display widget
+//==============================================================================================
+
+interface ScoreTickerParams {
+    team: mod.Team;
+    position: number[];
+    size: number[];
+    parent: mod.UIWidget;
+    textSize?: number;
+    bracketTopBottomLength?: number;
+    bracketThickness?: number;
+}
+
+class ScoreTicker extends TickerWidget {
+    readonly team: mod.Team;
+    readonly teamId: number;
+    
+    private currentScore: number = -1;
+    private isLeading: boolean = false;
+    
+    constructor(params: ScoreTickerParams) {
+        // Get team colors before calling super
+        const teamId = mod.GetObjId(params.team);
+        const teamColor = GetTeamColorById(teamId);
+        const textColor = VectorClampToRange(
+            mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)), 
+            0, 
+            1
+        );
+        
+        // Call parent constructor with team-specific colors
+        super({
+            position: params.position,
+            size: params.size,
+            parent: params.parent,
+            textSize: params.textSize,
+            bracketTopBottomLength: params.bracketTopBottomLength,
+            bracketThickness: params.bracketThickness,
+            bgColor: teamColor,
+            textColor: textColor,
+            bgAlpha: 0.75
+        });
+        
+        this.team = params.team;
+        this.teamId = teamId;
+        
+        this.refresh();
+    }
+    
+    /**
+     * Update the score display and leading indicator
+     */
+    public updateScore(): void {
+        const score = teamScores.get(this.teamId) ?? 0;
+        
+        // Only update if score has changed
+        if (this.currentScore !== score) {
+            this.currentScore = score;
+            this.updateText(mod.Message(score));
+
+            // Show brackets only if this team is the sole leader (no ties)
+            let leadingTeams = GetLeadingTeamIDs();
+            console.log(`Leading teams: ${leadingTeams.join(", ")}`);
+            if(leadingTeams.length === 1 && leadingTeams.includes(this.teamId)){
+                this.setLeading(true);
+            } else {
+                this.setLeading(false);
+            }
+        }
+    }
+    
+    /**
+     * Set whether this team is currently in the lead
+     * @param isLeading True if this team is leading (not tied)
+     */
+    public setLeading(isLeading: boolean): void {
+        console.log(`Score ticker leading: ${isLeading}`);
+        
+        this.isLeading = isLeading;
+        this.showBrackets(isLeading);
+    }
+    
+    /**
+     * Get the current score
+     */
+    public getScore(): number {
+        return this.currentScore;
+    }
+    
+    /**
+     * Get the team ID
+     */
+    public getTeamId(): number {
+        return this.teamId;
+    }
+    
+    /**
+     * Refresh both score and leading status
+     */
+    public refresh(): void {
+        this.updateScore();
+    }
+}
+
+
+//==============================================================================================
+// ROUND TIMER - Display remaining game time in mm:ss format
+//==============================================================================================
+
+interface RoundTimerParams {
+    position: number[];
+    size: number[];
+    parent: mod.UIWidget;
+    textSize?: number;
+    seperatorPadding?: number;
+    bracketTopBottomLength?: number;
+    bracketThickness?: number;
+    bgColor?: mod.Vector;
+    textColor?: mod.Vector;
+    bgAlpha?: number;
+
+}
+
+class RoundTimer extends TickerWidget {
+    private currentTimeSeconds: number = -1;
+    private currentTimeMinutes: number = -1;
+    private seperatorPadding: number;
+    private secondsText: mod.UIWidget;
+    private minutesText: mod.UIWidget;
+    private seperatorText: mod.UIWidget;
+    
+    constructor(params: RoundTimerParams) {        
+        // Call parent constructor with default neutral colors if not specified
+        super({
+            position: params.position,
+            size: params.size,
+            parent: params.parent,
+            textSize: params.textSize,
+            bracketTopBottomLength: params.bracketTopBottomLength,
+            bracketThickness: params.bracketThickness,
+            bgColor: params.bgColor ?? mod.CreateVector(0.2, 0.2, 0.2),
+            textColor: params.textColor ?? mod.CreateVector(1, 1, 1),
+            bgAlpha: params.bgAlpha ?? 0.75
+        });
+
+        this.seperatorPadding = params.seperatorPadding ?? 16;
+
+        this.secondsText = modlib.ParseUI({
+            type: "Text",
+            parent: this.columnWidget,
+            position: [this.seperatorPadding, 0],
+            size: [30, 24],
+            anchor: mod.UIAnchor.Center,
+            textAnchor: mod.UIAnchor.CenterLeft,
+            textSize: this.textSize,
+            textLabel: "",
+            textColor: this.textColor,
+            bgAlpha: 0,
+        })!;
+
+        this.minutesText = modlib.ParseUI({
+            type: "Text",
+            parent: this.columnWidget,
+            position: [-this.seperatorPadding, 0],
+            size: [5, 24],
+            anchor: mod.UIAnchor.Center,
+            textAnchor: mod.UIAnchor.CenterRight,
+            textSize: this.textSize,
+            textLabel: "",
+            textColor: this.textColor,
+            bgAlpha: 0,
+        })!;
+
+        this.seperatorText = modlib.ParseUI({
+            type: "Text",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [30, 24],
+            anchor: mod.UIAnchor.Center,
+            textAnchor: mod.UIAnchor.Center,
+            textSize: this.textSize,
+            textLabel: mod.stringkeys.score_timer_seperator,
+            textColor: this.textColor,
+            bgAlpha: 0,
+        })!;
+        
+        this.refresh();
+    }
+    
+    /**
+     * Update the timer display with remaining game time
+     */
+    public updateTime(): void {
+        const remainingTime = mod.GetMatchTimeRemaining();
+        const timeSeconds = Math.floor(remainingTime);
+        
+        // Only update if time has changed
+        if (this.currentTimeSeconds !== timeSeconds) {
+
+            // Update time values and floor/pad values
+            this.currentTimeSeconds = timeSeconds % 60;
+            this.currentTimeMinutes = Math.floor(timeSeconds / 60);
+            const secondsTensDigit = Math.floor(this.currentTimeSeconds / 10);
+            const secondsOnesDigit = this.currentTimeSeconds % 10;
+
+            // Update text labels
+            mod.SetUITextLabel(this.minutesText, mod.Message(mod.stringkeys.score_timer_minutes, this.currentTimeMinutes));
+            mod.SetUITextLabel(this.secondsText, mod.Message(mod.stringkeys.score_timer_seconds, secondsTensDigit, secondsOnesDigit));
+        }
+    }
+    
+    /**
+     * Refresh the timer display
+     */
+    public refresh(): void {
+        this.updateTime();
+    }
+}
+
+
+//==============================================================================================
+// FLAG BAR UI CLASS - Displays flag positions and progress for two teams
+//==============================================================================================
+
+interface FlagBarParams {
+    position: number[];
+    size: number[];  // [width, height]
+    parent: mod.UIWidget;
+    team1: mod.Team;
+    team2: mod.Team;
+    team1CaptureZonePosition: mod.Vector;
+    team2CaptureZonePosition: mod.Vector;
+    barHeight?: number;  // Default: 16
+    barSeperatorPadding?: number;
+    flagIconSize?: number[];  // Default: [24, 24]
+}
+
+interface FlagBarState {
+    targetProgress: number;   // Target position (0-1)
+    currentProgress: number;  // Current animated position (0-1)
+    velocity: number;         // For smooth dampening
+}
+
+class FlagBar {
+    private readonly params: FlagBarParams;
+    private rootContainer: mod.UIWidget;
+    
+    // Team bars (TickerWidget containers)
+    private team1Bar: TickerWidget;
+    private team2Bar: TickerWidget;
+    
+    // Flag icons
+    private team1FlagIcon: FlagIcon;
+    private team2FlagIcon: FlagIcon;
+    
+    // Flag states for smooth animation
+    private team1FlagState: FlagBarState;
+    private team2FlagState: FlagBarState;
+    
+    // Teams
+    private readonly team1: mod.Team;
+    private readonly team2: mod.Team;
+    private readonly team1Id: number;
+    private readonly team2Id: number;
+    
+    // Dimensions
+    private readonly barWidth: number;
+    private readonly barHeight: number;
+    private readonly halfBarWidth: number;
+    private readonly flagIconSize: number[];
+    private readonly barSeperatorSize: number;
+    
+    constructor(params: FlagBarParams) {
+        this.params = params;
+        this.team1 = params.team1;
+        this.team2 = params.team2;
+        this.team1Id = mod.GetObjId(this.team1);
+        this.team2Id = mod.GetObjId(this.team2);
+        this.barSeperatorSize = this.params.barSeperatorPadding ?? 20;
+        this.barWidth = params.size[0] - this.barSeperatorSize;
+        this.barHeight = params.barHeight ?? 16;
+        this.halfBarWidth = this.barWidth / 2;
+        this.flagIconSize = params.flagIconSize ?? [24, 24];
+        
+        // Initialize flag states
+        this.team1FlagState = {
+            targetProgress: 0.0,
+            currentProgress: 0.0,
+            velocity: 0.0
+        };
+        
+        this.team2FlagState = {
+            targetProgress: 0.0,
+            currentProgress: 0.0,
+            velocity: 0.0
+        };
+        
+        // Create root container
+        this.rootContainer = this.createRootContainer();
+        
+        // Create team bars
+        this.team1Bar = this.createTeamBar(this.team1, true);
+        this.team2Bar = this.createTeamBar(this.team2, false);
+        
+        // Create flag icons
+        this.team1FlagIcon = this.createFlagIcon(this.team1, this.team1Id);
+        this.team2FlagIcon = this.createFlagIcon(this.team2, this.team2Id);
+    }
+    
+    private createRootContainer(): mod.UIWidget {
+        return modlib.ParseUI({
+            type: "Container",
+            parent: this.params.parent,
+            position: this.params.position,
+            size: [this.barWidth, this.barHeight],
+            anchor: mod.UIAnchor.TopCenter,
+            bgAlpha: 0  // Transparent background
+        })!;
+    }
+    
+    private createTeamBar(team: mod.Team, isLeftSide: boolean): TickerWidget {
+        const teamId = mod.GetObjId(team);
+        const teamColor = GetTeamColorById(teamId);
+        
+        // Position bars side by side
+        const xPos = isLeftSide ? (-this.halfBarWidth / 2) - this.barSeperatorSize : (this.halfBarWidth / 2) + this.barSeperatorSize;
+        
+        // Create a simple TickerWidget subclass for the bar
+        class FlagBarTicker extends TickerWidget {
+            refresh(): void {
+                // No refresh needed for flag bars
+            }
+        }
+
+        const textColor = VectorClampToRange(
+            mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)), 
+            0, 
+            1
+        );
+        
+        return new FlagBarTicker({
+            position: [xPos, 0],
+            size: [this.halfBarWidth, this.barHeight],
+            parent: this.rootContainer,
+            textSize: 0,  // No text
+            textColor: textColor,
+            bgColor: teamColor,
+            bgAlpha: 0.5,
+            showProgressBar: true,
+            progressValue: 1.0,  // Start full
+            progressDirection: isLeftSide ? 'right' : 'left'
+        });
+    }
+    
+    private createFlagIcon(team: mod.Team, teamId: number): FlagIcon {
+        const teamColor = GetTeamColorById(teamId);
+        
+        return new FlagIcon({
+            name: `FlagBar_FlagIcon_Team${teamId}`,
+            position: mod.CreateVector(0, 0, 0),
+            size: mod.CreateVector(this.flagIconSize[0], this.flagIconSize[1], 0),
+            anchor: mod.UIAnchor.Center,
+            parent: this.rootContainer,
+            fillColor: teamColor,
+            fillAlpha: 1,
+            outlineColor: teamColor,
+            showFill: true,
+            showOutline: true,
+            visible: true
+        });
+    }
+    
+    /**
+     * Main update method - called from ClassicCTFScoreHUD refresh (1Hz SlowUpdate)
+     */
+    public update(flags: Map<number, Flag>, deltaTime: number = 1.0): void {
+        // Get flags for each team
+        const team1Flag = flags.get(this.team1Id);
+        const team2Flag = flags.get(this.team2Id);
+        
+        if (team1Flag) {
+            this.updateFlagState(
+                team1Flag,
+                this.team1FlagState,
+                this.team1FlagIcon,
+                this.team1Bar,
+                this.params.team2CaptureZonePosition,
+                true,
+                deltaTime
+            );
+        }
+        
+        if (team2Flag) {
+            this.updateFlagState(
+                team2Flag,
+                this.team2FlagState,
+                this.team2FlagIcon,
+                this.team2Bar,
+                this.params.team1CaptureZonePosition,
+                false,
+                deltaTime
+            );
+        }
+    }
+    
+    /**
+     * Update a single flag's state and position
+     */
+    private updateFlagState(
+        flag: Flag,
+        flagState: FlagBarState,
+        flagIcon: FlagIcon,
+        opposingBar: TickerWidget,
+        captureZonePosition: mod.Vector,
+        isLeftTeam: boolean,
+        deltaTime: number
+    ): void {
+        // Calculate target progress
+        flagState.targetProgress = this.calculateFlagProgress(flag, captureZonePosition);
+        
+        if (DEBUG_MODE) {
+            console.log(`[FlagBar] Team ${flag.teamId} flag state: isAtHome=${flag.isAtHome}, isCarried=${flag.isBeingCarried}, isDropped=${flag.isDropped}`);
+            console.log(`[FlagBar] Team ${flag.teamId} targetProgress: ${flagState.targetProgress.toFixed(3)}`);
+        }
+        
+        // Apply smooth damping
+        this.smoothDampProgress(flagState, deltaTime);
+        
+        if (DEBUG_MODE) {
+            console.log(`[FlagBar] Team ${flag.teamId} currentProgress after damping: ${flagState.currentProgress.toFixed(3)}`);
+        }
+        
+        // Update flag icon position
+        this.updateFlagIconPosition(flagIcon, flagState.currentProgress, isLeftTeam);
+        
+        // Update flag icon visibility based on flag state
+        // FIXED: Show flag when NOT dropped (was reversed)
+        if (flag.isDropped) {
+            if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
+            flagIcon.SetFillAlpha(0.15);
+            flagIcon.SetOutlineAlpha(0.75);           
+        } else {
+            if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
+            flagIcon.SetFillAlpha(1);
+            flagIcon.SetOutlineAlpha(1);
+        }
+        
+        // Update bar progress (bar empties as flag advances). 
+        // Bar at twice the distance of the flag process so we empty it at the moment the flag hits the middle
+        const barProgress = 1.0 - flagState.currentProgress * 2;
+        opposingBar.setProgressValue(barProgress);
+        
+        if (DEBUG_MODE) {
+            console.log(`[FlagBar] Team ${flag.teamId} opposing bar progress: ${barProgress.toFixed(3)}`);
+        }
+    }
+    
+    /**
+     * Calculate flag progress from home (0.0) to enemy capture zone (1.0)
+     * Uses vector projection to ensure progress only increases when moving toward capture zone
+     */
+    private calculateFlagProgress(flag: Flag, captureZonePosition: mod.Vector): number {
+        if (flag.isAtHome) {
+            if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} is at home, progress = 0.0`);
+            return 0.0;
+        }
+        
+        const homePos = flag.homePosition;
+        const currentPos = flag.currentPosition;
+        
+        if (DEBUG_MODE) {
+            console.log(`[FlagBar] Flag ${flag.teamId} homePos: ${VectorToString(homePos)}`);
+            console.log(`[FlagBar] Flag ${flag.teamId} currentPos: ${VectorToString(currentPos)}`);
+            console.log(`[FlagBar] Flag ${flag.teamId} captureZonePos: ${VectorToString(captureZonePosition)}`);
+        }
+        
+        // Vector from home to capture zone (the direction we want to measure progress along)
+        const homeToCaptureVec = Math2.Vec3.FromVector(captureZonePosition)
+            .Subtract(Math2.Vec3.FromVector(homePos));
+        
+        // Vector from home to current position
+        const homeToCurrentVec = Math2.Vec3.FromVector(currentPos)
+            .Subtract(Math2.Vec3.FromVector(homePos));
+        
+        // Calculate the total distance from home to capture zone using proper vector length
+        const totalDistanceSquared = (homeToCaptureVec.x * homeToCaptureVec.x) +
+                                    (homeToCaptureVec.y * homeToCaptureVec.y) +
+                                    (homeToCaptureVec.z * homeToCaptureVec.z);
+        
+        const totalDistance = Math.sqrt(totalDistanceSquared);
+        
+        if (totalDistance < 0.01) {
+            // Capture zone is at the same position as home (edge case)
+            if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} capture zone at home position, progress = 0.0`);
+            return 0.0;
+        }
+        
+        // Project current position onto the home-to-capture line
+        // This gives us the distance along the line toward the capture zone
+        const dotProduct = (homeToCurrentVec.x * homeToCaptureVec.x) +
+                          (homeToCurrentVec.y * homeToCaptureVec.y) +
+                          (homeToCurrentVec.z * homeToCaptureVec.z);
+        
+        const projectedDistance = dotProduct / totalDistance;
+        
+        if (DEBUG_MODE) {
+            console.log(`[FlagBar] Flag ${flag.teamId} totalDistance: ${totalDistance.toFixed(2)}`);
+            console.log(`[FlagBar] Flag ${flag.teamId} dotProduct: ${dotProduct.toFixed(2)}`);
+            console.log(`[FlagBar] Flag ${flag.teamId} projectedDistance: ${projectedDistance.toFixed(2)}`);
+        }
+        
+        // Normalize progress to [0, 1] range
+        // - If projectedDistance < 0, flag is behind home (moving away), clamp to 0
+        // - If projectedDistance > totalDistance, flag is past capture zone, clamp to 1
+        const progress = Math.max(0.0, Math.min(1.0, projectedDistance / totalDistance));
+        
+        if (DEBUG_MODE) {
+            console.log(`[FlagBar] Flag ${flag.teamId} calculated progress: ${progress.toFixed(3)}`);
+        }
+        
+        return progress;
+    }
+    
+    /**
+     * Apply smooth damping to progress for smooth animation
+     * Uses a damped spring algorithm with 2 second smooth time
+     */
+    private smoothDampProgress(flagState: FlagBarState, deltaTime: number): void {
+        const smoothTime = 2.0;  // 2 seconds to reach target
+        
+        // Damped spring calculation
+        const omega = 2.0 / smoothTime;
+        const x = omega * deltaTime;
+        const exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x);
+        
+        const change = flagState.currentProgress - flagState.targetProgress;
+        const temp = (flagState.velocity + omega * change) * deltaTime;
+        
+        flagState.velocity = (flagState.velocity - omega * temp) * exp;
+        flagState.currentProgress = flagState.targetProgress + (change + temp) * exp;
+        
+        // Clamp to valid range
+        flagState.currentProgress = Math.max(0.0, Math.min(1.0, flagState.currentProgress));
+    }
+    
+    /**
+     * Update flag icon position based on progress
+     * Progress 0.0: Flag at far end of own bar
+     * Progress 0.5: Flag at center (between bars)
+     * Progress 1.0: Flag at far end of enemy bar
+     */
+    private updateFlagIconPosition(
+        flagIcon: FlagIcon,
+        progress: number,
+        isLeftTeam: boolean
+    ): void {
+        // Calculate position across the entire bar width
+        // For left team: 0.0 progress = left edge, 1.0 progress = right edge
+        // For right team: 0.0 progress = right edge, 1.0 progress = left edge
+        
+        let xPos: number;
+        
+        if (isLeftTeam) {
+            // Left team flag moves from left (-halfBarWidth) to right (+halfBarWidth)
+            xPos = -this.halfBarWidth + (progress * this.barWidth);
+        } else {
+            // Right team flag moves from right (+halfBarWidth) to left (-halfBarWidth)
+            xPos = this.halfBarWidth - (progress * this.barWidth);
+        }
+        
+        // Center vertically
+        const yPos = 0;
+        
+        if (DEBUG_MODE) {
+            console.log(`[FlagBar] ${isLeftTeam ? 'Left' : 'Right'} team flag position: x=${xPos.toFixed(2)}, y=${yPos}, progress=${progress.toFixed(3)}`);
+            console.log(`[FlagBar] Bar dimensions: halfBarWidth=${this.halfBarWidth.toFixed(2)}, barWidth=${this.barWidth.toFixed(2)}`);
+        }
+        
+        flagIcon.SetPosition(mod.CreateVector(xPos, yPos, 0));
+    }
+    
+    /**
+     * Clean up all UI widgets
+     */
+    public destroy(): void {
+        this.team1FlagIcon.Destroy();
+        this.team2FlagIcon.Destroy();
+        mod.DeleteUIWidget(this.rootContainer);
+    }
+}
+
 
 //==============================================================================================
 // MULTI 2+ TEAM CTF HUD
@@ -3623,68 +4240,37 @@ function BuildFlagStatus(flag: Flag): mod.Message {
 
 /**
  * TeamColumnWidget - Displays a single team's score and flag status
- * Encapsulates the column background, score text, and flag status text
+ * Encapsulates the score ticker and flag icon
  */
 class TeamColumnWidget {
     readonly teamId: number;
     readonly team: mod.Team;
     readonly isPlayerTeam: boolean;
-    readonly columnWidget: mod.UIWidget;
-    readonly columnWidgetOutline: mod.UIWidget;
-    readonly scoreWidget: mod.UIWidget;
+    readonly scoreTicker: ScoreTicker;
     readonly flagIcon: FlagIcon;
     readonly verticalPadding:number = 8;
     
-    constructor(team: mod.Team, position: mod.Vector, size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
+    constructor(team: mod.Team, position: number[], size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
         this.team = team;
         this.teamId = mod.GetObjId(team);
         this.isPlayerTeam = isPlayerTeam;
         
-        
-        // Create column container with team color background
-        this.columnWidget = modlib.ParseUI({
-            type: "Container",
-            parent: parent,
+        // Create score ticker with bracket indicators
+        this.scoreTicker = new ScoreTicker({
+            team: team,
             position: position,
-            size: [size[0], size[1]],
-            anchor: mod.UIAnchor.TopCenter,
-            bgFill:  mod.UIBgFill.Blur,
-            bgColor: GetTeamColorById(this.teamId),
-            bgAlpha: 0.75
-        })!;
-
-        // Create column container with team color background
-        this.columnWidgetOutline = modlib.ParseUI({
-            type: "Container",
+            size: size,
             parent: parent,
-            position: position,
-            size: [size[0], size[1]],
-            anchor: mod.UIAnchor.TopCenter,
-            bgFill:  mod.UIBgFill.OutlineThin,
-            bgColor: GetTeamColorById(this.teamId),
-            bgAlpha: 0
-        })!;
-        
-        // Create score text (top row)
-        this.scoreWidget = modlib.ParseUI({
-            type: "Text",
-            parent: this.columnWidget,
-            position: [0, 0],
-            size: [size[0], 25],
-            anchor: mod.UIAnchor.Center,
-            textAnchor: mod.UIAnchor.Center,
             textSize: 28,
-            textLabel: "",
-            textColor: VectorClampToRange(mod.Add(GetTeamColorById(this.teamId), mod.CreateVector(0.5, 0.5, 0.5)), 0, 1),
-            bgAlpha: 0,
-        })!;
+            bracketTopBottomLength: 10,
+            bracketThickness: 3
+        });
 
-        let teamColorAdditive = isPlayerTeam ? 0.5 : -0.2;
-
+        // Create flag icon below the score ticker
         let flagIconConfig: FlagIconParams = {
             name: `FlagHomeIcon_Team${this.teamId}`,
-            parent: this.columnWidget,
-            position: mod.CreateVector(0, size[1] + this.verticalPadding, 0),
+            parent: parent,
+            position: mod.CreateVector(position[0], position[1] + size[1] + this.verticalPadding, 0),
             size: mod.CreateVector(35, 35, 0),
             anchor: mod.UIAnchor.TopCenter,
             fillColor:  GetTeamColorById(this.teamId),
@@ -3701,21 +4287,15 @@ class TeamColumnWidget {
     
     /**
      * Update the team's score and flag status display
-     * @param score Current team score
-     * @param flagStatus Flag status message (from GetFlagStatusText)
      */
     update(): void {
-        // mod.SetUITextLabel(this.scoreWidget, mod.Message(mod.stringkeys.scoreboard_score_value, score));
-        // mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
-
-        const score = teamScores.get(this.teamId) ?? 0;
+        // Update score ticker
+        this.scoreTicker.updateScore();
 
         // Get flag status for this team
         const flag = flags.get(this.teamId);
         if(flag){
             const flagStatus = BuildFlagStatus(flag);
-            mod.SetUITextLabel(this.scoreWidget, mod.Message(score));
-            // mod.SetUITextLabel(this.flagStatusWidget, flagStatus);
             
             // TODO: Ugly hack. This needs to be event triggered, not changed in update
             if(flag.isAtHome){
@@ -3730,6 +4310,13 @@ class TeamColumnWidget {
                 this.flagIcon.SetOutlineAlpha(0.75);
             }
         }
+    }
+    
+    /**
+     * Set whether this team is currently in the lead
+     */
+    setLeading(isLeading: boolean): void {
+        this.scoreTicker.setLeading(isLeading);
     }
 }
 
@@ -3827,7 +4414,7 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
         
         for (const [teamId, team] of teams.entries()) {
             let isPlayerTeam: boolean = mod.Equals(team, mod.GetTeam(this.player));
-            const columnPos = mod.CreateVector(currentX, 0, 0);
+            const columnPos = [currentX, 0];
             const column = new TeamColumnWidget(team, columnPos, [50, 30], this.teamRow, isPlayerTeam);
             this.teamColumns.set(teamId, column);
             currentX += columnWidth + this.COLUMN_SPACING;
@@ -3857,9 +4444,26 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
         mod.SetUITextColor(this.teamIndicatorText, mod.CreateVector(1,1,1));
         mod.SetUIWidgetBgColor(this.teamIndicatorContainer, teamColor);
         
+        // Determine which team is leading (if any)
+        let maxScore = -1;
+        let leadingTeams: number[] = [];
+        
+        for (const [teamId, score] of teamScores.entries()) {
+            if (score > maxScore) {
+                maxScore = score;
+                leadingTeams = [teamId];
+            } else if (score === maxScore && score > 0) {
+                leadingTeams.push(teamId);
+            }
+        }
+        
         // Update each team column
         for (const [teamId, column] of this.teamColumns.entries()) {
             column.update();
+            
+            // Show brackets only if this team is the sole leader (no ties)
+            const isLeading = leadingTeams.length === 1 && leadingTeams[0] === teamId;
+            column.setLeading(isLeading);
         }
     }
     
@@ -3885,6 +4489,8 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
 // CLASSIC 2-TEAM CTF HUD
 //==============================================================================================
 
+import { ParseUI } from "modlib";
+
 /**
  * ScoreboardUI - Main scoring interface for CTF
  * Shows player's team and all team scores with flag statuses
@@ -3894,7 +4500,23 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
     readonly playerId: number;
     
     rootWidget: mod.UIWidget | undefined;
-    
+
+    // Team scores
+    teamScoreTickers: Map<number, ScoreTicker> = new Map<number, ScoreTicker>();
+    teamScoreSpacing: number = 490;
+    teamScorePaddingTop: number = 60;
+    teamWidgetSize: number[] = [76, 30];
+
+    // Round timer
+    timerTicker: RoundTimer | undefined;
+    timerWidgetSize: number[] = [66, 20];
+    timerScorePaddingTop: number = 86;
+
+    // Flag bar
+    flagBar: FlagBar | undefined;
+    flagBarPadding = 20;
+    flagBarHeight = 12;
+
     constructor(player: mod.Player) {
         this.player = player;
         this.playerId = mod.GetObjId(player);
@@ -3907,13 +4529,61 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
         // Create root container
         this.rootWidget = modlib.ParseUI({
             type: "Container",
-            size: [0, 0],
+            size: [700, 100],
             position: [0, 0],
             anchor: mod.UIAnchor.TopCenter,
             bgFill: mod.UIBgFill.Blur,
             bgColor: [0, 0, 0],
             bgAlpha: 0.0,
             playerId: this.player
+        })!;
+
+        // Create team score tickers
+        for (const [teamId, team] of teams.entries()) {
+            let tickerParams: ScoreTickerParams = {
+                parent: this.rootWidget,
+                position: [((teamId - 1) * this.teamScoreSpacing) - this.teamScoreSpacing*0.5, this.teamScorePaddingTop],
+                size: this.teamWidgetSize,
+                team: team
+            };
+            this.teamScoreTickers.set(teamId, new ScoreTicker(tickerParams));
+        }
+
+        // Create flag bar (positioned between the two score tickers)
+        const team1Ticker = this.teamScoreTickers.get(1);
+        const team2Ticker = this.teamScoreTickers.get(2);
+        
+        if (team1Ticker && team2Ticker && team1 && team2) {
+            // Calculate FlagBar dimensions and position
+            const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarPadding;
+            const barPosX = 0;  // Center horizontally
+            const barPosY = this.teamScorePaddingTop + (this.teamWidgetSize[1] / 2) - (this.flagBarHeight * 0.5);
+            
+            // Get capture zone positions
+            const team1CaptureZone = captureZones.get(1);
+            const team2CaptureZone = captureZones.get(2);
+            
+            if (team1CaptureZone && team2CaptureZone) {
+                this.flagBar = new FlagBar({
+                    position: [barPosX, barPosY],
+                    size: [barWidth, 16],
+                    parent: this.rootWidget,
+                    team1: team1,
+                    team2: team2,
+                    team1CaptureZonePosition: team1CaptureZone.position,
+                    team2CaptureZonePosition: team2CaptureZone.position,
+                    barHeight: this.flagBarHeight,
+                    barSeperatorPadding: 4,
+                    flagIconSize: [24, 24]
+                });
+            }
+        }
+
+        this.timerTicker = new RoundTimer({
+            position: [0, this.timerScorePaddingTop],
+            parent: this.rootWidget,
+            textSize: 24,
+            size: this.timerWidgetSize,
         })!;
 
         // Initial refresh
@@ -3926,6 +4596,14 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
     refresh(): void {
         if (!this.rootWidget) return;
         
+        for(let [teamId, widget] of this.teamScoreTickers.entries()){
+            widget.refresh();
+        }
+
+        this.timerTicker?.refresh();
+        
+        // Update flag bar (deltaTime = 1.0 since refresh is called at 1Hz)
+        this.flagBar?.update(flags, 1.0);
     }
     
     /**
@@ -4294,6 +4972,280 @@ class FlagIcon {
     GetRootWidget(): mod.UIWidget {
         return this.rootContainer;
     }
+}
+
+
+//==============================================================================================
+// GAMEMODE CONFIGURATION AND LOADING 
+//==============================================================================================
+
+interface TeamConfig {
+    teamId: number;
+    name?: string;
+    color?: mod.Vector;
+    hqId?: number;  // Optional, for future refactoring
+    captureZones?: CaptureZoneConfig[] // Array of capture points for this team
+}
+
+interface FlagConfig {
+    flagId: number;
+    owningTeamId: TeamID;
+    allowedCapturingTeams?: number[];  // Empty = any opposing team can capture
+    customColor?: mod.Vector;  // Optional color override
+    spawnObjectId?: number;
+}
+
+class CaptureZoneConfig {
+    team: mod.Team;
+    captureZoneID?: number;
+    captureZoneSpatialObjId?: number;
+
+    constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
+        this.team = team;
+        this.captureZoneID = captureZoneID;
+        this.captureZoneSpatialObjId;
+    }
+}
+
+interface GameModeConfig {
+    teams: TeamConfig[];
+    flags: FlagConfig[];
+    HUDClass?: new (player: mod.Player) => BaseScoreboardHUD;
+}
+
+// Store the HUD class to use for player scoreboards
+let currentHUDClass: (new (player: mod.Player) => BaseScoreboardHUD) | undefined;
+
+function LoadGameModeConfig(config: GameModeConfig): void {
+    // Store HUD class for use in JSPlayer constructor
+    currentHUDClass = config.HUDClass;
+    
+    // Clear existing data
+    teams.clear();
+    teamConfigs.clear();
+    teamScores.clear();
+    flags.clear();
+    
+    // Load team configurations
+    for (const teamConfig of config.teams) {
+        const team = mod.GetTeam(teamConfig.teamId);
+        teams.set(teamConfig.teamId, team);
+        console.log(`Loading team config for ${teamConfig.teamId}. Colour is ${teamConfig.name}`);
+        teamConfigs.set(teamConfig.teamId, teamConfig);
+        teamScores.set(teamConfig.teamId, 0);
+
+        // Store capture zones
+        if(teamConfig.captureZones){
+            for(const captureZoneConfig of teamConfig.captureZones){
+                let captureZone = new CaptureZone(
+                    captureZoneConfig.team, 
+                    captureZoneConfig.captureZoneID, 
+                    captureZoneConfig.captureZoneSpatialObjId
+                );
+                captureZones.set(teamConfig.teamId, captureZone);
+            }
+        }
+        
+        if (DEBUG_MODE) {
+            console.log(`Loaded team config: ID=${teamConfig.teamId}, Name=${teamConfig.name}`);
+        }
+    }
+    
+    // Initialize scoreboard based on team count
+    if (config.teams.length === 2) {
+        console.log(`Using CustomTwoTeams scoreboard`);
+        mod.SetScoreboardType(mod.ScoreboardType.CustomTwoTeams);
+        const team1Config = teamConfigs.get(1);
+        const team2Config = teamConfigs.get(2);
+        if (team1Config && team2Config) {
+            mod.SetScoreboardHeader(
+                mod.Message(GetTeamName(team1)), 
+                mod.Message(GetTeamName(team2))
+            );
+            mod.SetScoreboardColumnNames(
+                mod.Message(mod.stringkeys.scoreboard_captures_label), 
+                mod.Message(mod.stringkeys.scoreboard_capture_assists_label),
+                mod.Message(mod.stringkeys.scoreboard_carrier_kills_label)
+            );
+
+            // Sort by flag captures
+            //mod.SetScoreboardSorting(1);
+        }
+    } else {
+        console.log(`Using CustomFFA scoreboard`);
+        // 3+ teams: Use FFA scoreboard with Team ID as first column
+        mod.SetScoreboardType(mod.ScoreboardType.CustomFFA);
+        mod.SetScoreboardColumnNames(
+            mod.Message(mod.stringkeys.scoreboard_team_label),
+            mod.Message(mod.stringkeys.scoreboard_captures_label), 
+            mod.Message(mod.stringkeys.scoreboard_capture_assists_label),
+            mod.Message(mod.stringkeys.scoreboard_carrier_kills_label)
+        );
+        mod.SetScoreboardColumnWidths(0.2, 0.2, 0.2, 0.4);
+
+        // Sort by teamID to group players - this overload is zero indexed so the first available column is used
+        mod.SetScoreboardSorting(0, false);
+    }
+
+    // Initialize flags from config
+    for (const flagConfig of config.flags) {
+        const team = teams.get(flagConfig.owningTeamId);
+        if (!team) {
+            console.error(`Team ${flagConfig.owningTeamId} not found for flag ${flagConfig.flagId}`);
+            continue;
+        }
+        
+        // Get flag spawn position
+        const flagSpawn = mod.GetSpatialObject(flagConfig.spawnObjectId ?? GetDefaultFlagSpawnIdForTeam(mod.GetTeam(flagConfig.owningTeamId)));
+        const flagPosition = mod.GetObjectPosition(flagSpawn);
+        
+        // Create flag instance
+        const flag = new Flag(
+            team,
+            flagPosition,
+            flagConfig.flagId,
+            flagConfig.allowedCapturingTeams,
+            flagConfig.customColor
+        );
+        
+        // Store in flags Map
+        flags.set(flagConfig.flagId, flag);
+        
+        if (DEBUG_MODE) {
+            console.log(`Initialized flag ${flagConfig.flagId} for team ${flagConfig.owningTeamId} at ${VectorToString(flagPosition)}`);
+        }
+    }
+    
+    if (DEBUG_MODE) {
+        console.log(`Loaded ${config.teams.length} teams and ${config.flags.length} flags`);
+    }
+}
+
+
+//==============================================================================================
+// CLASSIC 2-TEAM CTF CONFIG
+//==============================================================================================
+
+const ClassicCTFConfig: GameModeConfig = {
+    HUDClass: ClassicCTFScoreHUD,
+    teams: [
+        { 
+            teamId: TeamID.TEAM_1, 
+            name: mod.stringkeys.purple_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
+            hqId: TEAM1_HQ_ID, 
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_1)  // Get team directly instead of using uninitialized variable
+                }
+            ]
+        },
+        { 
+            teamId: TeamID.TEAM_2, 
+            name: mod.stringkeys.orange_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
+            hqId: TEAM2_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_2)  // Get team directly instead of using uninitialized variable
+                }
+            ]
+        }
+    ],
+    flags: [
+        {
+            flagId: 1,
+            owningTeamId: TeamID.TEAM_1,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        },
+        {
+            flagId: 2,
+            owningTeamId: TeamID.TEAM_2,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        }
+    ]
+}
+
+
+//==============================================================================================
+// MULTI TEAM CTF CONFIG
+//==============================================================================================
+
+const FourTeamCTFConfig: GameModeConfig = {
+    HUDClass: MultiTeamScoreHUD,
+    teams: [
+        { 
+            teamId: 1, 
+            name: mod.stringkeys.purple_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
+            hqId: TEAM1_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_1)  // Get team directly
+                }
+            ]
+        },
+        { 
+            teamId: 2, 
+            name: mod.stringkeys.orange_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
+            hqId: TEAM2_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_2)  // Get team directly
+                }
+            ]
+        },
+        { teamId: 3, 
+            name: mod.stringkeys.green_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_3), 
+            hqId: TEAM3_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_3)  // Get team directly
+                }
+            ]
+        },
+        { 
+            teamId: 4, 
+            name: mod.stringkeys.blue_team_name, 
+            color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_4), 
+            hqId: TEAM4_HQ_ID,
+            captureZones: [
+                {
+                    team: mod.GetTeam(TeamID.TEAM_4)  // Get team directly
+                }
+            ]
+        }
+    ],
+    flags: [
+        {
+            flagId: 1,
+            owningTeamId: TeamID.TEAM_1,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        },
+        {
+            flagId: 2,
+            owningTeamId: TeamID.TEAM_2,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        },
+        {
+            flagId: 3,
+            owningTeamId: TeamID.TEAM_3,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        },
+        {
+            flagId: 4,
+            owningTeamId: TeamID.TEAM_4,
+            //allowedCapturingTeams: [], // Empty = all opposing teams
+        }
+        // {
+        //     flagId: 5,
+        //     owningTeamId: TeamID.TEAM_NEUTRAL,
+        //     allowedCapturingTeams: [], // Empty = all opposing teams
+        //     spawnObjectId: GetDefaultFlagSpawnIdForTeam(teamNeutral)
+        // }
+    ]
 }
 
 
