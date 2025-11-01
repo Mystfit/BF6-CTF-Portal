@@ -13,6 +13,12 @@ Notes
 - COMPLETE: Change team colours to purple and orange
 - COMPLETE (with bonus!): Stop flags dropping inside props by using raycasts. Bonus for using an arc.
 - Drop icon update rate. Either use UI object or make it smoother
-- Forcefully 3D spot the flag carrier
+- COMPLETE: Forcefully 3D spot the flag carrier
 - COMPLETE: Add configurable option for flag carrier to have pistol?
-- Custom UI for showing flag captures and provide feedback
+- IN PROGRESS: Custom UI for showing flag captures and provide feedback
+    - Fix flags not drawing fills
+- Example CTF maps
+    - Golf course (free)
+    - Tech Campus (free)
+    - Firestorm (full)
+- Add MCOM follow mode (Sonic & Tails mode)

@@ -8,11 +8,18 @@ class Flag {
     readonly allowedCapturingTeams: number[];
     customColor?: mod.Vector;
     
-    // Legacy properties (kept for backwards compatibility during transition)
     readonly team: mod.Team;
     readonly teamId: number;
     readonly homePosition: mod.Vector;
+
+    // Flag position
     currentPosition: mod.Vector;
+    followPoints: mod.Vector[];
+    followDelay: number;   // Number of points to cache for flag to follow
+    
+    // Smoothed values for exponential averaging
+    smoothedPosition: mod.Vector;
+    smoothedRotation: mod.Vector;
     
     // State
     isAtHome: boolean = true;
@@ -35,6 +42,7 @@ class Flag {
     flagProp: mod.Object | null = null;
     flagHomeVFX: mod.VFX;
     alarmSFX : mod.SFX | null = null;
+    dragSFX: mod.SFX | null = null;
     
     constructor(
         team: mod.Team, 
@@ -51,10 +59,15 @@ class Flag {
         this.customColor = customColor;
         this.homePosition = homePosition;
         this.currentPosition = homePosition;
+        this.smoothedPosition = homePosition;
+        this.smoothedRotation = ZERO_VEC;
+        this.followPoints = [];
+        this.followDelay = 10;
         this.flagInteractionPoint = null;
         this.flagRecoverIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, ZERO_VEC, ZERO_VEC);
         this.flagProp = null;
         this.flagHomeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
+        this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
         this.Initialize();
     }
     
@@ -163,15 +176,23 @@ class Flag {
         this.PlayFlagTakenVO();
 
         // Play pickup SFX
-        let pickupSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureStartedByFriendly_OneShot2D, this.homePosition, ZERO_VEC);
-        // mod.EnableSFX(pickupSfx, true);
-        mod.PlaySound(pickupSfx, 1);
+        let pickupSfxOwner: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_EnemyPickedUpCache_OneShot2D, this.homePosition, ZERO_VEC);
+        mod.PlaySound(pickupSfxOwner, 1, this.team);
+        for(let teamID of GetOpposingTeamsForFlag(this)){
+            let pickupSfxCapturer: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_FriendlyCapturedCache_OneShot2D, this.homePosition, ZERO_VEC);
+            mod.PlaySound(pickupSfxCapturer, 1, mod.GetTeam(teamID));
+        }
 
         // Remove flag prop
-        if (this.flagProp) {
-            mod.UnspawnObject(this.flagProp);
-            this.flagProp = null;
+        if(!FLAG_FOLLOW_MODE){
+            if (this.flagProp) {
+                mod.UnspawnObject(this.flagProp);
+                this.flagProp = null;
+            }
         }
+
+        // Make sure to clear follow buffer so we get new points
+        this.followPoints = [];
 
         // Flag carriers need updated weapons
         this.RestrictCarrierWeapons(player);
@@ -245,20 +266,25 @@ class Flag {
         }
         
         // Remove old flag if it exists - it shouldn't but lets make sure
-        try{
-            if (this.flagProp)
-                mod.UnspawnObject(this.flagProp);
-        } catch(error: unknown){
-            console.log("Couldn't unspawn flag prop");
+        if(!FLAG_FOLLOW_MODE){
+            try{
+                if (this.flagProp)
+                    mod.UnspawnObject(this.flagProp);
+            } catch(error: unknown){
+                console.log("Couldn't unspawn flag prop");
+            }
         }
-
+       
         // Flag rotation based on facing direction
         // TODO: replace with facing angle and hit normal
         let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
         
         // Initially spawn flag at carrier position - it will be moved by animation
         let initialPosition = position;
-        this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
+        
+        if(!FLAG_FOLLOW_MODE){
+            this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
+        }
 
         if(DEBUG_MODE) console.log("this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);");
         
@@ -275,7 +301,7 @@ class Flag {
         this.carrierPlayer = null;
 
         // Animate flag with concurrent raycast generation
-        if(this.flagProp && useProjectileThrow) {
+        if(this.flagProp && useProjectileThrow && !FLAG_FOLLOW_MODE) {
             if(DEBUG_MODE) console.log("Starting concurrent flag animation");
             
             // Create the generator for projectile path with validation callback
@@ -374,9 +400,12 @@ class Flag {
         mod.SetVFXColor(this.flagHomeVFX, GetTeamDroppedColor(this.team));
 
         // Play drop SFX
-        let dropSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureNeutralize_OneShot2D, this.currentPosition, ZERO_VEC);
-        // mod.EnableSFX(dropSfx, true);
-        mod.PlaySound(dropSfx, 1);
+        let dropSfxOwner: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheStart_OneShot2D, this.homePosition, ZERO_VEC);
+        mod.PlaySound(dropSfxOwner, 1, this.team);
+        // for(let teamID of GetOpposingTeamsForFlag(this)){
+        //     let dropSfxCapturer: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_FriendlyCapturedCache_OneShot2D, this.homePosition, ZERO_VEC);
+        //     mod.PlaySound(dropSfxCapturer, 1, mod.GetTeam(teamID));
+        // }
 
         // Play drop VO
         let friendlyVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
@@ -492,15 +521,24 @@ class Flag {
         }
         
         // Get the soldier position for attaching effects
-        this.currentPosition = mod.GetSoldierState(
+        let currentSoldierPosition = mod.GetSoldierState(
             this.carrierPlayer, 
             mod.SoldierStateVector.GetPosition);
         let currentRotation = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
         let currentVelocity = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetLinearVelocity);
+        let soldierInAir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsInAir);
+        let soldierInVehicle = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsInVehicle);
+
         // Update jsPlayer velocity
         let jsPlayer = JSPlayer.get(this.carrierPlayer);
         if(jsPlayer){
             jsPlayer.velocity = currentVelocity
+        }
+
+        if(FLAG_FOLLOW_MODE){
+            this.FollowPlayer(currentSoldierPosition);
+        } else {
+            this.currentPosition = currentSoldierPosition;
         }
         
         // Make smoke effect follow carrier
@@ -511,6 +549,71 @@ class Flag {
 
         // Force disable carrier weapons
         this.CheckCarrierDroppedFlag(this.carrierPlayer);
+    }
+
+    FollowPlayer(currentSoldierPosition: mod.Vector) {
+        let distanceToPlayer = Math2.Vec3.FromVector(currentSoldierPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).Length();
+
+        // Always add player position to buffer to maintain continuous path
+        let currentFlagPos = Math2.Vec3.FromVector(this.currentPosition);
+        let currentSoldierPos = Math2.Vec3.FromVector(currentSoldierPosition);
+        let soldierToFlagDir = currentSoldierPos.Subtract(currentFlagPos);
+        let soldierToFlagDirScaled = soldierToFlagDir.MultiplyScalar(0.85);
+        let flagPositionScaled = currentFlagPos.Add(soldierToFlagDirScaled);
+        this.followPoints.push(flagPositionScaled.ToVector());
+
+        // Keep buffer within max sample size
+        if (this.followPoints.length > FLAG_FOLLOW_SAMPLES) {
+            this.followPoints.shift(); // Remove oldest to maintain size
+        }
+
+        // Process buffer when we have minimum required points
+        if (this.followPoints.length >= FLAG_FOLLOW_SAMPLES) {
+            // Always consume one position per frame to keep buffer flowing
+            let nextBufferPosition = this.followPoints.shift() ?? this.currentPosition;
+
+            // Check if this position would maintain proper distance from player
+            let distanceNextPosToPlayer = Math2.Vec3.FromVector(currentSoldierPosition).Subtract(Math2.Vec3.FromVector(nextBufferPosition)).Length();
+
+            // Use hysteresis to prevent oscillation: stricter threshold to stop, looser to continue
+            // This accounts for the dampening factor making positions closer to flag
+            let minDistanceToMove = FLAG_FOLLOW_DISTANCE * 0.7; // Lower threshold to allow movement
+
+            // Only move flag if position maintains safe distance
+            if (distanceNextPosToPlayer > minDistanceToMove) {
+                // Apply exponential smoothing to position
+                // smoothedPosition = alpha * newPosition + (1 - alpha) * previousSmoothedPosition
+                let targetPos = Math2.Vec3.FromVector(nextBufferPosition);
+                let currentSmoothedPos = Math2.Vec3.FromVector(this.smoothedPosition);
+                let smoothedPos = targetPos.MultiplyScalar(FLAG_FOLLOW_POSITION_SMOOTHING)
+                    .Add(currentSmoothedPos.MultiplyScalar(1 - FLAG_FOLLOW_POSITION_SMOOTHING));
+                
+                this.smoothedPosition = smoothedPos.ToVector();
+                this.currentPosition = this.smoothedPosition;
+
+                // Calculate direction to next point for rotation
+                let nextPosition = this.followPoints.length > 1 ? this.followPoints[0] : this.currentPosition;
+                let direction = Math2.Vec3.FromVector(nextPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).MultiplyScalar(-1);
+                let targetRotation = direction.Length() > 0.01 ? direction.DirectionToEuler() : new Math2.Vec3(0, 0, 0);
+                
+                // Apply exponential smoothing to rotation
+                // smoothedRotation = alpha * newRotation + (1 - alpha) * previousSmoothedRotation
+                let currentSmoothedRot = Math2.Vec3.FromVector(this.smoothedRotation);
+                let smoothedRot = targetRotation.MultiplyScalar(FLAG_FOLLOW_ROTATION_SMOOTHING)
+                    .Add(currentSmoothedRot.MultiplyScalar(1 - FLAG_FOLLOW_ROTATION_SMOOTHING));
+                
+                this.smoothedRotation = smoothedRot.ToVector();
+
+                if (this.flagProp) {
+                    mod.SetObjectTransform(this.flagProp, mod.CreateTransform(this.smoothedPosition, this.smoothedRotation));
+
+                    if (this.dragSFX) {
+                        mod.PlaySound(this.dragSFX, 1);
+                    }
+                }
+            }
+            // If position is too close, we consumed it but didn't move - flag stays at currentPosition
+        }
     }
 
     UpdateCarrierIcon(){

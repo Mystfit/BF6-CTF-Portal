@@ -84,6 +84,8 @@ const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop repr
 const FLAG_THROW_SPEED = 6;                                         // Speed in units p/s to throw a flag away a player
 const FLAG_FOLLOW_MODE = true;
 const FLAG_FOLLOW_DISTANCE = 3;
+const FLAG_FOLLOW_POSITION_SMOOTHING = 0.5;                        // Exponential smoothing factor for position (0-1, lower = smoother)
+const FLAG_FOLLOW_ROTATION_SMOOTHING = 0.5;                         // Exponential smoothing factor for rotation (0-1, lower = smoother)
 
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up

@@ -84,6 +84,10 @@ const FLAG_SFX_DURATION = 5.0;                                      // Time dela
 const FLAG_ICON_HEIGHT_OFFSET = 2.5;                                // Height that the flag icon should be placed above a flag
 const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
 const FLAG_THROW_SPEED = 6;                                         // Speed in units p/s to throw a flag away a player
+const FLAG_FOLLOW_MODE = true;
+const FLAG_FOLLOW_DISTANCE = 3;
+const FLAG_FOLLOW_POSITION_SMOOTHING = 0.5;                        // Exponential smoothing factor for position (0-1, lower = smoother)
+const FLAG_FOLLOW_ROTATION_SMOOTHING = 0.5;                         // Exponential smoothing factor for rotation (0-1, lower = smoother)
 
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up
@@ -109,6 +113,7 @@ const FLAG_COLLISION_RADIUS_OFFSET = 1;                             // Safety ra
 const FLAG_DROP_RAYCAST_DISTANCE = 100;                             // Maximum distance for downward raycast when dropping
 const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
 const FLAG_ENABLE_ARC_THROW = true;                                 // Enable flag throwing
+const FLAG_FOLLOW_SAMPLES = 20;
 const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
 const SOLDIER_HEIGHT = 2;                                           // Full soldier height
@@ -379,7 +384,7 @@ export function OnPlayerDied(
     // If player was carrying a flag, drop it
     mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
     
-        // Increment flag carrier kill score
+    // Increment flag carrier kill score
     let killer = JSPlayer.get(eventOtherPlayer);
     if(killer && IsCarryingAnyFlag(eventPlayer))
         killer.score.flag_carrier_kills += 1;
@@ -552,6 +557,13 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
     const scoringTeamFlag = flags.get(scoringTeamId);
     if (scoringTeamFlag) {
         CaptureFeedback(scoringTeamFlag.homePosition);
+
+        // Play SFX
+        // Play pickup SFX
+        let captureSfxOwner: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_EnemyCapturedCache_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
+        mod.PlaySound(captureSfxOwner, 1, scoringTeamFlag.team);
+        let captureSfxCapturer: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_FriendlyCapturedCache_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
+        mod.PlaySound(captureSfxCapturer, 1, mod.GetTeam(scoringTeamId)); 
         
         // Play audio
         let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
@@ -683,12 +695,16 @@ export function GetPlayersInTeam(team: mod.Team) {
 // Godot flag IDs
 // --------------
 
-function CaptureFeedback(pos: mod.Vector): void {
+async function CaptureFeedback(pos: mod.Vector): Promise<void> {
     let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
     mod.EnableVFX(vfx, true);
-    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
-    // mod.EnableSFX(sfx, true);
-    mod.PlaySound(sfx, 1);
+    // let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
+    // mod.PlaySound(sfx, 1);
+
+    // Cleanup
+    mod.Wait(5);
+    // mod.UnspawnObject(sfx);
+    mod.UnspawnObject(vfx);
 }
 
 
@@ -778,6 +794,81 @@ export namespace Math2 {
         Add(other:Vec3): Vec3 {
             return new Vec3(this.x + other.x, this.y + other.y, this.z + other.z);
         }
+
+        /**
+         * Calculates the length of this vector
+         * @returns The magnitude/length of the vector
+         */
+        Length(): number {
+            return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+        }
+
+        /**
+         * Normalizes this vector (returns a unit vector in the same direction)
+         * @returns A normalized copy of this vector, or zero vector if length is 0
+         */
+        Normalize(): Vec3 {
+            const len = this.Length();
+            if (len < 1e-9) {
+                return new Vec3(0, 0, 0);
+            }
+            return new Vec3(this.x / len, this.y / len, this.z / len);
+        }
+
+        /**
+         * Converts a directional vector to Euler angles in radians for use with mod.CreateTransform().
+         * Uses the Battlefield Portal coordinate system:
+         * - X-axis: left (-1, 0, 0) to right (1, 0, 0)
+         * - Y-axis: down (0, -1, 0) to up (0, 1, 0)
+         * - Z-axis: forward (0, 0, -1) to backward (0, 0, 1)
+         * 
+         * Returns Vec3 where each component represents rotation around that axis:
+         * - x = rotation around X-axis (pitch - vertical tilt)
+         * - y = rotation around Y-axis (yaw - horizontal rotation)
+         * - z = rotation around Z-axis (roll - barrel roll, set to 0 as direction alone can't determine this)
+         * 
+         * Handles gimbal lock cases (when pointing straight up/down)
+         * 
+         * @returns Vec3 containing rotations around (X, Y, Z) axes in radians
+         */
+        DirectionToEuler(): Vec3 {
+            // Normalize the direction vector to ensure consistent results
+            const normalized = this.Normalize();
+            
+            // Handle zero vector case
+            if (normalized.Length() < 1e-9) {
+                return new Vec3(0, 0, 0);
+            }
+
+            const x = normalized.x;
+            const y = normalized.y;
+            const z = normalized.z;
+
+            // Calculate yaw (rotation around Y-axis in horizontal plane)
+            // Since forward is (0, 0, -1), we use atan2(-x, -z)
+            // Negated to match the rotation direction expected by the engine
+            const yaw = Math.atan2(-x, -z);
+
+            // Calculate pitch (rotation around X-axis for vertical tilt)
+            // Use atan2 for better handling of edge cases
+            // Horizontal length in the XZ plane
+            // Negated to match the rotation direction expected by the engine
+            const horizontalLength = Math.sqrt(x * x + z * z);
+            const pitch = Math.atan2(y, horizontalLength);
+
+            // Roll cannot be determined from direction vector alone
+            // (it would require an "up" vector to fully define orientation)
+            // Set to 0 as a sensible default
+            const roll = 0;
+
+            // Return in the format expected by CreateTransform: (pitch, yaw, roll)
+            // which corresponds to rotations around (X-axis, Y-axis, Z-axis)
+            return new Vec3(pitch, yaw, roll);
+        }
+
+        ToString(): string {
+            return `X:${this.x}, Y:${this.y}, Z:${this.z}`;
+        }
     }
 }
 
@@ -836,7 +927,7 @@ function VectorToString(v: mod.Vector): string {
 }
 
 function VectorLength(vec: mod.Vector): number{
-    return Math.abs(Math.sqrt(VectorLengthSquared(vec)));
+    return Math.sqrt(VectorLengthSquared(vec));
 }
 
 function VectorLengthSquared(vec: mod.Vector): number{
@@ -2462,11 +2553,18 @@ class Flag {
     readonly allowedCapturingTeams: number[];
     customColor?: mod.Vector;
     
-    // Legacy properties (kept for backwards compatibility during transition)
     readonly team: mod.Team;
     readonly teamId: number;
     readonly homePosition: mod.Vector;
+
+    // Flag position
     currentPosition: mod.Vector;
+    followPoints: mod.Vector[];
+    followDelay: number;   // Number of points to cache for flag to follow
+    
+    // Smoothed values for exponential averaging
+    smoothedPosition: mod.Vector;
+    smoothedRotation: mod.Vector;
     
     // State
     isAtHome: boolean = true;
@@ -2489,6 +2587,7 @@ class Flag {
     flagProp: mod.Object | null = null;
     flagHomeVFX: mod.VFX;
     alarmSFX : mod.SFX | null = null;
+    dragSFX: mod.SFX | null = null;
     
     constructor(
         team: mod.Team, 
@@ -2505,10 +2604,15 @@ class Flag {
         this.customColor = customColor;
         this.homePosition = homePosition;
         this.currentPosition = homePosition;
+        this.smoothedPosition = homePosition;
+        this.smoothedRotation = ZERO_VEC;
+        this.followPoints = [];
+        this.followDelay = 10;
         this.flagInteractionPoint = null;
         this.flagRecoverIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, ZERO_VEC, ZERO_VEC);
         this.flagProp = null;
         this.flagHomeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
+        this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
         this.Initialize();
     }
     
@@ -2617,15 +2721,23 @@ class Flag {
         this.PlayFlagTakenVO();
 
         // Play pickup SFX
-        let pickupSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureStartedByFriendly_OneShot2D, this.homePosition, ZERO_VEC);
-        // mod.EnableSFX(pickupSfx, true);
-        mod.PlaySound(pickupSfx, 1);
+        let pickupSfxOwner: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_EnemyPickedUpCache_OneShot2D, this.homePosition, ZERO_VEC);
+        mod.PlaySound(pickupSfxOwner, 1, this.team);
+        for(let teamID of GetOpposingTeamsForFlag(this)){
+            let pickupSfxCapturer: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_FriendlyCapturedCache_OneShot2D, this.homePosition, ZERO_VEC);
+            mod.PlaySound(pickupSfxCapturer, 1, mod.GetTeam(teamID));
+        }
 
         // Remove flag prop
-        if (this.flagProp) {
-            mod.UnspawnObject(this.flagProp);
-            this.flagProp = null;
+        if(!FLAG_FOLLOW_MODE){
+            if (this.flagProp) {
+                mod.UnspawnObject(this.flagProp);
+                this.flagProp = null;
+            }
         }
+
+        // Make sure to clear follow buffer so we get new points
+        this.followPoints = [];
 
         // Flag carriers need updated weapons
         this.RestrictCarrierWeapons(player);
@@ -2699,20 +2811,25 @@ class Flag {
         }
         
         // Remove old flag if it exists - it shouldn't but lets make sure
-        try{
-            if (this.flagProp)
-                mod.UnspawnObject(this.flagProp);
-        } catch(error: unknown){
-            console.log("Couldn't unspawn flag prop");
+        if(!FLAG_FOLLOW_MODE){
+            try{
+                if (this.flagProp)
+                    mod.UnspawnObject(this.flagProp);
+            } catch(error: unknown){
+                console.log("Couldn't unspawn flag prop");
+            }
         }
-
+       
         // Flag rotation based on facing direction
         // TODO: replace with facing angle and hit normal
         let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
         
         // Initially spawn flag at carrier position - it will be moved by animation
         let initialPosition = position;
-        this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
+        
+        if(!FLAG_FOLLOW_MODE){
+            this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
+        }
 
         if(DEBUG_MODE) console.log("this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);");
         
@@ -2729,7 +2846,7 @@ class Flag {
         this.carrierPlayer = null;
 
         // Animate flag with concurrent raycast generation
-        if(this.flagProp && useProjectileThrow) {
+        if(this.flagProp && useProjectileThrow && !FLAG_FOLLOW_MODE) {
             if(DEBUG_MODE) console.log("Starting concurrent flag animation");
             
             // Create the generator for projectile path with validation callback
@@ -2828,9 +2945,12 @@ class Flag {
         mod.SetVFXColor(this.flagHomeVFX, GetTeamDroppedColor(this.team));
 
         // Play drop SFX
-        let dropSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_CaptureNeutralize_OneShot2D, this.currentPosition, ZERO_VEC);
-        // mod.EnableSFX(dropSfx, true);
-        mod.PlaySound(dropSfx, 1);
+        let dropSfxOwner: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheStart_OneShot2D, this.homePosition, ZERO_VEC);
+        mod.PlaySound(dropSfxOwner, 1, this.team);
+        // for(let teamID of GetOpposingTeamsForFlag(this)){
+        //     let dropSfxCapturer: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_FriendlyCapturedCache_OneShot2D, this.homePosition, ZERO_VEC);
+        //     mod.PlaySound(dropSfxCapturer, 1, mod.GetTeam(teamID));
+        // }
 
         // Play drop VO
         let friendlyVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
@@ -2946,15 +3066,24 @@ class Flag {
         }
         
         // Get the soldier position for attaching effects
-        this.currentPosition = mod.GetSoldierState(
+        let currentSoldierPosition = mod.GetSoldierState(
             this.carrierPlayer, 
             mod.SoldierStateVector.GetPosition);
         let currentRotation = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
         let currentVelocity = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetLinearVelocity);
+        let soldierInAir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsInAir);
+        let soldierInVehicle = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsInVehicle);
+
         // Update jsPlayer velocity
         let jsPlayer = JSPlayer.get(this.carrierPlayer);
         if(jsPlayer){
             jsPlayer.velocity = currentVelocity
+        }
+
+        if(FLAG_FOLLOW_MODE){
+            this.FollowPlayer(currentSoldierPosition);
+        } else {
+            this.currentPosition = currentSoldierPosition;
         }
         
         // Make smoke effect follow carrier
@@ -2965,6 +3094,71 @@ class Flag {
 
         // Force disable carrier weapons
         this.CheckCarrierDroppedFlag(this.carrierPlayer);
+    }
+
+    FollowPlayer(currentSoldierPosition: mod.Vector) {
+        let distanceToPlayer = Math2.Vec3.FromVector(currentSoldierPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).Length();
+
+        // Always add player position to buffer to maintain continuous path
+        let currentFlagPos = Math2.Vec3.FromVector(this.currentPosition);
+        let currentSoldierPos = Math2.Vec3.FromVector(currentSoldierPosition);
+        let soldierToFlagDir = currentSoldierPos.Subtract(currentFlagPos);
+        let soldierToFlagDirScaled = soldierToFlagDir.MultiplyScalar(0.85);
+        let flagPositionScaled = currentFlagPos.Add(soldierToFlagDirScaled);
+        this.followPoints.push(flagPositionScaled.ToVector());
+
+        // Keep buffer within max sample size
+        if (this.followPoints.length > FLAG_FOLLOW_SAMPLES) {
+            this.followPoints.shift(); // Remove oldest to maintain size
+        }
+
+        // Process buffer when we have minimum required points
+        if (this.followPoints.length >= FLAG_FOLLOW_SAMPLES) {
+            // Always consume one position per frame to keep buffer flowing
+            let nextBufferPosition = this.followPoints.shift() ?? this.currentPosition;
+
+            // Check if this position would maintain proper distance from player
+            let distanceNextPosToPlayer = Math2.Vec3.FromVector(currentSoldierPosition).Subtract(Math2.Vec3.FromVector(nextBufferPosition)).Length();
+
+            // Use hysteresis to prevent oscillation: stricter threshold to stop, looser to continue
+            // This accounts for the dampening factor making positions closer to flag
+            let minDistanceToMove = FLAG_FOLLOW_DISTANCE * 0.7; // Lower threshold to allow movement
+
+            // Only move flag if position maintains safe distance
+            if (distanceNextPosToPlayer > minDistanceToMove) {
+                // Apply exponential smoothing to position
+                // smoothedPosition = alpha * newPosition + (1 - alpha) * previousSmoothedPosition
+                let targetPos = Math2.Vec3.FromVector(nextBufferPosition);
+                let currentSmoothedPos = Math2.Vec3.FromVector(this.smoothedPosition);
+                let smoothedPos = targetPos.MultiplyScalar(FLAG_FOLLOW_POSITION_SMOOTHING)
+                    .Add(currentSmoothedPos.MultiplyScalar(1 - FLAG_FOLLOW_POSITION_SMOOTHING));
+                
+                this.smoothedPosition = smoothedPos.ToVector();
+                this.currentPosition = this.smoothedPosition;
+
+                // Calculate direction to next point for rotation
+                let nextPosition = this.followPoints.length > 1 ? this.followPoints[0] : this.currentPosition;
+                let direction = Math2.Vec3.FromVector(nextPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).MultiplyScalar(-1);
+                let targetRotation = direction.Length() > 0.01 ? direction.DirectionToEuler() : new Math2.Vec3(0, 0, 0);
+                
+                // Apply exponential smoothing to rotation
+                // smoothedRotation = alpha * newRotation + (1 - alpha) * previousSmoothedRotation
+                let currentSmoothedRot = Math2.Vec3.FromVector(this.smoothedRotation);
+                let smoothedRot = targetRotation.MultiplyScalar(FLAG_FOLLOW_ROTATION_SMOOTHING)
+                    .Add(currentSmoothedRot.MultiplyScalar(1 - FLAG_FOLLOW_ROTATION_SMOOTHING));
+                
+                this.smoothedRotation = smoothedRot.ToVector();
+
+                if (this.flagProp) {
+                    mod.SetObjectTransform(this.flagProp, mod.CreateTransform(this.smoothedPosition, this.smoothedRotation));
+
+                    if (this.dragSFX) {
+                        mod.PlaySound(this.dragSFX, 1);
+                    }
+                }
+            }
+            // If position is too close, we consumed it but didn't move - flag stays at currentPosition
+        }
     }
 
     UpdateCarrierIcon(){
@@ -3696,7 +3890,7 @@ class ScoreTicker extends TickerWidget {
             if(leadingTeams.length === 1 && leadingTeams.includes(this.teamId)){
                 this.setLeading(true);
             } else {
-                this.setLeading(false);
+                this.setLeading(true);
             }
         }
     }
@@ -3993,6 +4187,7 @@ class FlagBar {
             size: mod.CreateVector(this.flagIconSize[0], this.flagIconSize[1], 0),
             anchor: mod.UIAnchor.Center,
             parent: this.rootContainer,
+            bgFill: mod.UIBgFill.Solid,
             fillColor: teamColor,
             fillAlpha: 1,
             outlineColor: teamColor,
@@ -4051,15 +4246,15 @@ class FlagBar {
         flagState.targetProgress = this.calculateFlagProgress(flag, captureZonePosition);
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Team ${flag.teamId} flag state: isAtHome=${flag.isAtHome}, isCarried=${flag.isBeingCarried}, isDropped=${flag.isDropped}`);
-            console.log(`[FlagBar] Team ${flag.teamId} targetProgress: ${flagState.targetProgress.toFixed(3)}`);
+            //console.log(`[FlagBar] Team ${flag.teamId} flag state: isAtHome=${flag.isAtHome}, isCarried=${flag.isBeingCarried}, isDropped=${flag.isDropped}`);
+            //console.log(`[FlagBar] Team ${flag.teamId} targetProgress: ${flagState.targetProgress.toFixed(3)}`);
         }
         
         // Apply smooth damping
         this.smoothDampProgress(flagState, deltaTime);
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Team ${flag.teamId} currentProgress after damping: ${flagState.currentProgress.toFixed(3)}`);
+            //console.log(`[FlagBar] Team ${flag.teamId} currentProgress after damping: ${flagState.currentProgress.toFixed(3)}`);
         }
         
         // Update flag icon position
@@ -4068,11 +4263,11 @@ class FlagBar {
         // Update flag icon visibility based on flag state
         // FIXED: Show flag when NOT dropped (was reversed)
         if (flag.isDropped) {
-            if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
+            //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
             flagIcon.SetFillAlpha(0.15);
             flagIcon.SetOutlineAlpha(0.75);           
         } else {
-            if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
+            //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
             flagIcon.SetFillAlpha(1);
             flagIcon.SetOutlineAlpha(1);
         }
@@ -4083,7 +4278,7 @@ class FlagBar {
         opposingBar.setProgressValue(barProgress);
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Team ${flag.teamId} opposing bar progress: ${barProgress.toFixed(3)}`);
+            //console.log(`[FlagBar] Team ${flag.teamId} opposing bar progress: ${barProgress.toFixed(3)}`);
         }
     }
     
@@ -4093,7 +4288,7 @@ class FlagBar {
      */
     private calculateFlagProgress(flag: Flag, captureZonePosition: mod.Vector): number {
         if (flag.isAtHome) {
-            if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} is at home, progress = 0.0`);
+            //if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} is at home, progress = 0.0`);
             return 0.0;
         }
         
@@ -4101,9 +4296,9 @@ class FlagBar {
         const currentPos = flag.currentPosition;
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Flag ${flag.teamId} homePos: ${VectorToString(homePos)}`);
-            console.log(`[FlagBar] Flag ${flag.teamId} currentPos: ${VectorToString(currentPos)}`);
-            console.log(`[FlagBar] Flag ${flag.teamId} captureZonePos: ${VectorToString(captureZonePosition)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} homePos: ${VectorToString(homePos)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} currentPos: ${VectorToString(currentPos)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} captureZonePos: ${VectorToString(captureZonePosition)}`);
         }
         
         // Vector from home to capture zone (the direction we want to measure progress along)
@@ -4123,7 +4318,7 @@ class FlagBar {
         
         if (totalDistance < 0.01) {
             // Capture zone is at the same position as home (edge case)
-            if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} capture zone at home position, progress = 0.0`);
+            //if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} capture zone at home position, progress = 0.0`);
             return 0.0;
         }
         
@@ -4136,9 +4331,9 @@ class FlagBar {
         const projectedDistance = dotProduct / totalDistance;
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Flag ${flag.teamId} totalDistance: ${totalDistance.toFixed(2)}`);
-            console.log(`[FlagBar] Flag ${flag.teamId} dotProduct: ${dotProduct.toFixed(2)}`);
-            console.log(`[FlagBar] Flag ${flag.teamId} projectedDistance: ${projectedDistance.toFixed(2)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} totalDistance: ${totalDistance.toFixed(2)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} dotProduct: ${dotProduct.toFixed(2)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} projectedDistance: ${projectedDistance.toFixed(2)}`);
         }
         
         // Normalize progress to [0, 1] range
@@ -4147,7 +4342,7 @@ class FlagBar {
         const progress = Math.max(0.0, Math.min(1.0, projectedDistance / totalDistance));
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Flag ${flag.teamId} calculated progress: ${progress.toFixed(3)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} calculated progress: ${progress.toFixed(3)}`);
         }
         
         return progress;
@@ -4204,8 +4399,8 @@ class FlagBar {
         const yPos = 0;
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] ${isLeftTeam ? 'Left' : 'Right'} team flag position: x=${xPos.toFixed(2)}, y=${yPos}, progress=${progress.toFixed(3)}`);
-            console.log(`[FlagBar] Bar dimensions: halfBarWidth=${this.halfBarWidth.toFixed(2)}, barWidth=${this.barWidth.toFixed(2)}`);
+            //console.log(`[FlagBar] ${isLeftTeam ? 'Left' : 'Right'} team flag position: x=${xPos.toFixed(2)}, y=${yPos}, progress=${progress.toFixed(3)}`);
+            //console.log(`[FlagBar] Bar dimensions: halfBarWidth=${this.halfBarWidth.toFixed(2)}, barWidth=${this.barWidth.toFixed(2)}`);
         }
         
         flagIcon.SetPosition(mod.CreateVector(xPos, yPos, 0));
@@ -4504,7 +4699,7 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
     // Team scores
     teamScoreTickers: Map<number, ScoreTicker> = new Map<number, ScoreTicker>();
     teamScoreSpacing: number = 490;
-    teamScorePaddingTop: number = 60;
+    teamScorePaddingTop: number = 64;
     teamWidgetSize: number[] = [76, 30];
 
     // Round timer
@@ -4699,7 +4894,7 @@ class FlagIcon {
         
         // Set initial visibility
         this.SetFillVisible(this.params.showFill ?? true);
-        this.SetOutlineVisible(this.params.showOutline ?? false);
+        this.SetOutlineVisible(this.params.showOutline ?? true);
     }
     
     private createRootContainer(): mod.UIWidget {

@@ -80,6 +80,8 @@ declare const TEAM_BALANCE_CHECK_INTERVAL: number;
 declare const FLAG_DROP_DISTANCE: number;
 declare const FLAG_FOLLOW_MODE: boolean;
 declare const FLAG_FOLLOW_DISTANCE: number;
+declare const FLAG_FOLLOW_POSITION_SMOOTHING: number;
+declare const FLAG_FOLLOW_ROTATION_SMOOTHING: number;
 declare const FLAG_INTERACTION_HEIGHT_OFFSET: number;
 declare const FLAG_SPAWN_HEIGHT_OFFSET: number;
 declare const FLAG_COLLISION_RADIUS: number;
@@ -257,6 +259,8 @@ declare class Flag {
     currentPosition: mod.Vector;
     followPoints: mod.Vector[];
     followDelay: number;   // Number of points to cache for flag to follow
+    smoothedPosition: mod.Vector;
+    smoothedRotation: mod.Vector;
     isAtHome: boolean;
     isBeingCarried: boolean;
     isDropped: boolean;
@@ -287,6 +291,7 @@ declare class Flag {
     SlowUpdate(timeDelta: number): void;
     FastUpdate(timeDelta: number): void;
     UpdateCarrier(timeDelta: number): void;
+    FollowPlayer(currentSoldierPosition: mod.Vector): void;
     UpdateCarrierIcon(): void;
     RestrictCarrierWeapons(player: mod.Player): void;
     CheckCarrierDroppedFlag(player: mod.Player): void;
