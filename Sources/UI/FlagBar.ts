@@ -200,15 +200,15 @@ class FlagBar {
         flagState.targetProgress = this.calculateFlagProgress(flag, captureZonePosition);
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Team ${flag.teamId} flag state: isAtHome=${flag.isAtHome}, isCarried=${flag.isBeingCarried}, isDropped=${flag.isDropped}`);
-            console.log(`[FlagBar] Team ${flag.teamId} targetProgress: ${flagState.targetProgress.toFixed(3)}`);
+            //console.log(`[FlagBar] Team ${flag.teamId} flag state: isAtHome=${flag.isAtHome}, isCarried=${flag.isBeingCarried}, isDropped=${flag.isDropped}`);
+            //console.log(`[FlagBar] Team ${flag.teamId} targetProgress: ${flagState.targetProgress.toFixed(3)}`);
         }
         
         // Apply smooth damping
         this.smoothDampProgress(flagState, deltaTime);
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Team ${flag.teamId} currentProgress after damping: ${flagState.currentProgress.toFixed(3)}`);
+            //console.log(`[FlagBar] Team ${flag.teamId} currentProgress after damping: ${flagState.currentProgress.toFixed(3)}`);
         }
         
         // Update flag icon position
@@ -217,11 +217,11 @@ class FlagBar {
         // Update flag icon visibility based on flag state
         // FIXED: Show flag when NOT dropped (was reversed)
         if (flag.isDropped) {
-            if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
+            //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
             flagIcon.SetFillAlpha(0.15);
             flagIcon.SetOutlineAlpha(0.75);           
         } else {
-            if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
+            //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
             flagIcon.SetFillAlpha(1);
             flagIcon.SetOutlineAlpha(1);
         }
@@ -232,7 +232,7 @@ class FlagBar {
         opposingBar.setProgressValue(barProgress);
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Team ${flag.teamId} opposing bar progress: ${barProgress.toFixed(3)}`);
+            //console.log(`[FlagBar] Team ${flag.teamId} opposing bar progress: ${barProgress.toFixed(3)}`);
         }
     }
     
@@ -242,7 +242,7 @@ class FlagBar {
      */
     private calculateFlagProgress(flag: Flag, captureZonePosition: mod.Vector): number {
         if (flag.isAtHome) {
-            if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} is at home, progress = 0.0`);
+            //if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} is at home, progress = 0.0`);
             return 0.0;
         }
         
@@ -250,9 +250,9 @@ class FlagBar {
         const currentPos = flag.currentPosition;
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Flag ${flag.teamId} homePos: ${VectorToString(homePos)}`);
-            console.log(`[FlagBar] Flag ${flag.teamId} currentPos: ${VectorToString(currentPos)}`);
-            console.log(`[FlagBar] Flag ${flag.teamId} captureZonePos: ${VectorToString(captureZonePosition)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} homePos: ${VectorToString(homePos)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} currentPos: ${VectorToString(currentPos)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} captureZonePos: ${VectorToString(captureZonePosition)}`);
         }
         
         // Vector from home to capture zone (the direction we want to measure progress along)
@@ -272,7 +272,7 @@ class FlagBar {
         
         if (totalDistance < 0.01) {
             // Capture zone is at the same position as home (edge case)
-            if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} capture zone at home position, progress = 0.0`);
+            //if (DEBUG_MODE) console.log(`[FlagBar] Flag ${flag.teamId} capture zone at home position, progress = 0.0`);
             return 0.0;
         }
         
@@ -285,9 +285,9 @@ class FlagBar {
         const projectedDistance = dotProduct / totalDistance;
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Flag ${flag.teamId} totalDistance: ${totalDistance.toFixed(2)}`);
-            console.log(`[FlagBar] Flag ${flag.teamId} dotProduct: ${dotProduct.toFixed(2)}`);
-            console.log(`[FlagBar] Flag ${flag.teamId} projectedDistance: ${projectedDistance.toFixed(2)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} totalDistance: ${totalDistance.toFixed(2)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} dotProduct: ${dotProduct.toFixed(2)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} projectedDistance: ${projectedDistance.toFixed(2)}`);
         }
         
         // Normalize progress to [0, 1] range
@@ -296,7 +296,7 @@ class FlagBar {
         const progress = Math.max(0.0, Math.min(1.0, projectedDistance / totalDistance));
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] Flag ${flag.teamId} calculated progress: ${progress.toFixed(3)}`);
+            //console.log(`[FlagBar] Flag ${flag.teamId} calculated progress: ${progress.toFixed(3)}`);
         }
         
         return progress;
@@ -353,8 +353,8 @@ class FlagBar {
         const yPos = 0;
         
         if (DEBUG_MODE) {
-            console.log(`[FlagBar] ${isLeftTeam ? 'Left' : 'Right'} team flag position: x=${xPos.toFixed(2)}, y=${yPos}, progress=${progress.toFixed(3)}`);
-            console.log(`[FlagBar] Bar dimensions: halfBarWidth=${this.halfBarWidth.toFixed(2)}, barWidth=${this.barWidth.toFixed(2)}`);
+            //console.log(`[FlagBar] ${isLeftTeam ? 'Left' : 'Right'} team flag position: x=${xPos.toFixed(2)}, y=${yPos}, progress=${progress.toFixed(3)}`);
+            //console.log(`[FlagBar] Bar dimensions: halfBarWidth=${this.halfBarWidth.toFixed(2)}, barWidth=${this.barWidth.toFixed(2)}`);
         }
         
         flagIcon.SetPosition(mod.CreateVector(xPos, yPos, 0));

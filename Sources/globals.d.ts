@@ -78,6 +78,8 @@ declare const TEAM_AUTO_BALANCE: boolean;
 declare const TEAM_BALANCE_DELAY: number;
 declare const TEAM_BALANCE_CHECK_INTERVAL: number;
 declare const FLAG_DROP_DISTANCE: number;
+declare const FLAG_FOLLOW_MODE: boolean;
+declare const FLAG_FOLLOW_DISTANCE: number;
 declare const FLAG_INTERACTION_HEIGHT_OFFSET: number;
 declare const FLAG_SPAWN_HEIGHT_OFFSET: number;
 declare const FLAG_COLLISION_RADIUS: number;
@@ -85,6 +87,7 @@ declare const FLAG_COLLISION_RADIUS_OFFSET: number;
 declare const FLAG_DROP_RAYCAST_DISTANCE: number;
 declare const FLAG_DROP_RING_RADIUS: number;
 declare const FLAG_ENABLE_ARC_THROW: boolean;
+declare const FLAG_FOLLOW_SAMPLES: number;
 declare const FLAG_TERRAIN_RAYCAST_SUPPORT: boolean;
 declare const SOLDIER_HALF_HEIGHT: number;
 declare const SOLDIER_HEIGHT: number;
@@ -252,6 +255,8 @@ declare class Flag {
     readonly teamId: number;
     readonly homePosition: mod.Vector;
     currentPosition: mod.Vector;
+    followPoints: mod.Vector[];
+    followDelay: number;   // Number of points to cache for flag to follow
     isAtHome: boolean;
     isBeingCarried: boolean;
     isDropped: boolean;
@@ -266,7 +271,8 @@ declare class Flag {
     flagProp: mod.Object | null;
     flagHomeVFX: mod.VFX;
     alarmSFX: mod.SFX | null;
-    
+    dragSFX: mod.SFX | null;
+
     constructor(team: mod.Team, homePosition: mod.Vector, flagId?: number, allowedCapturingTeams?: number[], customColor?: mod.Vector);
     Initialize(): void;
     SpawnFlagAtHome(): void;
@@ -535,6 +541,10 @@ declare namespace Math2 {
         Multiply(other: Vec3): Vec3;
         MultiplyScalar(scalar: number): Vec3;
         Add(other: Vec3): Vec3;
+        Length(): number;
+        Normalize(): number;
+        DirectionToEuler(): Vec3;
+        ToString(): string;
     }
 }
 

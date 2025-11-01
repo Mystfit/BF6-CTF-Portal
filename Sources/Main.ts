@@ -82,6 +82,8 @@ const FLAG_SFX_DURATION = 5.0;                                      // Time dela
 const FLAG_ICON_HEIGHT_OFFSET = 2.5;                                // Height that the flag icon should be placed above a flag
 const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
 const FLAG_THROW_SPEED = 6;                                         // Speed in units p/s to throw a flag away a player
+const FLAG_FOLLOW_MODE = true;
+const FLAG_FOLLOW_DISTANCE = 3;
 
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up
@@ -107,6 +109,7 @@ const FLAG_COLLISION_RADIUS_OFFSET = 1;                             // Safety ra
 const FLAG_DROP_RAYCAST_DISTANCE = 100;                             // Maximum distance for downward raycast when dropping
 const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
 const FLAG_ENABLE_ARC_THROW = true;                                 // Enable flag throwing
+const FLAG_FOLLOW_SAMPLES = 20;
 const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
 const SOLDIER_HEIGHT = 2;                                           // Full soldier height
@@ -377,7 +380,7 @@ export function OnPlayerDied(
     // If player was carrying a flag, drop it
     mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
     
-        // Increment flag carrier kill score
+    // Increment flag carrier kill score
     let killer = JSPlayer.get(eventOtherPlayer);
     if(killer && IsCarryingAnyFlag(eventPlayer))
         killer.score.flag_carrier_kills += 1;
@@ -550,6 +553,13 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
     const scoringTeamFlag = flags.get(scoringTeamId);
     if (scoringTeamFlag) {
         CaptureFeedback(scoringTeamFlag.homePosition);
+
+        // Play SFX
+        // Play pickup SFX
+        let captureSfxOwner: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_EnemyCapturedCache_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
+        mod.PlaySound(captureSfxOwner, 1, scoringTeamFlag.team);
+        let captureSfxCapturer: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_FriendlyCapturedCache_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
+        mod.PlaySound(captureSfxCapturer, 1, mod.GetTeam(scoringTeamId)); 
         
         // Play audio
         let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
@@ -681,10 +691,14 @@ export function GetPlayersInTeam(team: mod.Team) {
 // Godot flag IDs
 // --------------
 
-function CaptureFeedback(pos: mod.Vector): void {
+async function CaptureFeedback(pos: mod.Vector): Promise<void> {
     let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
     mod.EnableVFX(vfx, true);
-    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
-    // mod.EnableSFX(sfx, true);
-    mod.PlaySound(sfx, 1);
+    // let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
+    // mod.PlaySound(sfx, 1);
+
+    // Cleanup
+    mod.Wait(5);
+    // mod.UnspawnObject(sfx);
+    mod.UnspawnObject(vfx);
 }

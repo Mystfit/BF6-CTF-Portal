@@ -37,6 +37,81 @@ export namespace Math2 {
         Add(other:Vec3): Vec3 {
             return new Vec3(this.x + other.x, this.y + other.y, this.z + other.z);
         }
+
+        /**
+         * Calculates the length of this vector
+         * @returns The magnitude/length of the vector
+         */
+        Length(): number {
+            return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+        }
+
+        /**
+         * Normalizes this vector (returns a unit vector in the same direction)
+         * @returns A normalized copy of this vector, or zero vector if length is 0
+         */
+        Normalize(): Vec3 {
+            const len = this.Length();
+            if (len < 1e-9) {
+                return new Vec3(0, 0, 0);
+            }
+            return new Vec3(this.x / len, this.y / len, this.z / len);
+        }
+
+        /**
+         * Converts a directional vector to Euler angles in radians for use with mod.CreateTransform().
+         * Uses the Battlefield Portal coordinate system:
+         * - X-axis: left (-1, 0, 0) to right (1, 0, 0)
+         * - Y-axis: down (0, -1, 0) to up (0, 1, 0)
+         * - Z-axis: forward (0, 0, -1) to backward (0, 0, 1)
+         * 
+         * Returns Vec3 where each component represents rotation around that axis:
+         * - x = rotation around X-axis (pitch - vertical tilt)
+         * - y = rotation around Y-axis (yaw - horizontal rotation)
+         * - z = rotation around Z-axis (roll - barrel roll, set to 0 as direction alone can't determine this)
+         * 
+         * Handles gimbal lock cases (when pointing straight up/down)
+         * 
+         * @returns Vec3 containing rotations around (X, Y, Z) axes in radians
+         */
+        DirectionToEuler(): Vec3 {
+            // Normalize the direction vector to ensure consistent results
+            const normalized = this.Normalize();
+            
+            // Handle zero vector case
+            if (normalized.Length() < 1e-9) {
+                return new Vec3(0, 0, 0);
+            }
+
+            const x = normalized.x;
+            const y = normalized.y;
+            const z = normalized.z;
+
+            // Calculate yaw (rotation around Y-axis in horizontal plane)
+            // Since forward is (0, 0, -1), we use atan2(-x, -z)
+            // Negated to match the rotation direction expected by the engine
+            const yaw = Math.atan2(-x, -z);
+
+            // Calculate pitch (rotation around X-axis for vertical tilt)
+            // Use atan2 for better handling of edge cases
+            // Horizontal length in the XZ plane
+            // Negated to match the rotation direction expected by the engine
+            const horizontalLength = Math.sqrt(x * x + z * z);
+            const pitch = Math.atan2(y, horizontalLength);
+
+            // Roll cannot be determined from direction vector alone
+            // (it would require an "up" vector to fully define orientation)
+            // Set to 0 as a sensible default
+            const roll = 0;
+
+            // Return in the format expected by CreateTransform: (pitch, yaw, roll)
+            // which corresponds to rotations around (X-axis, Y-axis, Z-axis)
+            return new Vec3(pitch, yaw, roll);
+        }
+
+        ToString(): string {
+            return `X:${this.x}, Y:${this.y}, Z:${this.z}`;
+        }
     }
 }
 

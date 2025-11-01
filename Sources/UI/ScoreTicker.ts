@@ -65,7 +65,7 @@ class ScoreTicker extends TickerWidget {
             if(leadingTeams.length === 1 && leadingTeams.includes(this.teamId)){
                 this.setLeading(true);
             } else {
-                this.setLeading(false);
+                this.setLeading(true);
             }
         }
     }
