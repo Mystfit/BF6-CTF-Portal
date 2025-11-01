@@ -43,6 +43,8 @@ class Flag {
     flagHomeVFX: mod.VFX;
     alarmSFX : mod.SFX | null = null;
     dragSFX: mod.SFX | null = null;
+    tetherFlagVFX: mod.VFX | null = null;
+    tetherPlayerVFX: mod.VFX | null = null;
     
     constructor(
         team: mod.Team, 
@@ -132,14 +134,14 @@ class Flag {
             mod.EnableWorldIconImage(carriedIcon, false);
             mod.SetWorldIconImage(carriedIcon, mod.WorldIconImages.Flag);
             mod.EnableWorldIconText(carriedIcon, false);
-            mod.SetWorldIconText(carriedIcon, mod.Message(mod.stringkeys.defend_flag_label));
+            mod.SetWorldIconText(carriedIcon, mod.Message(mod.stringkeys.pickup_flag_label));
         }
 
         // Update recover icon
         mod.SetWorldIconColor(this.flagRecoverIcon, GetTeamColor(this.team));
         mod.EnableWorldIconImage(this.flagRecoverIcon, false);
         mod.EnableWorldIconText(this.flagRecoverIcon, false);
-        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Alert);
+        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Flag);
         mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.recover_flag_label));
 
         // Update interaction point
@@ -189,6 +191,11 @@ class Flag {
                 mod.UnspawnObject(this.flagProp);
                 this.flagProp = null;
             }
+        } else {
+            this.tetherFlagVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_WireGuidedMissile_SpooledWire, this.currentPosition, ZERO_VEC) as mod.VFX;
+            this.tetherPlayerVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_WireGuidedMissile_SpooledWire, this.currentPosition, ZERO_VEC) as mod.VFX;
+            mod.EnableVFX(this.tetherFlagVFX, true);
+            mod.EnableVFX(this.tetherPlayerVFX, true);
         }
 
         // Make sure to clear follow buffer so we get new points
@@ -206,7 +213,7 @@ class Flag {
             mod.EnableWorldIconText(carriedIcon, true);
         }
         mod.EnableWorldIconImage(this.flagRecoverIcon, true);
-        mod.EnableWorldIconText(this.flagRecoverIcon, false);
+        mod.EnableWorldIconText(this.flagRecoverIcon, true);
 
         // Set VFX properties
         mod.SetVFXColor(this.flagHomeVFX, GetTeamColor(this.team));
@@ -272,6 +279,11 @@ class Flag {
                     mod.UnspawnObject(this.flagProp);
             } catch(error: unknown){
                 console.log("Couldn't unspawn flag prop");
+            }
+        } else {
+            if(this.tetherFlagVFX && this.tetherPlayerVFX){
+                mod.UnspawnObject(this.tetherFlagVFX);
+                mod.UnspawnObject(this.tetherPlayerVFX);
             }
         }
        
@@ -610,6 +622,15 @@ class Flag {
                     if (this.dragSFX) {
                         mod.PlaySound(this.dragSFX, 1);
                     }
+                }
+
+                if(this.tetherFlagVFX && this.tetherPlayerVFX){
+                    mod.MoveVFX(this.tetherFlagVFX, this.smoothedPosition, soldierToFlagDir.DirectionToEuler().ToVector());
+                    //mod.SetVFXScale(this.tetherFlagVFX, 2);
+
+                    let playerToFlagRot = smoothedPos.Subtract(currentSoldierPos).DirectionToEuler();
+                    mod.MoveVFX(this.tetherPlayerVFX, currentSoldierPosition, playerToFlagRot.ToVector());
+                    // mod.SetVFXScale(this.tetherPlayerVFX, 2);
                 }
             }
             // If position is too close, we consumed it but didn't move - flag stays at currentPosition

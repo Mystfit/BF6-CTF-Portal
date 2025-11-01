@@ -661,6 +661,10 @@ function GetTeamDroppedColor(team: mod.Team): mod.Vector {
     return GetTeamColorById(mod.GetObjId(team) );
 }
 
+function GetTeamColorLight(team: mod.Team): mod.Vector {
+    return mod.Add(GetTeamColor(team), mod.CreateVector(0.5, 0.5, 0.5));
+}
+
 export function GetPlayersInTeam(team: mod.Team) {
     const allPlayers = mod.AllPlayers();
     const n = mod.CountOf(allPlayers);
@@ -2571,6 +2575,8 @@ class Flag {
     flagHomeVFX: mod.VFX;
     alarmSFX : mod.SFX | null = null;
     dragSFX: mod.SFX | null = null;
+    tetherFlagVFX: mod.VFX | null = null;
+    tetherPlayerVFX: mod.VFX | null = null;
     
     constructor(
         team: mod.Team, 
@@ -2660,14 +2666,14 @@ class Flag {
             mod.EnableWorldIconImage(carriedIcon, false);
             mod.SetWorldIconImage(carriedIcon, mod.WorldIconImages.Flag);
             mod.EnableWorldIconText(carriedIcon, false);
-            mod.SetWorldIconText(carriedIcon, mod.Message(mod.stringkeys.defend_flag_label));
+            mod.SetWorldIconText(carriedIcon, mod.Message(mod.stringkeys.pickup_flag_label));
         }
 
         // Update recover icon
         mod.SetWorldIconColor(this.flagRecoverIcon, GetTeamColor(this.team));
         mod.EnableWorldIconImage(this.flagRecoverIcon, false);
         mod.EnableWorldIconText(this.flagRecoverIcon, false);
-        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Alert);
+        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Flag);
         mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.recover_flag_label));
 
         // Update interaction point
@@ -2717,6 +2723,11 @@ class Flag {
                 mod.UnspawnObject(this.flagProp);
                 this.flagProp = null;
             }
+        } else {
+            this.tetherFlagVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_WireGuidedMissile_SpooledWire, this.currentPosition, ZERO_VEC) as mod.VFX;
+            this.tetherPlayerVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_WireGuidedMissile_SpooledWire, this.currentPosition, ZERO_VEC) as mod.VFX;
+            mod.EnableVFX(this.tetherFlagVFX, true);
+            mod.EnableVFX(this.tetherPlayerVFX, true);
         }
 
         // Make sure to clear follow buffer so we get new points
@@ -2734,7 +2745,7 @@ class Flag {
             mod.EnableWorldIconText(carriedIcon, true);
         }
         mod.EnableWorldIconImage(this.flagRecoverIcon, true);
-        mod.EnableWorldIconText(this.flagRecoverIcon, false);
+        mod.EnableWorldIconText(this.flagRecoverIcon, true);
 
         // Set VFX properties
         mod.SetVFXColor(this.flagHomeVFX, GetTeamColor(this.team));
@@ -2800,6 +2811,11 @@ class Flag {
                     mod.UnspawnObject(this.flagProp);
             } catch(error: unknown){
                 console.log("Couldn't unspawn flag prop");
+            }
+        } else {
+            if(this.tetherFlagVFX && this.tetherPlayerVFX){
+                mod.UnspawnObject(this.tetherFlagVFX);
+                mod.UnspawnObject(this.tetherPlayerVFX);
             }
         }
        
@@ -3138,6 +3154,15 @@ class Flag {
                     if (this.dragSFX) {
                         mod.PlaySound(this.dragSFX, 1);
                     }
+                }
+
+                if(this.tetherFlagVFX && this.tetherPlayerVFX){
+                    mod.MoveVFX(this.tetherFlagVFX, this.smoothedPosition, soldierToFlagDir.DirectionToEuler().ToVector());
+                    //mod.SetVFXScale(this.tetherFlagVFX, 2);
+
+                    let playerToFlagRot = smoothedPos.Subtract(currentSoldierPos).DirectionToEuler();
+                    mod.MoveVFX(this.tetherPlayerVFX, currentSoldierPosition, playerToFlagRot.ToVector());
+                    // mod.SetVFXScale(this.tetherPlayerVFX, 2);
                 }
             }
             // If position is too close, we consumed it but didn't move - flag stays at currentPosition
@@ -3832,7 +3857,7 @@ class ScoreTicker extends TickerWidget {
         const teamId = mod.GetObjId(params.team);
         const teamColor = GetTeamColorById(teamId);
         const textColor = VectorClampToRange(
-            mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)), 
+            GetTeamColorLight(params.team), 
             0, 
             1
         );
@@ -4085,7 +4110,7 @@ class FlagBar {
         this.team2 = params.team2;
         this.team1Id = mod.GetObjId(this.team1);
         this.team2Id = mod.GetObjId(this.team2);
-        this.barSeperatorSize = this.params.barSeperatorPadding ?? 20;
+        this.barSeperatorSize = this.params.barSeperatorPadding ?? 24;
         this.barWidth = params.size[0] - this.barSeperatorSize;
         this.barHeight = params.barHeight ?? 16;
         this.halfBarWidth = this.barWidth / 2;
@@ -4142,7 +4167,7 @@ class FlagBar {
         }
 
         const textColor = VectorClampToRange(
-            mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)), 
+            GetTeamColorLight(team), 
             0, 
             1
         );
@@ -4171,9 +4196,10 @@ class FlagBar {
             anchor: mod.UIAnchor.Center,
             parent: this.rootContainer,
             bgFill: mod.UIBgFill.Solid,
-            fillColor: teamColor,
+            fillColor: mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)),
             fillAlpha: 1,
             outlineColor: teamColor,
+            outlineThickness: 1,
             showFill: true,
             showOutline: true,
             visible: true
@@ -4372,14 +4398,14 @@ class FlagBar {
         
         if (isLeftTeam) {
             // Left team flag moves from left (-halfBarWidth) to right (+halfBarWidth)
-            xPos = -this.halfBarWidth + (progress * this.barWidth);
+            xPos = -this.halfBarWidth + (this.flagIconSize[0] * 0.5) - this.barSeperatorSize + (progress * this.barWidth);
         } else {
             // Right team flag moves from right (+halfBarWidth) to left (-halfBarWidth)
-            xPos = this.halfBarWidth - (progress * this.barWidth);
+            xPos = this.halfBarWidth - (this.flagIconSize[0] * 0.5) + this.barSeperatorSize - (progress * this.barWidth);
         }
         
         // Center vertically
-        const yPos = 0;
+        const yPos = 3;
         
         if (DEBUG_MODE) {
             //console.log(`[FlagBar] ${isLeftTeam ? 'Left' : 'Right'} team flag position: x=${xPos.toFixed(2)}, y=${yPos}, progress=${progress.toFixed(3)}`);
@@ -4890,6 +4916,8 @@ class FlagIcon {
             parent: this.params.parent,
             visible: this.params.visible ?? true,
             bgAlpha: 0, // Transparent background
+            //bgColor: this.params.fillColor ?? ONE_VEC,
+            bgFill: mod.UIBgFill.Blur,
             teamId: this.params.teamId,
             playerId: this.params.playerId
         })!;

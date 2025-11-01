@@ -86,6 +86,8 @@ class FlagIcon {
             parent: this.params.parent,
             visible: this.params.visible ?? true,
             bgAlpha: 0, // Transparent background
+            //bgColor: this.params.fillColor ?? ONE_VEC,
+            bgFill: mod.UIBgFill.Blur,
             teamId: this.params.teamId,
             playerId: this.params.playerId
         })!;

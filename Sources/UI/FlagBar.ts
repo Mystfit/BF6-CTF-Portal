@@ -56,7 +56,7 @@ class FlagBar {
         this.team2 = params.team2;
         this.team1Id = mod.GetObjId(this.team1);
         this.team2Id = mod.GetObjId(this.team2);
-        this.barSeperatorSize = this.params.barSeperatorPadding ?? 20;
+        this.barSeperatorSize = this.params.barSeperatorPadding ?? 24;
         this.barWidth = params.size[0] - this.barSeperatorSize;
         this.barHeight = params.barHeight ?? 16;
         this.halfBarWidth = this.barWidth / 2;
@@ -113,7 +113,7 @@ class FlagBar {
         }
 
         const textColor = VectorClampToRange(
-            mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)), 
+            GetTeamColorLight(team), 
             0, 
             1
         );
@@ -142,9 +142,10 @@ class FlagBar {
             anchor: mod.UIAnchor.Center,
             parent: this.rootContainer,
             bgFill: mod.UIBgFill.Solid,
-            fillColor: teamColor,
+            fillColor: mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)),
             fillAlpha: 1,
             outlineColor: teamColor,
+            outlineThickness: 1,
             showFill: true,
             showOutline: true,
             visible: true
@@ -343,14 +344,14 @@ class FlagBar {
         
         if (isLeftTeam) {
             // Left team flag moves from left (-halfBarWidth) to right (+halfBarWidth)
-            xPos = -this.halfBarWidth + (progress * this.barWidth);
+            xPos = -this.halfBarWidth + (this.flagIconSize[0] * 0.5) - this.barSeperatorSize + (progress * this.barWidth);
         } else {
             // Right team flag moves from right (+halfBarWidth) to left (-halfBarWidth)
-            xPos = this.halfBarWidth - (progress * this.barWidth);
+            xPos = this.halfBarWidth - (this.flagIconSize[0] * 0.5) + this.barSeperatorSize - (progress * this.barWidth);
         }
         
         // Center vertically
-        const yPos = 0;
+        const yPos = 3;
         
         if (DEBUG_MODE) {
             //console.log(`[FlagBar] ${isLeftTeam ? 'Left' : 'Right'} team flag position: x=${xPos.toFixed(2)}, y=${yPos}, progress=${progress.toFixed(3)}`);

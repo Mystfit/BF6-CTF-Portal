@@ -276,6 +276,8 @@ declare class Flag {
     flagHomeVFX: mod.VFX;
     alarmSFX: mod.SFX | null;
     dragSFX: mod.SFX | null;
+    tetherFlagVFX: mod.VFX | null;
+    tetherPlayerVFX: mod.VFX | null;
 
     constructor(team: mod.Team, homePosition: mod.Vector, flagId?: number, allowedCapturingTeams?: number[], customColor?: mod.Vector);
     Initialize(): void;
@@ -598,6 +600,7 @@ declare function GetOpposingTeams(teamId: number): number[];
 declare function GetOpposingTeamsForFlag(flagData: Flag): number[];
 declare function GetTeamColorById(teamId: number): mod.Vector;
 declare function GetTeamColor(team: mod.Team): mod.Vector;
+declare function GetTeamColorLight(team: mod.Team): mod.Vector;
 declare function GetTeamDroppedColor(team: mod.Team): mod.Vector;
 declare function IsCarryingAnyFlag(player: mod.Player): boolean;
 declare function DropAllFlags(player: mod.Player): void;

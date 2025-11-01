@@ -24,7 +24,7 @@ class ScoreTicker extends TickerWidget {
         const teamId = mod.GetObjId(params.team);
         const teamColor = GetTeamColorById(teamId);
         const textColor = VectorClampToRange(
-            mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)), 
+            GetTeamColorLight(params.team), 
             0, 
             1
         );

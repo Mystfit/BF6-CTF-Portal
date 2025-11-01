@@ -659,6 +659,10 @@ function GetTeamDroppedColor(team: mod.Team): mod.Vector {
     return GetTeamColorById(mod.GetObjId(team) );
 }
 
+function GetTeamColorLight(team: mod.Team): mod.Vector {
+    return mod.Add(GetTeamColor(team), mod.CreateVector(0.5, 0.5, 0.5));
+}
+
 export function GetPlayersInTeam(team: mod.Team) {
     const allPlayers = mod.AllPlayers();
     const n = mod.CountOf(allPlayers);
