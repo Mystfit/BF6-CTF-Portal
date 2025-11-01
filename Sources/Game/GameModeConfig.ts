@@ -6,7 +6,6 @@ interface TeamConfig {
     teamId: number;
     name?: string;
     color?: mod.Vector;
-    hqId?: number;  // Optional, for future refactoring
     captureZones?: CaptureZoneConfig[] // Array of capture points for this team
 }
 

@@ -51,8 +51,8 @@ try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof
  * 
  * const config = {
  *   teams: [
- *     { teamId: 1, name: "Red", color: redVector, hqId: 1 },
- *     { teamId: 2, name: "Blue", color: blueVector, hqId: 2 }
+ *     { teamId: 1, name: "Red", color: redVector},
+ *     { teamId: 2, name: "Blue", color: blueVector}
  *   ],
  *   flags: [
  *     { flagId: 1, owningTeamId: 1 },  // Red flag
@@ -80,14 +80,8 @@ const GAMEMODE_TARGET_SCORE = 5;                                     // Points n
 // Flag settings
 const FLAG_PICKUP_DELAY = 3;                                        // Seconds before dropped flag can be picked up
 const FLAG_AUTO_RETURN_TIME = 30;                                   // Seconds before dropped flag auto-returns to base
-const FLAG_SFX_DURATION = 5.0;                                      // Time delay before alarm sound shuts off
-const FLAG_ICON_HEIGHT_OFFSET = 2.5;                                // Height that the flag icon should be placed above a flag
 const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
-const FLAG_THROW_SPEED = 6;                                         // Speed in units p/s to throw a flag away a player
-const FLAG_FOLLOW_MODE = true;
-const FLAG_FOLLOW_DISTANCE = 3;
-const FLAG_FOLLOW_POSITION_SMOOTHING = 0.5;                        // Exponential smoothing factor for position (0-1, lower = smoother)
-const FLAG_FOLLOW_ROTATION_SMOOTHING = 0.5;                         // Exponential smoothing factor for rotation (0-1, lower = smoother)
+const FLAG_FOLLOW_MODE = true;                                     // Flag follows the player.
 
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up
@@ -105,14 +99,20 @@ const TEAM_BALANCE_CHECK_INTERVAL = 10;                             // Check bal
 //==============================================================================================
 
 // Flag placement and positioning
-const FLAG_DROP_DISTANCE = 2.5;                                     // Distance in front of player when dropping flag
+const FLAG_SFX_DURATION = 5.0;                                      // Time delay before alarm sound shuts off
+const FLAG_ICON_HEIGHT_OFFSET = 2.5;                                // Height that the flag icon should be placed above a flag
 const FLAG_INTERACTION_HEIGHT_OFFSET = 1.3;                         // Height offset for flag interaction point
 const FLAG_SPAWN_HEIGHT_OFFSET = 0.5;                               // Height offset when spawning flag above ground
 const FLAG_COLLISION_RADIUS = 1.5;                                  // Safety radius to prevent spawning inside objects
-const FLAG_COLLISION_RADIUS_OFFSET = 1;                             // Safety radius to prevent spawning inside objects
+const FLAG_COLLISION_RADIUS_OFFSET = 1;                             // Offset the start of the radius to avoid ray collisions inside the flag
+const FLAG_DROP_DISTANCE = 2.5;                                     // Distance in front of player when dropping flag
 const FLAG_DROP_RAYCAST_DISTANCE = 100;                             // Maximum distance for downward raycast when dropping
 const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
-const FLAG_ENABLE_ARC_THROW = true;                                 // Enable flag throwing
+const FLAG_ENABLE_ARC_THROW = true;                                 // True = Enable flag throwing, False = simple wall + ground detection for dropped flag
+const FLAG_THROW_SPEED = 6;                                         // Speed in units p/s to throw a flag away from a player
+const FLAG_FOLLOW_DISTANCE = 3;                                     // Distance flag will follow the player at
+const FLAG_FOLLOW_POSITION_SMOOTHING = 0.5;                         // Exponential smoothing factor for position (0-1, lower = smoother)
+const FLAG_FOLLOW_ROTATION_SMOOTHING = 0.5;                         // Exponential smoothing factor for rotation (0-1, lower = smoother)
 const FLAG_FOLLOW_SAMPLES = 20;
 const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
@@ -134,15 +134,6 @@ const TICK_RATE = 0.032;                                            // ~30fps up
 //==============================================================================================
 // CONSTANTS - Team and object IDs (you probably won't need to modify these)
 //==============================================================================================
-
-// HQ ids
-const TEAM1_HQ_ID = 1;
-const TEAM2_HQ_ID = 2;
-const TEAM3_HQ_ID = 3;
-const TEAM4_HQ_ID = 4;
-const TEAM5_HQ_ID = 5;
-const TEAM6_HQ_ID = 6;
-const TEAM7_HQ_ID = 7;
 
 const enum TeamID {
     TEAM_NEUTRAL = 0,
@@ -251,13 +242,6 @@ export async function OnGameModeStarted() {
         let loopPlayer = mod.ValueInArray(players, i);
         if(mod.IsPlayerValid(loopPlayer)){
             JSPlayer.get(loopPlayer); // Create JSPlayer instance
-        }
-    }
-
-    // Enable HQs for configured teams
-    for (const teamConfig of config.teams) {
-        if (teamConfig.hqId) {
-            mod.EnableHQ(mod.GetHQ(teamConfig.hqId), true);
         }
     }
 
@@ -697,13 +681,12 @@ export function GetPlayersInTeam(team: mod.Team) {
 
 async function CaptureFeedback(pos: mod.Vector): Promise<void> {
     let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
-    mod.EnableVFX(vfx, true);
-    // let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
-    // mod.PlaySound(sfx, 1);
+    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
+    mod.PlaySound(sfx, 1);
 
     // Cleanup
     mod.Wait(5);
-    // mod.UnspawnObject(sfx);
+    mod.UnspawnObject(sfx);
     mod.UnspawnObject(vfx);
 }
 
@@ -5178,7 +5161,6 @@ interface TeamConfig {
     teamId: number;
     name?: string;
     color?: mod.Vector;
-    hqId?: number;  // Optional, for future refactoring
     captureZones?: CaptureZoneConfig[] // Array of capture points for this team
 }
 
@@ -5328,7 +5310,6 @@ const ClassicCTFConfig: GameModeConfig = {
             teamId: TeamID.TEAM_1, 
             name: mod.stringkeys.purple_team_name, 
             color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
-            hqId: TEAM1_HQ_ID, 
             captureZones: [
                 {
                     team: mod.GetTeam(TeamID.TEAM_1)  // Get team directly instead of using uninitialized variable
@@ -5339,7 +5320,6 @@ const ClassicCTFConfig: GameModeConfig = {
             teamId: TeamID.TEAM_2, 
             name: mod.stringkeys.orange_team_name, 
             color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
-            hqId: TEAM2_HQ_ID,
             captureZones: [
                 {
                     team: mod.GetTeam(TeamID.TEAM_2)  // Get team directly instead of using uninitialized variable
@@ -5373,7 +5353,6 @@ const FourTeamCTFConfig: GameModeConfig = {
             teamId: 1, 
             name: mod.stringkeys.purple_team_name, 
             color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_1), 
-            hqId: TEAM1_HQ_ID,
             captureZones: [
                 {
                     team: mod.GetTeam(TeamID.TEAM_1)  // Get team directly
@@ -5384,7 +5363,6 @@ const FourTeamCTFConfig: GameModeConfig = {
             teamId: 2, 
             name: mod.stringkeys.orange_team_name, 
             color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_2), 
-            hqId: TEAM2_HQ_ID,
             captureZones: [
                 {
                     team: mod.GetTeam(TeamID.TEAM_2)  // Get team directly
@@ -5394,7 +5372,6 @@ const FourTeamCTFConfig: GameModeConfig = {
         { teamId: 3, 
             name: mod.stringkeys.green_team_name, 
             color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_3), 
-            hqId: TEAM3_HQ_ID,
             captureZones: [
                 {
                     team: mod.GetTeam(TeamID.TEAM_3)  // Get team directly
@@ -5405,7 +5382,6 @@ const FourTeamCTFConfig: GameModeConfig = {
             teamId: 4, 
             name: mod.stringkeys.blue_team_name, 
             color: DEFAULT_TEAM_COLOURS.get(TeamID.TEAM_4), 
-            hqId: TEAM4_HQ_ID,
             captureZones: [
                 {
                     team: mod.GetTeam(TeamID.TEAM_4)  // Get team directly
