@@ -64,7 +64,7 @@ try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof
 //@ts-ignore
 import * as modlib from 'modlib';
 
-const VERSION = [1, 2, 0];
+const VERSION = [2, 0, 0];
 
 //==============================================================================================
 // CONFIGURATION
