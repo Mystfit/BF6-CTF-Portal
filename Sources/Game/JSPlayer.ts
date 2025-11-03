@@ -6,11 +6,13 @@ class PlayerScore {
     captures: number
     capture_assists: number
     flag_carrier_kills: number
+    kills: number;
 
-    constructor(captures: number = 0, capture_assists: number = 0, flag_carrier_kills:number = 0){
+    constructor(captures: number = 0, capture_assists: number = 0, flag_carrier_kills:number = 0, kills = 0){
         this.captures = captures;
         this.capture_assists = capture_assists
         this.flag_carrier_kills = flag_carrier_kills
+        this.kills = kills;
     }
 }
 

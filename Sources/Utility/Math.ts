@@ -15,7 +15,16 @@ export namespace Math2 {
         }
 
         static FromVector(vector: mod.Vector): Vec3 {
-            return new Vec3(mod.XComponentOf(vector), mod.YComponentOf(vector), mod.ZComponentOf(vector));
+            let x = mod.XComponentOf(vector);
+            let y = mod.YComponentOf(vector);
+            let z = mod.ZComponentOf(vector);
+            
+            // Check for NaN or undefined values and default to 0
+            if (isNaN(x) || x === undefined) x = 0;
+            if (isNaN(y) || y === undefined) y = 0;
+            if (isNaN(z) || z === undefined) z = 0;
+            
+            return new Vec3(x, y, z);
         }
 
         ToVector(): mod.Vector {
@@ -113,6 +122,10 @@ export namespace Math2 {
             return `X:${this.x}, Y:${this.y}, Z:${this.z}`;
         }
     }
+
+    export function Remap(value:number, inMin:number, inMax:number, outMin:number, outMax:number): number {
+        return outMin + (outMax - outMin) * ((value - inMin) / (inMax - inMin));
+    }
 }
 
 /**
@@ -177,7 +190,13 @@ function VectorLengthSquared(vec: mod.Vector): number{
     let xLength = mod.XComponentOf(vec);
     let yLength = mod.YComponentOf(vec);
     let zLength = mod.ZComponentOf(vec);
-    return Math.sqrt((xLength * xLength) + (yLength * yLength) + (zLength * yLength));
+    
+    // Check for NaN or undefined values and default to 0
+    if (isNaN(xLength) || xLength === undefined) xLength = 0;
+    if (isNaN(yLength) || yLength === undefined) yLength = 0;
+    if (isNaN(zLength) || zLength === undefined) zLength = 0;
+    
+    return (xLength * xLength) + (yLength * yLength) + (zLength * zLength);
 }
 
 function VectorClampToRange(vector: mod.Vector, min:number, max:number): mod.Vector{

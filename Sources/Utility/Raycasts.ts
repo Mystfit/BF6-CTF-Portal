@@ -546,6 +546,7 @@ class RaycastManager {
         gravity: number = 9.8,
         debug: boolean = false,
         interpolationSteps: number = 5,
+        maxYDistance?: number,
         onHitDetected?: (hitPoint: mod.Vector, hitNormal?: mod.Vector) => Promise<mod.Vector>
     ): AsyncGenerator<ProjectilePoint> {
         const timeStep = 1.0 / sampleRate;
@@ -585,7 +586,24 @@ class RaycastManager {
                 console.log(`[ProjectileRaycastGenerator] Iteration ${iteration} - From: ${VectorToString(currentPos)} To: ${VectorToString(nextPos)}, TotalDist: ${totalDistance.toFixed(2)}`);
             }
 
-            const rayResult = player ? await this.castWithPlayer(player, currentPos, nextPos, debug) : await RaycastManager.cast(currentPos, nextPos, debug);
+            // Cast ray or clamp to maximum drop distance and assume hit
+            let rayResult: RaycastResult = { hit: false, ID: -1, point:ZERO_VEC };
+            if(maxYDistance){
+                if(mod.YComponentOf(nextPos) < maxYDistance){
+                    rayResult = {hit: true, ID:-1, point: mod.CreateVector(mod.XComponentOf(nextPos), maxYDistance, mod.ZComponentOf(nextPos))};
+                    yield {
+                        position: rayResult.point,
+                        rayId: -1,
+                        hit: true,
+                        hitNormal: mod.UpVector(),
+                        isLast: true
+                    };
+                } else {
+                    rayResult = player ? await this.castWithPlayer(player, currentPos, nextPos, debug) : await RaycastManager.cast(currentPos, nextPos, debug);
+                }
+            } else {
+                rayResult = player ? await this.castWithPlayer(player, currentPos, nextPos, debug) : await RaycastManager.cast(currentPos, nextPos, debug);
+            }
             
             if(DEBUG_MODE) {
                 console.log(`[ProjectileRaycastGenerator] Iteration ${iteration} - Result: ${rayResult.hit ? "HIT" : "MISS"} at ${VectorToString(rayResult.point ?? nextPos)}`);
@@ -702,6 +720,8 @@ class RaycastManager {
             
             // Update position and distance for next iteration
             currentPos = nextPos;
+            console.log(`Before displacement vec: ${VectorToString(displacement)}`);
+            console.log(`After displacement vec length: ${VectorLength(displacement)}`);
             totalDistance += VectorLength(displacement);
         }
         
@@ -759,7 +779,8 @@ class RaycastManager {
         numDirections: number,
         downwardDistance: number,
         maxIterations: number = SPAWN_VALIDATION_MAX_ITERATIONS,
-        debug: boolean = false
+        debug: boolean = false,
+        maxYDistance?: number | undefined
     ): Promise<ValidatedSpawnResult> {
         let currentPosition = centerPosition;
         let foundCollision = false;

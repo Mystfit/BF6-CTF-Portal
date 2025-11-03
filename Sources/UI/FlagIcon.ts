@@ -44,6 +44,7 @@ class FlagIcon {
     private outlineContainers: mod.UIWidget[] = [];  // Containers for outline version
     
     private readonly params: FlagIconParams;
+    isPulsing: boolean;
     
     // Flag proportions
     private readonly POLE_WIDTH_RATIO = 0.15;
@@ -52,9 +53,8 @@ class FlagIcon {
     private readonly FLAG_HEIGHT_RATIO = 0.55;
     
     constructor(params: FlagIconParams) {
-        this.params = params;
-        
         // Default values
+        this.params = params;
         this.params.showFill = params.showFill ?? true;
         this.params.showOutline = params.showOutline ?? false;
         this.params.fillColor = VectorClampToRange(params.fillColor ?? mod.CreateVector(1, 1, 1), 0, 1);
@@ -62,7 +62,10 @@ class FlagIcon {
         this.params.outlineColor = VectorClampToRange(params.outlineColor ?? mod.CreateVector(1, 1, 1), 0, 1);
         this.params.outlineAlpha = params.outlineAlpha ?? 1.0;
         this.params.flagPoleGap = params.flagPoleGap ?? 2.0;
-        
+
+        // UI states
+        this.isPulsing = false;
+
         // Create root container
         this.rootContainer = this.createRootContainer();
         
@@ -227,6 +230,31 @@ class FlagIcon {
      */
     IsOutlineVisible(): boolean {
         return this.params.showOutline ?? false;
+    }
+
+    async StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
+        if(this.isPulsing)
+            return;
+
+        let minAlpha = minimumAlpha ?? 0;
+        let maxAlpha = maximumAlpha ?? 1;
+        let speed = pulseSpeed ?? 0.1;
+
+        this.isPulsing = true;
+        let alpha = 1;
+        let time = 0;
+        while(this.isPulsing){
+            time = GetCurrentTime();
+            alpha = Math2.Remap(Math.abs(Math.sin(time * speed)), 0, 1, minAlpha, maxAlpha),
+            this.SetFillAlpha(alpha);
+            if(this.params.showOutline)
+                this.SetOutlineAlpha(alpha);
+            await mod.Wait(TICK_RATE);
+        }
+    }
+
+    StopPulse(): void {
+        this.isPulsing = false;
     }
     
     /**

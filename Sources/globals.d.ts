@@ -78,6 +78,7 @@ declare const TEAM_AUTO_BALANCE: boolean;
 declare const TEAM_BALANCE_DELAY: number;
 declare const TEAM_BALANCE_CHECK_INTERVAL: number;
 declare const FLAG_DROP_DISTANCE: number;
+declare const FLAG_TERRAIN_FIX_PROTECTION: boolean;
 declare const FLAG_FOLLOW_MODE: boolean;
 declare const FLAG_FOLLOW_DISTANCE: number;
 declare const FLAG_FOLLOW_POSITION_SMOOTHING: number;
@@ -213,9 +214,24 @@ declare class rgba {
     static FromModVector3(vector: mod.Vector): rgba;
 }
 
+declare interface AnimationOptions {
+    speed?: number;              // Units per second (alternative to duration)
+    duration?: number;           // Total duration in seconds (overrides speed)
+    rotateToDirection?: boolean; // Auto-rotate to face movement direction
+    rotationSpeed?: number;      // How fast to rotate in degrees/second (default: instant)
+    rotation?: mod.Vector;       // Manual rotation to rotate object towards
+    loop?: boolean;              // Loop the animation
+    reverse?: boolean;           // Reverse after completion
+    onSpawnAtStart?: () => mod.Object | null;   // If object is undefined, spawn the object at the start of the animation
+    onStart?: () => void;
+    onProgress?: (progress: number, position: mod.Vector) => void;
+    onComplete?: () => void;
+    onSegmentComplete?: (segmentIndex: number) => void;
+}
+
 declare class AnimationManager {
     AnimateAlongPath(object: mod.Object, points: mod.Vector[], options?: any): Promise<void>;
-    AnimateAlongGeneratedPath(object: mod.Object, generator: AsyncGenerator<ProjectilePoint>, minBufferSize: number, options?: any): Promise<void>;
+    AnimateAlongGeneratedPath(object: mod.Object | undefined, generator: AsyncGenerator<ProjectilePoint>, minBufferSize: number, options?: AnimationOptions): Promise<void>;
     AnimateToPosition(object: mod.Object, targetPos: mod.Vector, duration: number, options?: any): Promise<void>;
     StopAnimation(object: mod.Object): void;
     IsAnimating(object: mod.Object): boolean;
@@ -229,7 +245,8 @@ declare class PlayerScore {
     captures: number;
     capture_assists: number;
     flag_carrier_kills: number;
-    constructor(captures?: number, capture_assists?: number, flag_carrier_kills?: number);
+    kills: number;
+    constructor(captures?: number, capture_assists?: number, flag_carrier_kills?: number, kills?: number);
 }
 
 declare class JSPlayer {
@@ -267,6 +284,7 @@ declare class Flag {
     canBePickedUp: boolean;
     numFlagTimesPickedUp: number;
     carrierPlayer: mod.Player | null;
+    lastCarrier: mod.Player | null;
     dropTime: number;
     autoReturnTime: number;
     flagRecoverIcon: mod.WorldIcon;
@@ -278,6 +296,7 @@ declare class Flag {
     dragSFX: mod.SFX | null;
     tetherFlagVFX: mod.VFX | null;
     tetherPlayerVFX: mod.VFX | null;
+    hoverVFX: mod.VFX | null;
 
     constructor(team: mod.Team, homePosition: mod.Vector, flagId?: number, allowedCapturingTeams?: number[], customColor?: mod.Vector);
     Initialize(): void;
@@ -293,7 +312,7 @@ declare class Flag {
     SlowUpdate(timeDelta: number): void;
     FastUpdate(timeDelta: number): void;
     UpdateCarrier(timeDelta: number): void;
-    FollowPlayer(currentSoldierPosition: mod.Vector): void;
+    FollowPlayer(currentSoldierPosition: mod.Vector, isParachuting?: boolean): void;
     UpdateCarrierIcon(): void;
     RestrictCarrierWeapons(player: mod.Player): void;
     CheckCarrierDroppedFlag(player: mod.Player): void;
@@ -338,9 +357,20 @@ declare class RaycastManager {
     getQueueLength(): number;
     static VisualizePoints(points: mod.Vector[], color?: mod.Vector, debugDuration?: number, rayIds?: number[], iconImage?: mod.WorldIconImages): Promise<void>;
     static ProjectileRaycast(startPosition: mod.Vector, velocity: mod.Vector, distance: number, sampleRate: number, player?:mod.Player | null, gravity?: number, debug?: boolean, debugDuration?: number): Promise<ProjectileRaycastResult>;
-    static ProjectileRaycastGenerator(startPosition: mod.Vector, velocity: mod.Vector, distance: number, sampleRate: number, player?: mod.Player | null, gravity?: number, debug?: boolean, interpolationSteps?: number, onHitDetected?: (hitPoint: mod.Vector, hitNormal?: mod.Vector) => Promise<mod.Vector>): AsyncGenerator<ProjectilePoint>;
+    static ProjectileRaycastGenerator(
+        startPosition: mod.Vector, 
+        velocity: mod.Vector, 
+        distance: number, 
+        sampleRate: number, 
+        player?: mod.Player | null, 
+        gravity?: number, 
+        debug?: boolean, 
+        interpolationSteps?: number, 
+        maxYDistance?: number,
+        onHitDetected?: (hitPoint: mod.Vector, hitNormal?: mod.Vector) => Promise<mod.Vector>
+    ): AsyncGenerator<ProjectilePoint>;
     static FindValidGroundPosition(startPosition: mod.Vector, direction: mod.Vector, forwardDistance: number, collisionRadius: number, downwardDistance: number, debug?: boolean, debugDuration?: number): Promise<RaycastResult>;
-    static ValidateSpawnLocationWithRadialCheck(centerPosition: mod.Vector, checkRadius: number, checkRadiusOffset: number, numDirections: number, downwardDistance: number, maxIterations?: number, debug?: boolean): Promise<ValidatedSpawnResult>;
+    static ValidateSpawnLocationWithRadialCheck(centerPosition: mod.Vector, checkRadius: number, checkRadiusOffset: number, numDirections: number, downwardDistance: number, maxIterations?: number, debug?: boolean, maxYDistance?: number | undefined): Promise<ValidatedSpawnResult>;
     static GetID(): number;
     static GetNextID(): number;
 }
@@ -412,6 +442,8 @@ interface FlagIconParams {
 }
 
 declare class FlagIcon {
+    isPulsing: boolean;
+    
     constructor(params: FlagIconParams);
     SetFillVisible(visible: boolean): void;
     SetOutlineVisible(visible: boolean): void;
@@ -419,6 +451,8 @@ declare class FlagIcon {
     IsOutlineVisible(): boolean;
     SetFillColor(color: mod.Vector, alpha?: number): void;
     SetFillAlpha(alpha: number): void;
+    StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void>;
+    StopPulse():void;
     SetOutlineColor(color: mod.Vector, alpha?: number): void;
     SetOutlineAlpha(alpha:number): void;
     SetColor(color: mod.Vector, alpha?: number): void;
@@ -549,10 +583,12 @@ declare namespace Math2 {
         MultiplyScalar(scalar: number): Vec3;
         Add(other: Vec3): Vec3;
         Length(): number;
-        Normalize(): number;
+        Normalize(): Vec3;
         DirectionToEuler(): Vec3;
         ToString(): string;
     }
+
+    function Remap(value:number, inMin:number, inMax:number, outMin:number, outMax:number): number;
 }
 
 declare function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean;
@@ -603,6 +639,7 @@ declare function GetTeamColor(team: mod.Team): mod.Vector;
 declare function GetTeamColorLight(team: mod.Team): mod.Vector;
 declare function GetTeamDroppedColor(team: mod.Team): mod.Vector;
 declare function IsCarryingAnyFlag(player: mod.Player): boolean;
+declare function WasCarryingAnyFlag(player: mod.Player): boolean;
 declare function DropAllFlags(player: mod.Player): void;
 declare function GetCarriedFlags(player: mod.Player): Flag[];
 declare function GetPlayersInTeam(team: mod.Team): mod.Player[];

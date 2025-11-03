@@ -37,8 +37,6 @@ class CaptureZone {
                 this.baseIcons = new Map();
                 let teamIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
                 mod.SetWorldIconOwner(teamIcon, team);
-                mod.EnableWorldIconText(teamIcon, true);
-                mod.EnableWorldIconImage(teamIcon, true);
                 this.baseIcons.set(mod.GetObjId(team), teamIcon);
                 
                 // Create world icons for opposing teams        
@@ -47,8 +45,6 @@ class CaptureZone {
                     for(let opposingTeam of opposingTeams){
                         let opposingIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
                         mod.SetWorldIconOwner(opposingIcon, mod.GetTeam(opposingTeam));
-                        mod.EnableWorldIconText(opposingIcon, true);
-                        mod.EnableWorldIconImage(opposingIcon, true);
                         this.baseIcons.set(opposingTeam, opposingIcon);
                     }
                 }
@@ -74,6 +70,8 @@ class CaptureZone {
                 mod.SetWorldIconImage(icon, mod.WorldIconImages.Triangle);
                 mod.SetWorldIconColor(icon, GetTeamColorById(this.teamId));
                 mod.SetWorldIconPosition(icon, this.iconPosition);
+                mod.EnableWorldIconText(icon, true);
+                mod.EnableWorldIconImage(icon, true);
             }
         }
     } 

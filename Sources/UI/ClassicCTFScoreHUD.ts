@@ -2,8 +2,6 @@
 // CLASSIC 2-TEAM CTF HUD
 //==============================================================================================
 
-import { ParseUI } from "modlib";
-
 /**
  * ScoreboardUI - Main scoring interface for CTF
  * Shows player's team and all team scores with flag statuses
@@ -22,8 +20,8 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
 
     // Round timer
     timerTicker: RoundTimer | undefined;
-    timerWidgetSize: number[] = [66, 20];
-    timerScorePaddingTop: number = 86;
+    timerWidgetSize: number[] = [66, 28];
+    timerScorePaddingTop: number = 90;
 
     // Flag bar
     flagBar: FlagBar | undefined;
@@ -65,7 +63,7 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
         // Create flag bar (positioned between the two score tickers)
         const team1Ticker = this.teamScoreTickers.get(1);
         const team2Ticker = this.teamScoreTickers.get(2);
-        
+
         if (team1Ticker && team2Ticker && team1 && team2) {
             // Calculate FlagBar dimensions and position
             const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarPadding;
@@ -92,11 +90,14 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
             }
         }
 
+        // Create round timer
         this.timerTicker = new RoundTimer({
             position: [0, this.timerScorePaddingTop],
             parent: this.rootWidget,
-            textSize: 24,
+            textSize: 26,
             size: this.timerWidgetSize,
+            bgAlpha: 0.5,
+            textColor: mod.CreateVector(0.9, 0.9, 0.9)
         })!;
 
         // Initial refresh

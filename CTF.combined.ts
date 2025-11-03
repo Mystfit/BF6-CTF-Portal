@@ -66,22 +66,20 @@ try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof
 //@ts-ignore
 import * as modlib from 'modlib';
 
-const VERSION = [1, 2, 0];
+const VERSION = [2, 0, 0];
 
 //==============================================================================================
 // CONFIGURATION
 //==============================================================================================
 
-const DEBUG_MODE = true;                                            // Print extra debug messages
+const DEBUG_MODE = false;                                            // Print extra debug messages
 
 // Game Settings
-const GAMEMODE_TARGET_SCORE = 5;                                     // Points needed to win
+const GAMEMODE_TARGET_SCORE = 10;                                    // Points needed to win
 
 // Flag settings
-const FLAG_PICKUP_DELAY = 3;                                        // Seconds before dropped flag can be picked up
+const FLAG_PICKUP_DELAY = 4;                                        // Seconds before dropped flag can be picked up and when carrier kills are still counted
 const FLAG_AUTO_RETURN_TIME = 30;                                   // Seconds before dropped flag auto-returns to base
-const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
-const FLAG_FOLLOW_MODE = true;                                     // Flag follows the player.
 
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up
@@ -109,19 +107,22 @@ const FLAG_DROP_DISTANCE = 2.5;                                     // Distance 
 const FLAG_DROP_RAYCAST_DISTANCE = 100;                             // Maximum distance for downward raycast when dropping
 const FLAG_DROP_RING_RADIUS = 2.5;                                  // Radius for multiple flags dropped in a ring pattern
 const FLAG_ENABLE_ARC_THROW = true;                                 // True = Enable flag throwing, False = simple wall + ground detection for dropped flag
-const FLAG_THROW_SPEED = 6;                                         // Speed in units p/s to throw a flag away from a player
+const FLAG_THROW_SPEED = 5;                                         // Speed in units p/s to throw a flag away from a player
 const FLAG_FOLLOW_DISTANCE = 3;                                     // Distance flag will follow the player at
 const FLAG_FOLLOW_POSITION_SMOOTHING = 0.5;                         // Exponential smoothing factor for position (0-1, lower = smoother)
 const FLAG_FOLLOW_ROTATION_SMOOTHING = 0.5;                         // Exponential smoothing factor for rotation (0-1, lower = smoother)
 const FLAG_FOLLOW_SAMPLES = 20;
 const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
+const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
+const FLAG_FOLLOW_MODE = false;                                     // Flag follows the player.
+const FLAG_TERRAIN_FIX_PROTECTION = true;                           // FIXES TERRAIN RAYCAST BUG: Flag will not drop under the player's Y position when thrown
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
 const SOLDIER_HEIGHT = 2;                                           // Full soldier height
 
 // Spawn validation settings
 const SPAWN_VALIDATION_DIRECTIONS = 4;                              // Number of radial check directions
 const SPAWN_VALIDATION_MAX_ITERATIONS = 1;                          // Maximum adjustment passes
-const SPAWN_VALIDATION_HEIGHT_OFFSET = 0.5;                         // Height offset above adjusted position for ground detection ray
+const SPAWN_VALIDATION_HEIGHT_OFFSET = 0.75;                        // Height offset above adjusted position for ground detection ray
 
 // Vehicle seat indices
 const VEHICLE_DRIVER_SEAT = 0;                                      // Driver seat index in vehicles
@@ -217,7 +218,7 @@ let captureZones: Map<number, CaptureZone> = new Map();
 // MAIN GAME LOOP
 //==============================================================================================
 
-export async function OnGameModeStarted() {
+export function OnGameModeStarted() {
     console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
     if(DEBUG_MODE)
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
@@ -229,7 +230,7 @@ export async function OnGameModeStarted() {
     team3 = mod.GetTeam(TeamID.TEAM_3);
     team4 = mod.GetTeam(TeamID.TEAM_4);
 
-    await mod.Wait(1);
+    //await mod.Wait(1);
 
     // Load game mode configuration
     let config = ClassicCTFConfig;
@@ -357,6 +358,10 @@ export function OnPlayerDeployed(eventPlayer: mod.Player): void {
 
     // If we don't have a JSPlayer by now, we really should create one
     JSPlayer.get(eventPlayer);
+
+    for(let [captureZoneId, captureZone] of captureZones){
+        captureZone.UpdateIcons();
+    }
 }
 
 export function OnPlayerDied(
@@ -370,8 +375,12 @@ export function OnPlayerDied(
     
     // Increment flag carrier kill score
     let killer = JSPlayer.get(eventOtherPlayer);
-    if(killer && IsCarryingAnyFlag(eventPlayer))
-        killer.score.flag_carrier_kills += 1;
+    if(killer){
+        if(IsCarryingAnyFlag(eventPlayer) || WasCarryingAnyFlag(eventPlayer))
+            killer.score.flag_carrier_kills += 1;
+        else
+            killer.score.kills += 1; 
+    }
 
     // Drop all flags on death
     DropAllFlags(eventPlayer);
@@ -475,101 +484,11 @@ export function OnGameModeEnding(): void {
 // GAME LOGIC FUNCTIONS
 //==============================================================================================
 
-function RefreshScoreboard(){
-    for(let jsPlayer of JSPlayer.getAllAsArray()){
-        UpdatePlayerScoreboard(jsPlayer.player);
-    }
-}
-
-function UpdatePlayerScoreboard(player: mod.Player){
-    let jsPlayer = JSPlayer.get(player);
-    let teamId = modlib.getTeamId(mod.GetTeam(player));
-    if(jsPlayer){
-        if(teams.size >= 2){
-            mod.SetScoreboardPlayerValues(player, teamId, jsPlayer.score.captures, jsPlayer.score.capture_assists, jsPlayer.score.flag_carrier_kills);
-        } else {
-            mod.SetScoreboardPlayerValues(player, jsPlayer.score.captures, jsPlayer.score.capture_assists, jsPlayer.score.flag_carrier_kills);
-        }
-    }
-}
-
-function GetLeadingTeamIDs(): number[]{
-    let leadingTeams: number[] = [];
-    let maxScore = 0;
-    for (const [teamId, score] of teamScores.entries()) {
-        if (score > maxScore) {
-            maxScore = score;
-            leadingTeams = [teamId];
-        } else if (score === maxScore && score > 0) {
-            leadingTeams.push(teamId);
-        }
-    }
-
-    return leadingTeams;
-}
-
-function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam: mod.Team): void {
-    // Set player score using JSPlayer
-    let jsPlayer = JSPlayer.get(scoringPlayer);
-    if (jsPlayer) {
-        jsPlayer.score.captures += 1;
-        UpdatePlayerScoreboard(scoringPlayer);
-        
-        if (DEBUG_MODE) {
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(
-                mod.stringkeys.player_score, 
-                jsPlayer.score.captures, 
-                jsPlayer.score.capture_assists));
-        }
-    }
-
-    // Increment team score in dynamic scores map
-    let scoringTeamId = mod.GetObjId(scoringTeam);
-    let currentScore = teamScores.get(scoringTeamId) ?? 0;
-    currentScore++;
-    teamScores.set(scoringTeamId, currentScore);
-    
-    // Update game mode score
-    mod.SetGameModeScore(scoringTeam, currentScore);
-    
-    // Notify players
-    if (DEBUG_MODE) {
-        console.log(`Team ${scoringTeamId} scored! New score: ${currentScore}`);
-    }
-
-    // Play VFX at scoring team's flag base
-    const scoringTeamFlag = flags.get(scoringTeamId);
-    if (scoringTeamFlag) {
-        CaptureFeedback(scoringTeamFlag.homePosition);
-
-        // Play SFX
-        // Play pickup SFX
-        let captureSfxOwner: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_EnemyCapturedCache_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
-        mod.PlaySound(captureSfxOwner, 1, scoringTeamFlag.team);
-        let captureSfxCapturer: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_FriendlyCapturedCache_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
-        mod.PlaySound(captureSfxCapturer, 1, mod.GetTeam(scoringTeamId)); 
-        
-        // Play audio
-        let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
-        if(capturingTeamVO){
-            let vo_flag = DEFAULT_TEAM_VO_FLAGS.get(capturedFlag.teamId);
-            mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCaptured, vo_flag ?? mod.VoiceOverFlags.Alpha, scoringTeam);
-        }
-    }
-
-    // Return all captured flags to their home spawners
-    GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => flag.ResetFlag());
-    
-    // Check win condition
-    if (currentScore >= GAMEMODE_TARGET_SCORE) {
-        EndGameByScore(scoringTeamId);
-    }
-}
-
 function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     const seatCount = mod.GetVehicleSeatCount(vehicle);
     
     // Try to find an empty passenger seat
+    let lastSeat = seatCount - 1;
     for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
             mod.ForcePlayerToSeat(player, vehicle, i);
@@ -578,36 +497,19 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
         }
     }
     
+    // Try last seat as fallback
+    if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
+        mod.ForcePlayerToSeat(player, vehicle, lastSeat);
+        if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${lastSeat}`);
+        return;
+    }
+    
     // No passenger seats available, force exit
     mod.ForcePlayerExitVehicle(player, vehicle);
     if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
 }
 
-function EndGameByScore(winningTeamId: number): void {
-    gameStarted = false;
-    
-    const winningTeam = mod.GetTeam(winningTeamId);
-    const teamName = winningTeamId === 1 ? "Blue" : "Red";
-    
-    console.log(`Game ended - Team ${winningTeamId} wins by score`);
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_score, winningTeamId))
-    mod.EndGameMode(winningTeam);    
-}
 
-function EndGameByTime(): void {
-    gameStarted = false;
-    // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_time));
-    console.log(`Game ended by time limit`);
-    
-    // Determine winner by score
-    // if (team1Score > team2Score) {
-    //     mod.EndGameMode(team1);
-    // } else if (team2Score > team1Score) {
-    //     mod.EndGameMode(team2);
-    // } else {
-    //     mod.EndGameMode(mod.GetTeam(0)); // Draw
-    // }
-}
 
 //==============================================================================================
 // UTILITY FUNCTIONS
@@ -680,21 +582,6 @@ export function GetPlayersInTeam(team: mod.Team) {
 }
 
 
-// Godot flag IDs
-// --------------
-
-async function CaptureFeedback(pos: mod.Vector): Promise<void> {
-    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
-    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
-    mod.PlaySound(sfx, 1);
-
-    // Cleanup
-    mod.Wait(5);
-    mod.UnspawnObject(sfx);
-    mod.UnspawnObject(vfx);
-}
-
-
 //==============================================================================================
 // COLOR & UTILITY CLASSES
 //==============================================================================================
@@ -759,7 +646,16 @@ export namespace Math2 {
         }
 
         static FromVector(vector: mod.Vector): Vec3 {
-            return new Vec3(mod.XComponentOf(vector), mod.YComponentOf(vector), mod.ZComponentOf(vector));
+            let x = mod.XComponentOf(vector);
+            let y = mod.YComponentOf(vector);
+            let z = mod.ZComponentOf(vector);
+            
+            // Check for NaN or undefined values and default to 0
+            if (isNaN(x) || x === undefined) x = 0;
+            if (isNaN(y) || y === undefined) y = 0;
+            if (isNaN(z) || z === undefined) z = 0;
+            
+            return new Vec3(x, y, z);
         }
 
         ToVector(): mod.Vector {
@@ -857,6 +753,10 @@ export namespace Math2 {
             return `X:${this.x}, Y:${this.y}, Z:${this.z}`;
         }
     }
+
+    export function Remap(value:number, inMin:number, inMax:number, outMin:number, outMax:number): number {
+        return outMin + (outMax - outMin) * ((value - inMin) / (inMax - inMin));
+    }
 }
 
 /**
@@ -921,7 +821,13 @@ function VectorLengthSquared(vec: mod.Vector): number{
     let xLength = mod.XComponentOf(vec);
     let yLength = mod.YComponentOf(vec);
     let zLength = mod.ZComponentOf(vec);
-    return Math.sqrt((xLength * xLength) + (yLength * yLength) + (zLength * yLength));
+    
+    // Check for NaN or undefined values and default to 0
+    if (isNaN(xLength) || xLength === undefined) xLength = 0;
+    if (isNaN(yLength) || yLength === undefined) yLength = 0;
+    if (isNaN(zLength) || zLength === undefined) zLength = 0;
+    
+    return (xLength * xLength) + (yLength * yLength) + (zLength * zLength);
 }
 
 function VectorClampToRange(vector: mod.Vector, min:number, max:number): mod.Vector{
@@ -1486,6 +1392,7 @@ class RaycastManager {
         gravity: number = 9.8,
         debug: boolean = false,
         interpolationSteps: number = 5,
+        maxYDistance?: number,
         onHitDetected?: (hitPoint: mod.Vector, hitNormal?: mod.Vector) => Promise<mod.Vector>
     ): AsyncGenerator<ProjectilePoint> {
         const timeStep = 1.0 / sampleRate;
@@ -1525,7 +1432,24 @@ class RaycastManager {
                 console.log(`[ProjectileRaycastGenerator] Iteration ${iteration} - From: ${VectorToString(currentPos)} To: ${VectorToString(nextPos)}, TotalDist: ${totalDistance.toFixed(2)}`);
             }
 
-            const rayResult = player ? await this.castWithPlayer(player, currentPos, nextPos, debug) : await RaycastManager.cast(currentPos, nextPos, debug);
+            // Cast ray or clamp to maximum drop distance and assume hit
+            let rayResult: RaycastResult = { hit: false, ID: -1, point:ZERO_VEC };
+            if(maxYDistance){
+                if(mod.YComponentOf(nextPos) < maxYDistance){
+                    rayResult = {hit: true, ID:-1, point: mod.CreateVector(mod.XComponentOf(nextPos), maxYDistance, mod.ZComponentOf(nextPos))};
+                    yield {
+                        position: rayResult.point,
+                        rayId: -1,
+                        hit: true,
+                        hitNormal: mod.UpVector(),
+                        isLast: true
+                    };
+                } else {
+                    rayResult = player ? await this.castWithPlayer(player, currentPos, nextPos, debug) : await RaycastManager.cast(currentPos, nextPos, debug);
+                }
+            } else {
+                rayResult = player ? await this.castWithPlayer(player, currentPos, nextPos, debug) : await RaycastManager.cast(currentPos, nextPos, debug);
+            }
             
             if(DEBUG_MODE) {
                 console.log(`[ProjectileRaycastGenerator] Iteration ${iteration} - Result: ${rayResult.hit ? "HIT" : "MISS"} at ${VectorToString(rayResult.point ?? nextPos)}`);
@@ -1642,6 +1566,8 @@ class RaycastManager {
             
             // Update position and distance for next iteration
             currentPos = nextPos;
+            console.log(`Before displacement vec: ${VectorToString(displacement)}`);
+            console.log(`After displacement vec length: ${VectorLength(displacement)}`);
             totalDistance += VectorLength(displacement);
         }
         
@@ -1699,7 +1625,8 @@ class RaycastManager {
         numDirections: number,
         downwardDistance: number,
         maxIterations: number = SPAWN_VALIDATION_MAX_ITERATIONS,
-        debug: boolean = false
+        debug: boolean = false,
+        maxYDistance?: number | undefined
     ): Promise<ValidatedSpawnResult> {
         let currentPosition = centerPosition;
         let foundCollision = false;
@@ -1853,17 +1780,20 @@ interface AnimationOptions {
     speed?: number;              // Units per second (alternative to duration)
     duration?: number;           // Total duration in seconds (overrides speed)
     rotateToDirection?: boolean; // Auto-rotate to face movement direction
+    rotation?: mod.Vector;       // Manual rotation to set when animating
     rotationSpeed?: number;      // How fast to rotate in degrees/second (default: instant)
     loop?: boolean;              // Loop the animation
     reverse?: boolean;           // Reverse after completion
+    onSpawnAtStart?: () => mod.Object | null;
+    onStart?: () => void;
     onProgress?: (progress: number, position: mod.Vector) => void;
     onComplete?: () => void;
     onSegmentComplete?: (segmentIndex: number) => void;
 }
 
 interface ActiveAnimation {
-    object: mod.Object;
-    objectId: number;
+    object: mod.Object | undefined;
+    objectId: number | undefined;
     cancelled: boolean;
     paused: boolean;
     progress: number;
@@ -2092,34 +2022,23 @@ class AnimationManager {
      * @returns Promise that resolves when animation completes
      */
     async AnimateAlongGeneratedPath(
-        object: mod.Object,
+        object: mod.Object | undefined,
         generator: AsyncGenerator<ProjectilePoint>,
         minBufferSize: number,
         options: AnimationOptions = {}
     ): Promise<void> {
-        const objectId = mod.GetObjId(object);
-        
-        // Register active animation
-        const animation: ActiveAnimation = {
-            object,
-            objectId,
-            cancelled: false,
-            paused: false,
-            progress: 0
-        };
-        this.activeAnimations.set(objectId, animation);
-
         const pointBuffer: ProjectilePoint[] = [];
         let generatorComplete = false;
         let currentPosition: mod.Vector;
         let animationStarted = false;
         let bufferStarvationCount = 0;
+        let objectId: number = -1;
 
         try {
             if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
 
             // Phase 1: Fill initial buffer (minBufferSize + 2 points)
-            const initialBufferSize = minBufferSize + 2;
+            const initialBufferSize = minBufferSize;
             for (let i = 0; i < initialBufferSize; i++) {
                 const result = await generator.next();
                 if (result.done) {
@@ -2148,6 +2067,38 @@ class AnimationManager {
             // Phase 2: Concurrent animation and generation
             animationStarted = true;
             let segmentIndex = 0;
+
+            let animation: ActiveAnimation;
+            
+            // Make sure we have an object to animate
+            if(!object && options.onSpawnAtStart){
+                let spawnedObj = options.onSpawnAtStart();
+                if(spawnedObj)
+                    object = spawnedObj;
+
+                if(!object){
+                    console.log("Could not spawn object for AnimateAlongGeneratedPath");
+                    return;
+                }
+            } else {
+                console.log("No valid object provided to AnimateAlongGeneratedPath");
+                return;
+            }
+
+            // Set up our object
+            objectId = object ? mod.GetObjId(object) : -1;
+            animation = {
+                object,
+                objectId,
+                cancelled: false,
+                paused: false,
+                progress: 0
+            }
+            this.activeAnimations.set(objectId, animation);
+        
+            // Let the caller know the animation has enough points and has started
+            if(options.onStart)
+                options.onStart();
             
             while (pointBuffer.length > 1 || !generatorComplete) {
                 if (animation.cancelled) break;
@@ -2219,6 +2170,8 @@ class AnimationManager {
                                 .Subtract(Math2.Vec3.FromVector(startPoint.position))
                                 .ToVector()
                         );
+                    } else if(options.rotation){
+                        rotation = options.rotation;
                     }
 
                     // Animate this segment
@@ -2273,6 +2226,8 @@ class AnimationManager {
                                     .Subtract(Math2.Vec3.FromVector(startPoint.position))
                                     .ToVector()
                             );
+                        } else if(options.rotation){
+                            rotation = options.rotation;
                         }
                         
                         await this.AnimateBetweenPoints(
@@ -2310,6 +2265,8 @@ class AnimationManager {
                                         .Subtract(Math2.Vec3.FromVector(currentPosition))
                                         .ToVector()
                                 );
+                            } else if(options.rotation){
+                                finalRotation = options.rotation;
                             }
                             
                             await this.AnimateBetweenPoints(
@@ -2340,7 +2297,8 @@ class AnimationManager {
             console.error(`[AnimateAlongGeneratedPath] Error during animation:`, error);
             throw error;
         } finally {
-            this.activeAnimations.delete(objectId);
+            if(objectId > -1)
+                this.activeAnimations.delete(objectId);
         }
     }
 
@@ -2415,7 +2373,8 @@ class AnimationManager {
     StopAllAnimations(): void {
         for (const [objectId, animation] of this.activeAnimations.entries()) {
             animation.cancelled = true;
-            mod.StopActiveMovementForObject(animation.object);
+            if(animation.object)
+                mod.StopActiveMovementForObject(animation.object);
         }
         this.activeAnimations.clear();
     }
@@ -2433,11 +2392,13 @@ class PlayerScore {
     captures: number
     capture_assists: number
     flag_carrier_kills: number
+    kills: number;
 
-    constructor(captures: number = 0, capture_assists: number = 0, flag_carrier_kills:number = 0){
+    constructor(captures: number = 0, capture_assists: number = 0, flag_carrier_kills:number = 0, kills = 0){
         this.captures = captures;
         this.capture_assists = capture_assists
         this.flag_carrier_kills = flag_carrier_kills
+        this.kills = kills;
     }
 }
 
@@ -2531,6 +2492,140 @@ class JSPlayer {
 
 
 //==============================================================================================
+// SCORING AND RULES
+//==============================================================================================
+
+
+function RefreshScoreboard(){
+    for(let jsPlayer of JSPlayer.getAllAsArray()){
+        UpdatePlayerScoreboard(jsPlayer.player);
+    }
+}
+
+function UpdatePlayerScoreboard(player: mod.Player){
+    let jsPlayer = JSPlayer.get(player);
+    let teamId = modlib.getTeamId(mod.GetTeam(player));
+    if(jsPlayer){
+        if(teams.size >= 3){
+            mod.SetScoreboardPlayerValues(player, teamId, jsPlayer.score.captures, jsPlayer.score.capture_assists, jsPlayer.score.flag_carrier_kills);
+        } else {
+            mod.SetScoreboardPlayerValues(player, jsPlayer.score.captures, jsPlayer.score.capture_assists, jsPlayer.score.flag_carrier_kills);
+        }
+    }
+}
+
+function GetLeadingTeamIDs(): number[]{
+    let leadingTeams: number[] = [];
+    let maxScore = 0;
+    for (const [teamId, score] of teamScores.entries()) {
+        if (score > maxScore) {
+            maxScore = score;
+            leadingTeams = [teamId];
+        } else if (score === maxScore && score > 0) {
+            leadingTeams.push(teamId);
+        }
+    }
+
+    return leadingTeams;
+}
+
+function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam: mod.Team): void {
+    // Set player score using JSPlayer
+    let jsPlayer = JSPlayer.get(scoringPlayer);
+    if (jsPlayer) {
+        jsPlayer.score.captures += 1;
+        UpdatePlayerScoreboard(scoringPlayer);
+        
+        if (DEBUG_MODE) {
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(
+                mod.stringkeys.player_score, 
+                jsPlayer.score.captures, 
+                jsPlayer.score.capture_assists));
+        }
+    }
+
+    // Increment team score in dynamic scores map
+    let scoringTeamId = mod.GetObjId(scoringTeam);
+    let currentScore = teamScores.get(scoringTeamId) ?? 0;
+    currentScore++;
+    teamScores.set(scoringTeamId, currentScore);
+    
+    // Update game mode score
+    mod.SetGameModeScore(scoringTeam, currentScore);
+    
+    // Notify players
+    if (DEBUG_MODE) {
+        console.log(`Team ${scoringTeamId} scored! New score: ${currentScore}`);
+    }
+
+    // Play VFX at scoring team's flag base
+    const scoringTeamFlag = flags.get(scoringTeamId);
+    if (scoringTeamFlag) {
+        CaptureFeedback(scoringTeamFlag.homePosition);
+
+        // Play SFX
+        // Play pickup SFX
+        let captureSfxOwner: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_EnemyCapturedCache_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
+        mod.PlaySound(captureSfxOwner, 1, scoringTeamFlag.team);
+        let captureSfxCapturer: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_FriendlyCapturedCache_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
+        mod.PlaySound(captureSfxCapturer, 1, mod.GetTeam(scoringTeamId)); 
+        
+        // Play audio
+        let capturingTeamVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, scoringTeamFlag.homePosition, ZERO_VEC);
+        if(capturingTeamVO){
+            let vo_flag = DEFAULT_TEAM_VO_FLAGS.get(capturedFlag.teamId);
+            mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCaptured, vo_flag ?? mod.VoiceOverFlags.Alpha, scoringTeam);
+        }
+    }
+
+    // Return all captured flags to their home spawners
+    GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => flag.ResetFlag());
+    
+    // Check win condition
+    if (currentScore >= GAMEMODE_TARGET_SCORE) {
+        EndGameByScore(scoringTeamId);
+    }
+}
+
+function EndGameByScore(winningTeamId: number): void {
+    gameStarted = false;
+    
+    const winningTeam = mod.GetTeam(winningTeamId);
+    const teamName = winningTeamId === 1 ? "Blue" : "Red";
+    
+    console.log(`Game ended - Team ${winningTeamId} wins by score`);
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_score, winningTeamId))
+    mod.EndGameMode(winningTeam);    
+}
+
+function EndGameByTime(): void {
+    gameStarted = false;
+    // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_time));
+    console.log(`Game ended by time limit`);
+    
+    // Determine winner by score
+    // if (team1Score > team2Score) {
+    //     mod.EndGameMode(team1);
+    // } else if (team2Score > team1Score) {
+    //     mod.EndGameMode(team2);
+    // } else {
+    //     mod.EndGameMode(mod.GetTeam(0)); // Draw
+    // }
+}
+
+async function CaptureFeedback(pos: mod.Vector): Promise<void> {
+    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
+    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
+    mod.PlaySound(sfx, 1);
+
+    // Cleanup
+    mod.Wait(5);
+    mod.UnspawnObject(sfx);
+    mod.UnspawnObject(vfx);
+}
+
+
+//==============================================================================================
 // FLAG CLASS
 //==============================================================================================
 
@@ -2562,6 +2657,7 @@ class Flag {
     
     // Player tracking
     carrierPlayer: mod.Player | null = null;
+    lastCarrier: mod.Player | null = null;
     
     // Timers
     dropTime: number = 0;
@@ -2572,11 +2668,17 @@ class Flag {
     flagCarriedIcons: Map<number, mod.WorldIcon> = new Map(); // One icon per opposing team
     flagInteractionPoint: mod.InteractPoint | null = null;
     flagProp: mod.Object | null = null;
+    
+    // VFX
     flagHomeVFX: mod.VFX;
-    alarmSFX : mod.SFX | null = null;
-    dragSFX: mod.SFX | null = null;
     tetherFlagVFX: mod.VFX | null = null;
     tetherPlayerVFX: mod.VFX | null = null;
+    hoverVFX: mod.VFX | null = null;
+
+    // SFX
+    alarmSFX : mod.SFX | null = null;
+    dragSFX: mod.SFX | null = null;
+
     
     constructor(
         team: mod.Team, 
@@ -2602,6 +2704,7 @@ class Flag {
         this.flagProp = null;
         this.flagHomeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
         this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
+        this.hoverVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Missile_Javelin, this.homePosition, ZERO_VEC);
         this.Initialize();
     }
     
@@ -2705,6 +2808,7 @@ class Flag {
         this.isBeingCarried = true;
         this.isDropped = false;
         this.carrierPlayer = player;
+        this.lastCarrier = player;
 
         // Play VO voice lines
         this.PlayFlagTakenVO();
@@ -2821,13 +2925,15 @@ class Flag {
        
         // Flag rotation based on facing direction
         // TODO: replace with facing angle and hit normal
-        let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
-        
+        let flagRotationVec = Math2.Vec3.FromVector(facingDir).DirectionToEuler(); //mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
+        let flagRotationFlat = new Math2.Vec3(0, flagRotationVec.y, 0);
+        let flagRotation = flagRotationFlat.ToVector();
+
         // Initially spawn flag at carrier position - it will be moved by animation
         let initialPosition = position;
         
         if(!FLAG_FOLLOW_MODE){
-            this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
+            //this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
         }
 
         if(DEBUG_MODE) console.log("this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);");
@@ -2845,22 +2951,23 @@ class Flag {
         this.carrierPlayer = null;
 
         // Animate flag with concurrent raycast generation
-        if(this.flagProp && useProjectileThrow && !FLAG_FOLLOW_MODE) {
+        if(useProjectileThrow && !FLAG_FOLLOW_MODE) {
             if(DEBUG_MODE) console.log("Starting concurrent flag animation");
             
             // Create the generator for projectile path with validation callback
             const pathGenerator = RaycastManager.ProjectileRaycastGenerator(
                 mod.Add(
-                    mod.Add(position, mod.CreateVector(0.0, SOLDIER_HEIGHT, 0.0)),     // Start above soldier head to avoid self collisions
+                    mod.Add(mod.Add(position, mod.CreateVector(0.0, SOLDIER_HEIGHT, 0.0)), mod.Multiply(facingDir, 1.5)) ,     // Start above soldier head to avoid self collisions
                     mod.Multiply(facingDir, 0.75)        // Start projectile arc away from player to avoid intersections
                 ),
                 throwDirectionAndSpeed,                 // Velocity
                 FLAG_DROP_RAYCAST_DISTANCE,             // Max drop distance
-                3,                                      // Sample rate
+                4,                                      // Sample rate
                 this.carrierPlayer,                     // Origin player (now null but was set earlier)
                 9.8,                                    // gravity
                 DEBUG_MODE,                             // Debug visualization
                 5,                                      // Interpolation steps
+                FLAG_TERRAIN_FIX_PROTECTION ? mod.YComponentOf(initialPosition) : undefined,    // Clamp Y distance arc can travel to fix terrain raycast bug
                 async (hitPoint: mod.Vector, hitNormal?: mod.Vector) => {
                     // This callback is called when the projectile hits something
                     if(DEBUG_MODE) {
@@ -2870,7 +2977,7 @@ class Flag {
                     // Move validation location slightly away from the hit location in direction of the hit normal
                     let groundLocationAdjusted: mod.Vector = mod.Add(
                         hitPoint, 
-                        mod.Multiply(hitNormal ?? ZERO_VEC, SPAWN_VALIDATION_HEIGHT_OFFSET)
+                        mod.Multiply(hitNormal ?? mod.UpVector(), SPAWN_VALIDATION_HEIGHT_OFFSET)
                     );
                     
                     // Adjust flag spawn location to make sure it's not clipping into a wall
@@ -2881,7 +2988,8 @@ class Flag {
                         SPAWN_VALIDATION_DIRECTIONS,        // How many direction rays to cast around the object
                         FLAG_DROP_RAYCAST_DISTANCE,         // How far down to look for a valid ground location
                         SPAWN_VALIDATION_MAX_ITERATIONS,    // Adjustment iterations, in case we don't find a valid location
-                        DEBUG_MODE                          // Debug
+                        DEBUG_MODE,                         // Debug
+                        FLAG_TERRAIN_FIX_PROTECTION ? mod.YComponentOf(initialPosition) : undefined
                     );
 
                     let endRayCastID: number = RaycastManager.GetID();
@@ -2899,21 +3007,26 @@ class Flag {
 
             // Animate concurrently with path generation
             await animationManager.AnimateAlongGeneratedPath(
-                this.flagProp,
+                undefined,
                 pathGenerator,
-                6,  // minBufferSize - stay 6 points ahead of animation to avoid catching up during validation
+                20,  // minBufferSize - stay ahead of animation to avoid catching up during validation
                 {
                     speed: 800,
+                    onSpawnAtStart: ():mod.Object | null  => {
+                        this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
+                        return this.flagProp;
+                    },
                     onProgress: (progress: number, position: mod.Vector) => {
                         mod.MoveVFX(this.flagHomeVFX, position, ZERO_VEC);
-                    }
+                    },
+                    rotation: flagRotation
                 }
             ).catch((reason: any) => {
                 console.log(`Concurrent animation path failed with reason ${reason}`);
             });
             
             // Update current position to final animated position
-            this.currentPosition = mod.GetObjectPosition(this.flagProp);
+            this.currentPosition = this.flagProp ? mod.GetObjectPosition(this.flagProp) : position;
             
             if(DEBUG_MODE) console.log("Concurrent flag animation complete");
         } else if(!useProjectileThrow) {
@@ -2990,6 +3103,7 @@ class Flag {
         await mod.Wait(FLAG_PICKUP_DELAY);
         if (this.isDropped) {
             this.canBePickedUp = true;
+            this.lastCarrier = null;
         }
     }
 
@@ -3071,6 +3185,7 @@ class Flag {
         let currentRotation = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
         let currentVelocity = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetLinearVelocity);
         let soldierInAir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsInAir);
+        let soldierParachuting = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsParachuting);
         let soldierInVehicle = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsInVehicle);
 
         // Update jsPlayer velocity
@@ -3080,13 +3195,22 @@ class Flag {
         }
 
         if(FLAG_FOLLOW_MODE){
-            this.FollowPlayer(currentSoldierPosition);
+            this.FollowPlayer(currentSoldierPosition, soldierParachuting);
         } else {
             this.currentPosition = currentSoldierPosition;
         }
         
         // Make smoke effect follow carrier
         mod.MoveVFX(this.flagHomeVFX, this.currentPosition, currentRotation);
+
+        if(this.hoverVFX){
+            if(soldierParachuting){
+                mod.EnableVFX(this.hoverVFX, true);
+                mod.MoveVFX(this.hoverVFX, this.currentPosition, Math2.Vec3.FromVector(mod.ForwardVector()).DirectionToEuler().ToVector());
+            } else {
+                mod.EnableVFX(this.hoverVFX, false);
+            }
+        }
 
         // Move carrier icons
         this.UpdateCarrierIcon();
@@ -3095,7 +3219,7 @@ class Flag {
         this.CheckCarrierDroppedFlag(this.carrierPlayer);
     }
 
-    FollowPlayer(currentSoldierPosition: mod.Vector) {
+    FollowPlayer(currentSoldierPosition: mod.Vector, isParachuting?: boolean) {
         let distanceToPlayer = Math2.Vec3.FromVector(currentSoldierPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).Length();
 
         // Always add player position to buffer to maintain continuous path
@@ -3104,6 +3228,7 @@ class Flag {
         let soldierToFlagDir = currentSoldierPos.Subtract(currentFlagPos);
         let soldierToFlagDirScaled = soldierToFlagDir.MultiplyScalar(0.85);
         let flagPositionScaled = currentFlagPos.Add(soldierToFlagDirScaled);
+        let soldierParachuting = isParachuting ?? false;
         this.followPoints.push(flagPositionScaled.ToVector());
 
         // Keep buffer within max sample size
@@ -3137,7 +3262,10 @@ class Flag {
 
                 // Calculate direction to next point for rotation
                 let nextPosition = this.followPoints.length > 1 ? this.followPoints[0] : this.currentPosition;
-                let direction = Math2.Vec3.FromVector(nextPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).MultiplyScalar(-1);
+                let direction = Math2.Vec3.FromVector(nextPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).MultiplyScalar(-1).Normalize();
+
+                // Remove pitch and roll if we're hovering
+                direction = soldierParachuting ? direction.Multiply(new Math2.Vec3(1,0,1)).Normalize() : direction;
                 let targetRotation = direction.Length() > 0.01 ? direction.DirectionToEuler() : new Math2.Vec3(0, 0, 0);
                 
                 // Apply exponential smoothing to rotation
@@ -3174,8 +3302,10 @@ class Flag {
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2.5,0));
         for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
             mod.SetWorldIconPosition(carriedIcon, flagIconOffset);
+            mod.EnableWorldIconImage(carriedIcon, this.isBeingCarried || this.isDropped);
         }
         mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
+        mod.EnableWorldIconImage(this.flagRecoverIcon, this.isBeingCarried || this.isDropped);
     }
     
     RestrictCarrierWeapons(player: mod.Player): void {
@@ -3383,6 +3513,17 @@ function IsCarryingAnyFlag(player: mod.Player): boolean {
     return false;
 }
 
+// Was the player previously holding a flag?
+function WasCarryingAnyFlag(player: mod.Player): boolean {
+    // Check all flags dynamically
+    for (const [flagId, flagData] of flags.entries()) {
+        if (flagData.carrierPlayer && mod.Equals(flagData.lastCarrier, player)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function GetOpposingTeamsForFlag(flagData: Flag): number[] {
     // If flag has specific allowed capturing teams, return those
     if (flagData.allowedCapturingTeams.length > 0) {
@@ -3433,8 +3574,6 @@ class CaptureZone {
                 this.baseIcons = new Map();
                 let teamIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
                 mod.SetWorldIconOwner(teamIcon, team);
-                mod.EnableWorldIconText(teamIcon, true);
-                mod.EnableWorldIconImage(teamIcon, true);
                 this.baseIcons.set(mod.GetObjId(team), teamIcon);
                 
                 // Create world icons for opposing teams        
@@ -3443,8 +3582,6 @@ class CaptureZone {
                     for(let opposingTeam of opposingTeams){
                         let opposingIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
                         mod.SetWorldIconOwner(opposingIcon, mod.GetTeam(opposingTeam));
-                        mod.EnableWorldIconText(opposingIcon, true);
-                        mod.EnableWorldIconImage(opposingIcon, true);
                         this.baseIcons.set(opposingTeam, opposingIcon);
                     }
                 }
@@ -3470,6 +3607,8 @@ class CaptureZone {
                 mod.SetWorldIconImage(icon, mod.WorldIconImages.Triangle);
                 mod.SetWorldIconColor(icon, GetTeamColorById(this.teamId));
                 mod.SetWorldIconPosition(icon, this.iconPosition);
+                mod.EnableWorldIconText(icon, true);
+                mod.EnableWorldIconImage(icon, true);
             }
         }
     } 
@@ -4171,13 +4310,18 @@ class FlagBar {
             0, 
             1
         );
-        
+
+        const midColor = VectorClampToRange(
+            Math2.Vec3.FromVector(teamColor).Add(new Math2.Vec3(0.2, 0.2, 0.2)).ToVector(),
+            0, 
+            1
+        );
         return new FlagBarTicker({
             position: [xPos, 0],
             size: [this.halfBarWidth, this.barHeight],
             parent: this.rootContainer,
             textSize: 0,  // No text
-            textColor: textColor,
+            textColor: midColor,
             bgColor: teamColor,
             bgAlpha: 0.5,
             showProgressBar: true,
@@ -4188,6 +4332,12 @@ class FlagBar {
     
     private createFlagIcon(team: mod.Team, teamId: number): FlagIcon {
         const teamColor = GetTeamColorById(teamId);
+
+        const textColor = VectorClampToRange(
+            GetTeamColorLight(team), 
+            0, 
+            1
+        );
         
         return new FlagIcon({
             name: `FlagBar_FlagIcon_Team${teamId}`,
@@ -4196,12 +4346,12 @@ class FlagBar {
             anchor: mod.UIAnchor.Center,
             parent: this.rootContainer,
             bgFill: mod.UIBgFill.Solid,
-            fillColor: mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)),
+            fillColor: textColor,
             fillAlpha: 1,
-            outlineColor: teamColor,
+            outlineColor: textColor,
             outlineThickness: 1,
             showFill: true,
-            showOutline: true,
+            showOutline: false,
             visible: true
         });
     }
@@ -4271,14 +4421,14 @@ class FlagBar {
         
         // Update flag icon visibility based on flag state
         // FIXED: Show flag when NOT dropped (was reversed)
-        if (flag.isDropped) {
+        if (flag.isDropped && !flagIcon.isPulsing) {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
-            flagIcon.SetFillAlpha(0.15);
-            flagIcon.SetOutlineAlpha(0.75);           
-        } else {
+            //flagIcon.SetFillAlpha(0.4);
+            //flagIcon.SetOutlineAlpha(0.4);      
+            flagIcon.StartPulse(2, 0.1, 0.8);
+        } else if(flagIcon.isPulsing) {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
-            flagIcon.SetFillAlpha(1);
-            flagIcon.SetOutlineAlpha(1);
+            flagIcon.StopPulse();
         }
         
         // Update bar progress (bar empties as flag advances). 
@@ -4693,8 +4843,6 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
 // CLASSIC 2-TEAM CTF HUD
 //==============================================================================================
 
-import { ParseUI } from "modlib";
-
 /**
  * ScoreboardUI - Main scoring interface for CTF
  * Shows player's team and all team scores with flag statuses
@@ -4713,8 +4861,8 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
 
     // Round timer
     timerTicker: RoundTimer | undefined;
-    timerWidgetSize: number[] = [66, 20];
-    timerScorePaddingTop: number = 86;
+    timerWidgetSize: number[] = [66, 28];
+    timerScorePaddingTop: number = 90;
 
     // Flag bar
     flagBar: FlagBar | undefined;
@@ -4756,7 +4904,7 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
         // Create flag bar (positioned between the two score tickers)
         const team1Ticker = this.teamScoreTickers.get(1);
         const team2Ticker = this.teamScoreTickers.get(2);
-        
+
         if (team1Ticker && team2Ticker && team1 && team2) {
             // Calculate FlagBar dimensions and position
             const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarPadding;
@@ -4783,11 +4931,14 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
             }
         }
 
+        // Create round timer
         this.timerTicker = new RoundTimer({
             position: [0, this.timerScorePaddingTop],
             parent: this.rootWidget,
-            textSize: 24,
+            textSize: 26,
             size: this.timerWidgetSize,
+            bgAlpha: 0.5,
+            textColor: mod.CreateVector(0.9, 0.9, 0.9)
         })!;
 
         // Initial refresh
@@ -4874,6 +5025,7 @@ class FlagIcon {
     private outlineContainers: mod.UIWidget[] = [];  // Containers for outline version
     
     private readonly params: FlagIconParams;
+    isPulsing: boolean;
     
     // Flag proportions
     private readonly POLE_WIDTH_RATIO = 0.15;
@@ -4882,9 +5034,8 @@ class FlagIcon {
     private readonly FLAG_HEIGHT_RATIO = 0.55;
     
     constructor(params: FlagIconParams) {
-        this.params = params;
-        
         // Default values
+        this.params = params;
         this.params.showFill = params.showFill ?? true;
         this.params.showOutline = params.showOutline ?? false;
         this.params.fillColor = VectorClampToRange(params.fillColor ?? mod.CreateVector(1, 1, 1), 0, 1);
@@ -4892,7 +5043,10 @@ class FlagIcon {
         this.params.outlineColor = VectorClampToRange(params.outlineColor ?? mod.CreateVector(1, 1, 1), 0, 1);
         this.params.outlineAlpha = params.outlineAlpha ?? 1.0;
         this.params.flagPoleGap = params.flagPoleGap ?? 2.0;
-        
+
+        // UI states
+        this.isPulsing = false;
+
         // Create root container
         this.rootContainer = this.createRootContainer();
         
@@ -5057,6 +5211,31 @@ class FlagIcon {
      */
     IsOutlineVisible(): boolean {
         return this.params.showOutline ?? false;
+    }
+
+    async StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
+        if(this.isPulsing)
+            return;
+
+        let minAlpha = minimumAlpha ?? 0;
+        let maxAlpha = maximumAlpha ?? 1;
+        let speed = pulseSpeed ?? 0.1;
+
+        this.isPulsing = true;
+        let alpha = 1;
+        let time = 0;
+        while(this.isPulsing){
+            time = GetCurrentTime();
+            alpha = Math2.Remap(Math.abs(Math.sin(time * speed)), 0, 1, minAlpha, maxAlpha),
+            this.SetFillAlpha(alpha);
+            if(this.params.showOutline)
+                this.SetOutlineAlpha(alpha);
+            await mod.Wait(TICK_RATE);
+        }
+    }
+
+    StopPulse(): void {
+        this.isPulsing = false;
     }
     
     /**

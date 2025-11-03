@@ -30,6 +30,7 @@ class Flag {
     
     // Player tracking
     carrierPlayer: mod.Player | null = null;
+    lastCarrier: mod.Player | null = null;
     
     // Timers
     dropTime: number = 0;
@@ -40,11 +41,17 @@ class Flag {
     flagCarriedIcons: Map<number, mod.WorldIcon> = new Map(); // One icon per opposing team
     flagInteractionPoint: mod.InteractPoint | null = null;
     flagProp: mod.Object | null = null;
+    
+    // VFX
     flagHomeVFX: mod.VFX;
-    alarmSFX : mod.SFX | null = null;
-    dragSFX: mod.SFX | null = null;
     tetherFlagVFX: mod.VFX | null = null;
     tetherPlayerVFX: mod.VFX | null = null;
+    hoverVFX: mod.VFX | null = null;
+
+    // SFX
+    alarmSFX : mod.SFX | null = null;
+    dragSFX: mod.SFX | null = null;
+
     
     constructor(
         team: mod.Team, 
@@ -70,6 +77,7 @@ class Flag {
         this.flagProp = null;
         this.flagHomeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
         this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
+        this.hoverVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Missile_Javelin, this.homePosition, ZERO_VEC);
         this.Initialize();
     }
     
@@ -173,6 +181,7 @@ class Flag {
         this.isBeingCarried = true;
         this.isDropped = false;
         this.carrierPlayer = player;
+        this.lastCarrier = player;
 
         // Play VO voice lines
         this.PlayFlagTakenVO();
@@ -289,13 +298,15 @@ class Flag {
        
         // Flag rotation based on facing direction
         // TODO: replace with facing angle and hit normal
-        let flagRotation = mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
-        
+        let flagRotationVec = Math2.Vec3.FromVector(facingDir).DirectionToEuler(); //mod.CreateVector(0, mod.ArctangentInRadians(mod.XComponentOf(direction) / mod.ZComponentOf(direction)), 0);
+        let flagRotationFlat = new Math2.Vec3(0, flagRotationVec.y, 0);
+        let flagRotation = flagRotationFlat.ToVector();
+
         // Initially spawn flag at carrier position - it will be moved by animation
         let initialPosition = position;
         
         if(!FLAG_FOLLOW_MODE){
-            this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
+            //this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
         }
 
         if(DEBUG_MODE) console.log("this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);");
@@ -313,22 +324,23 @@ class Flag {
         this.carrierPlayer = null;
 
         // Animate flag with concurrent raycast generation
-        if(this.flagProp && useProjectileThrow && !FLAG_FOLLOW_MODE) {
+        if(useProjectileThrow && !FLAG_FOLLOW_MODE) {
             if(DEBUG_MODE) console.log("Starting concurrent flag animation");
             
             // Create the generator for projectile path with validation callback
             const pathGenerator = RaycastManager.ProjectileRaycastGenerator(
                 mod.Add(
-                    mod.Add(position, mod.CreateVector(0.0, SOLDIER_HEIGHT, 0.0)),     // Start above soldier head to avoid self collisions
+                    mod.Add(mod.Add(position, mod.CreateVector(0.0, SOLDIER_HEIGHT, 0.0)), mod.Multiply(facingDir, 1.5)) ,     // Start above soldier head to avoid self collisions
                     mod.Multiply(facingDir, 0.75)        // Start projectile arc away from player to avoid intersections
                 ),
                 throwDirectionAndSpeed,                 // Velocity
                 FLAG_DROP_RAYCAST_DISTANCE,             // Max drop distance
-                3,                                      // Sample rate
+                4,                                      // Sample rate
                 this.carrierPlayer,                     // Origin player (now null but was set earlier)
                 9.8,                                    // gravity
                 DEBUG_MODE,                             // Debug visualization
                 5,                                      // Interpolation steps
+                FLAG_TERRAIN_FIX_PROTECTION ? mod.YComponentOf(initialPosition) : undefined,    // Clamp Y distance arc can travel to fix terrain raycast bug
                 async (hitPoint: mod.Vector, hitNormal?: mod.Vector) => {
                     // This callback is called when the projectile hits something
                     if(DEBUG_MODE) {
@@ -338,7 +350,7 @@ class Flag {
                     // Move validation location slightly away from the hit location in direction of the hit normal
                     let groundLocationAdjusted: mod.Vector = mod.Add(
                         hitPoint, 
-                        mod.Multiply(hitNormal ?? ZERO_VEC, SPAWN_VALIDATION_HEIGHT_OFFSET)
+                        mod.Multiply(hitNormal ?? mod.UpVector(), SPAWN_VALIDATION_HEIGHT_OFFSET)
                     );
                     
                     // Adjust flag spawn location to make sure it's not clipping into a wall
@@ -349,7 +361,8 @@ class Flag {
                         SPAWN_VALIDATION_DIRECTIONS,        // How many direction rays to cast around the object
                         FLAG_DROP_RAYCAST_DISTANCE,         // How far down to look for a valid ground location
                         SPAWN_VALIDATION_MAX_ITERATIONS,    // Adjustment iterations, in case we don't find a valid location
-                        DEBUG_MODE                          // Debug
+                        DEBUG_MODE,                         // Debug
+                        FLAG_TERRAIN_FIX_PROTECTION ? mod.YComponentOf(initialPosition) : undefined
                     );
 
                     let endRayCastID: number = RaycastManager.GetID();
@@ -367,21 +380,26 @@ class Flag {
 
             // Animate concurrently with path generation
             await animationManager.AnimateAlongGeneratedPath(
-                this.flagProp,
+                undefined,
                 pathGenerator,
-                6,  // minBufferSize - stay 6 points ahead of animation to avoid catching up during validation
+                20,  // minBufferSize - stay ahead of animation to avoid catching up during validation
                 {
                     speed: 800,
+                    onSpawnAtStart: ():mod.Object | null  => {
+                        this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
+                        return this.flagProp;
+                    },
                     onProgress: (progress: number, position: mod.Vector) => {
                         mod.MoveVFX(this.flagHomeVFX, position, ZERO_VEC);
-                    }
+                    },
+                    rotation: flagRotation
                 }
             ).catch((reason: any) => {
                 console.log(`Concurrent animation path failed with reason ${reason}`);
             });
             
             // Update current position to final animated position
-            this.currentPosition = mod.GetObjectPosition(this.flagProp);
+            this.currentPosition = this.flagProp ? mod.GetObjectPosition(this.flagProp) : position;
             
             if(DEBUG_MODE) console.log("Concurrent flag animation complete");
         } else if(!useProjectileThrow) {
@@ -458,6 +476,7 @@ class Flag {
         await mod.Wait(FLAG_PICKUP_DELAY);
         if (this.isDropped) {
             this.canBePickedUp = true;
+            this.lastCarrier = null;
         }
     }
 
@@ -539,6 +558,7 @@ class Flag {
         let currentRotation = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetFacingDirection);
         let currentVelocity = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateVector.GetLinearVelocity);
         let soldierInAir = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsInAir);
+        let soldierParachuting = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsParachuting);
         let soldierInVehicle = mod.GetSoldierState(this.carrierPlayer, mod.SoldierStateBool.IsInVehicle);
 
         // Update jsPlayer velocity
@@ -548,13 +568,22 @@ class Flag {
         }
 
         if(FLAG_FOLLOW_MODE){
-            this.FollowPlayer(currentSoldierPosition);
+            this.FollowPlayer(currentSoldierPosition, soldierParachuting);
         } else {
             this.currentPosition = currentSoldierPosition;
         }
         
         // Make smoke effect follow carrier
         mod.MoveVFX(this.flagHomeVFX, this.currentPosition, currentRotation);
+
+        if(this.hoverVFX){
+            if(soldierParachuting){
+                mod.EnableVFX(this.hoverVFX, true);
+                mod.MoveVFX(this.hoverVFX, this.currentPosition, Math2.Vec3.FromVector(mod.ForwardVector()).DirectionToEuler().ToVector());
+            } else {
+                mod.EnableVFX(this.hoverVFX, false);
+            }
+        }
 
         // Move carrier icons
         this.UpdateCarrierIcon();
@@ -563,7 +592,7 @@ class Flag {
         this.CheckCarrierDroppedFlag(this.carrierPlayer);
     }
 
-    FollowPlayer(currentSoldierPosition: mod.Vector) {
+    FollowPlayer(currentSoldierPosition: mod.Vector, isParachuting?: boolean) {
         let distanceToPlayer = Math2.Vec3.FromVector(currentSoldierPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).Length();
 
         // Always add player position to buffer to maintain continuous path
@@ -572,6 +601,7 @@ class Flag {
         let soldierToFlagDir = currentSoldierPos.Subtract(currentFlagPos);
         let soldierToFlagDirScaled = soldierToFlagDir.MultiplyScalar(0.85);
         let flagPositionScaled = currentFlagPos.Add(soldierToFlagDirScaled);
+        let soldierParachuting = isParachuting ?? false;
         this.followPoints.push(flagPositionScaled.ToVector());
 
         // Keep buffer within max sample size
@@ -605,7 +635,10 @@ class Flag {
 
                 // Calculate direction to next point for rotation
                 let nextPosition = this.followPoints.length > 1 ? this.followPoints[0] : this.currentPosition;
-                let direction = Math2.Vec3.FromVector(nextPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).MultiplyScalar(-1);
+                let direction = Math2.Vec3.FromVector(nextPosition).Subtract(Math2.Vec3.FromVector(this.currentPosition)).MultiplyScalar(-1).Normalize();
+
+                // Remove pitch and roll if we're hovering
+                direction = soldierParachuting ? direction.Multiply(new Math2.Vec3(1,0,1)).Normalize() : direction;
                 let targetRotation = direction.Length() > 0.01 ? direction.DirectionToEuler() : new Math2.Vec3(0, 0, 0);
                 
                 // Apply exponential smoothing to rotation
@@ -642,8 +675,10 @@ class Flag {
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2.5,0));
         for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
             mod.SetWorldIconPosition(carriedIcon, flagIconOffset);
+            mod.EnableWorldIconImage(carriedIcon, this.isBeingCarried || this.isDropped);
         }
         mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
+        mod.EnableWorldIconImage(this.flagRecoverIcon, this.isBeingCarried || this.isDropped);
     }
     
     RestrictCarrierWeapons(player: mod.Player): void {
@@ -845,6 +880,17 @@ function IsCarryingAnyFlag(player: mod.Player): boolean {
     // Check all flags dynamically
     for (const [flagId, flagData] of flags.entries()) {
         if (flagData.carrierPlayer && mod.Equals(flagData.carrierPlayer, player)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Was the player previously holding a flag?
+function WasCarryingAnyFlag(player: mod.Player): boolean {
+    // Check all flags dynamically
+    for (const [flagId, flagData] of flags.entries()) {
+        if (flagData.carrierPlayer && mod.Equals(flagData.lastCarrier, player)) {
             return true;
         }
     }

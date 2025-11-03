@@ -1,24 +1,70 @@
 Notes
 =====
 
-- COMPLETE:  Disable flag taken alarm sound after 5 seconds
-- COMPLETE: Add support for multiple teams (more than 2)
-- IN PROGRESS: Add support for neutral flags (any team can capture)
-- COMPLETE: Dynamic base WorldIcon spawning to show where a flag needs to be captured
-- Add markers for each base that is a slightly different shade of colour than the team color. 
-    - COMPLETE: Your base marker is ALWAYS visible. Enemy team base marker disappears when their flag is away, but will appear if your flag is away.
-    - Your base marker will say "". The enemy marker will say "".
-- COMPLETE: Make roaming recover marker colour match your team colour
-- COMPLETE: All world icons must match your team colour for objects owned by a team
-- COMPLETE: Change team colours to purple and orange
-- COMPLETE (with bonus!): Stop flags dropping inside props by using raycasts. Bonus for using an arc.
-- Drop icon update rate. Either use UI object or make it smoother
-- COMPLETE: Forcefully 3D spot the flag carrier
-- COMPLETE: Add configurable option for flag carrier to have pistol?
-- IN PROGRESS: Custom UI for showing flag captures and provide feedback
-    - Fix flags not drawing fills
+Bugs
+----
+- [x] Increase round time to 40m
+- [x] Following MCOMS are bugged and can desync on the server. Replace with projectile throw clamped to player Y height
+- [x] Disable redeploy beacon
+- [x] Fix ATV not letting flag carriers in when driven
+- [x] Two team columns are shifted by one. Remove teams column or fix
+- [x] Add kills column
+- [x] Flag carrier kills don't count if they drop the flag first. Add timer for last carrier
+- [x] Make flags filled with same colour by default (normal team colour, not light)
+- [x] Re-enable all world icons on every player deploy to fix desync
+- [ ] Flagbar readability improvements using blurred bgfill container
+- [ ] Add UI layer under flag bar to show your team colour, and your team task (recover, defend, capture)
+- [ ] Add pickup available VFX/SFX to MCOM
+- [ ] Add HQ spawn protection
+- [ ] Move bases closer together
+    
+
+In progress:
+------------
+- Add support for neutral flags (any team can capture)
+- Custom UI for showing flag captures and provide feedback
+
 - Example CTF maps
     - Golf course (free)
     - Tech Campus (free)
     - Firestorm (full)
+- Make flag smoke only emit when flag has left base
+- Add the following sounds:
+    - Drop Flag Start 
+        - SFX_UI_Gauntlet_Heist_AltRecoveringCacheStart_OneShot2D
+    - Drop Flag Timer
+        - SFX_UI_Gauntlet_Heist_AltRecoveringCacheTimer_OneShot2D
+    - Drop Flag Can Capture
+        - SFX_UI_Gauntlet_Heist_AltRecoveringCacheStop_OneShot2D
+- Add the following VFX:
+    - MCOM effect when parachuting
+        - FX_Missile_Javelin (attach to bottom and remove pitch rotation from movement)
+    - MCOM movement on ground
+        - FX_DeployableCover_Deploy_Dirt (attach to bottom, periodically loop)
+    - MCOM to player tether
+        - FX_Gadget_InteractiveSpectator_Camera_Light_Green or Red or Yellow
+        - FX_EODBot_Active_Friendly
+    - MCOM light when dropped and can pickup
+        - FX_TracerDart_Projectile_Glow (attach to top)
+    - MCOM captured at base 
+        - FX_Grenade_400_Thermobaric_Detonation
+        - FX_Vehicle_Car_Destruction_Death_Explosion_PTV
+
+Completed:
+----------
+- Disable flag taken alarm sound after 5 seconds
+- Add support for multiple teams (more than 2)
+- Dynamic base WorldIcon spawning to show where a flag needs to be captured
+- Your base marker is ALWAYS visible. Enemy team base marker disappears when their flag is away, but will appear if your flag is away.
+- Make roaming recover marker colour match your team colour
+- All world icons must match your team colour for objects owned by a team
+- Change team colours to purple and orange
+- (Terrain raycasts broken) Stop flags dropping inside props by using raycasts. Bonus for using an arc.
+- Forcefully 3D spot the flag carrier
+- Add configurable option for flag carrier to have pistol?
 - Add MCOM follow mode (Sonic & Tails mode)
+
+Deferred:
+---------
+- Add markers for each base that is a slightly different shade of colour than the team color. 
+- Drop icon update rate. Either use UI object or make it smoother

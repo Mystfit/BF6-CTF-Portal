@@ -117,13 +117,18 @@ class FlagBar {
             0, 
             1
         );
-        
+
+        const midColor = VectorClampToRange(
+            Math2.Vec3.FromVector(teamColor).Add(new Math2.Vec3(0.15, 0.15, 0.15)).ToVector(),
+            0, 
+            1
+        );
         return new FlagBarTicker({
             position: [xPos, 0],
             size: [this.halfBarWidth, this.barHeight],
             parent: this.rootContainer,
             textSize: 0,  // No text
-            textColor: textColor,
+            textColor: midColor,
             bgColor: teamColor,
             bgAlpha: 0.5,
             showProgressBar: true,
@@ -134,6 +139,12 @@ class FlagBar {
     
     private createFlagIcon(team: mod.Team, teamId: number): FlagIcon {
         const teamColor = GetTeamColorById(teamId);
+
+        const textColor = VectorClampToRange(
+            GetTeamColorLight(team), 
+            0, 
+            1
+        );
         
         return new FlagIcon({
             name: `FlagBar_FlagIcon_Team${teamId}`,
@@ -142,12 +153,12 @@ class FlagBar {
             anchor: mod.UIAnchor.Center,
             parent: this.rootContainer,
             bgFill: mod.UIBgFill.Solid,
-            fillColor: mod.Add(teamColor, mod.CreateVector(0.5, 0.5, 0.5)),
+            fillColor: textColor,
             fillAlpha: 1,
-            outlineColor: teamColor,
+            outlineColor: textColor,
             outlineThickness: 1,
             showFill: true,
-            showOutline: true,
+            showOutline: false,
             visible: true
         });
     }
@@ -217,14 +228,15 @@ class FlagBar {
         
         // Update flag icon visibility based on flag state
         // FIXED: Show flag when NOT dropped (was reversed)
-        if (flag.isDropped) {
+        if (flag.isDropped && !flagIcon.isPulsing) {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
-            flagIcon.SetFillAlpha(0.15);
-            flagIcon.SetOutlineAlpha(0.75);           
-        } else {
+            //flagIcon.SetFillAlpha(0.4);
+            //flagIcon.SetOutlineAlpha(0.4);      
+            flagIcon.StartPulse(2, 0.1, 0.8);
+        } else if(flagIcon.isPulsing) {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
+            flagIcon.StopPulse();
             flagIcon.SetFillAlpha(1);
-            flagIcon.SetOutlineAlpha(1);
         }
         
         // Update bar progress (bar empties as flag advances). 

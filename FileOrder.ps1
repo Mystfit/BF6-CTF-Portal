@@ -25,6 +25,7 @@
     # Level 3: Game data classes (uses Level 0-2)
     3 = @(
         "Game/JSPlayer.ts"
+        "Game/Scoring.ts"
     )
     
     # Level 4: Entity classes (uses Level 0-3)

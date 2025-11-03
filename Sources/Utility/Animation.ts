@@ -24,17 +24,20 @@ interface AnimationOptions {
     speed?: number;              // Units per second (alternative to duration)
     duration?: number;           // Total duration in seconds (overrides speed)
     rotateToDirection?: boolean; // Auto-rotate to face movement direction
+    rotation?: mod.Vector;       // Manual rotation to set when animating
     rotationSpeed?: number;      // How fast to rotate in degrees/second (default: instant)
     loop?: boolean;              // Loop the animation
     reverse?: boolean;           // Reverse after completion
+    onSpawnAtStart?: () => mod.Object | null;
+    onStart?: () => void;
     onProgress?: (progress: number, position: mod.Vector) => void;
     onComplete?: () => void;
     onSegmentComplete?: (segmentIndex: number) => void;
 }
 
 interface ActiveAnimation {
-    object: mod.Object;
-    objectId: number;
+    object: mod.Object | undefined;
+    objectId: number | undefined;
     cancelled: boolean;
     paused: boolean;
     progress: number;
@@ -263,34 +266,23 @@ class AnimationManager {
      * @returns Promise that resolves when animation completes
      */
     async AnimateAlongGeneratedPath(
-        object: mod.Object,
+        object: mod.Object | undefined,
         generator: AsyncGenerator<ProjectilePoint>,
         minBufferSize: number,
         options: AnimationOptions = {}
     ): Promise<void> {
-        const objectId = mod.GetObjId(object);
-        
-        // Register active animation
-        const animation: ActiveAnimation = {
-            object,
-            objectId,
-            cancelled: false,
-            paused: false,
-            progress: 0
-        };
-        this.activeAnimations.set(objectId, animation);
-
         const pointBuffer: ProjectilePoint[] = [];
         let generatorComplete = false;
         let currentPosition: mod.Vector;
         let animationStarted = false;
         let bufferStarvationCount = 0;
+        let objectId: number = -1;
 
         try {
             if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
 
             // Phase 1: Fill initial buffer (minBufferSize + 2 points)
-            const initialBufferSize = minBufferSize + 2;
+            const initialBufferSize = minBufferSize;
             for (let i = 0; i < initialBufferSize; i++) {
                 const result = await generator.next();
                 if (result.done) {
@@ -319,6 +311,38 @@ class AnimationManager {
             // Phase 2: Concurrent animation and generation
             animationStarted = true;
             let segmentIndex = 0;
+
+            let animation: ActiveAnimation;
+            
+            // Make sure we have an object to animate
+            if(!object && options.onSpawnAtStart){
+                let spawnedObj = options.onSpawnAtStart();
+                if(spawnedObj)
+                    object = spawnedObj;
+
+                if(!object){
+                    console.log("Could not spawn object for AnimateAlongGeneratedPath");
+                    return;
+                }
+            } else {
+                console.log("No valid object provided to AnimateAlongGeneratedPath");
+                return;
+            }
+
+            // Set up our object
+            objectId = object ? mod.GetObjId(object) : -1;
+            animation = {
+                object,
+                objectId,
+                cancelled: false,
+                paused: false,
+                progress: 0
+            }
+            this.activeAnimations.set(objectId, animation);
+        
+            // Let the caller know the animation has enough points and has started
+            if(options.onStart)
+                options.onStart();
             
             while (pointBuffer.length > 1 || !generatorComplete) {
                 if (animation.cancelled) break;
@@ -390,6 +414,8 @@ class AnimationManager {
                                 .Subtract(Math2.Vec3.FromVector(startPoint.position))
                                 .ToVector()
                         );
+                    } else if(options.rotation){
+                        rotation = options.rotation;
                     }
 
                     // Animate this segment
@@ -444,6 +470,8 @@ class AnimationManager {
                                     .Subtract(Math2.Vec3.FromVector(startPoint.position))
                                     .ToVector()
                             );
+                        } else if(options.rotation){
+                            rotation = options.rotation;
                         }
                         
                         await this.AnimateBetweenPoints(
@@ -481,6 +509,8 @@ class AnimationManager {
                                         .Subtract(Math2.Vec3.FromVector(currentPosition))
                                         .ToVector()
                                 );
+                            } else if(options.rotation){
+                                finalRotation = options.rotation;
                             }
                             
                             await this.AnimateBetweenPoints(
@@ -511,7 +541,8 @@ class AnimationManager {
             console.error(`[AnimateAlongGeneratedPath] Error during animation:`, error);
             throw error;
         } finally {
-            this.activeAnimations.delete(objectId);
+            if(objectId > -1)
+                this.activeAnimations.delete(objectId);
         }
     }
 
@@ -586,7 +617,8 @@ class AnimationManager {
     StopAllAnimations(): void {
         for (const [objectId, animation] of this.activeAnimations.entries()) {
             animation.cancelled = true;
-            mod.StopActiveMovementForObject(animation.object);
+            if(animation.object)
+                mod.StopActiveMovementForObject(animation.object);
         }
         this.activeAnimations.clear();
     }
