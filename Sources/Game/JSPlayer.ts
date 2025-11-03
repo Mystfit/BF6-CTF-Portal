@@ -42,16 +42,25 @@ class JSPlayer {
         this.joinOrder = JSPlayer.#nextJoinOrder++;
         JSPlayer.playerInstances.push(this.player);
         
-        // Create scoreboard UI for human players
-        if (!mod.GetSoldierState(player, mod.SoldierStateBool.IsAISoldier)) {
-            if (currentHUDClass) {
-                this.scoreboardUI = new currentHUDClass(player);
-            }
-        }
-        
         if (DEBUG_MODE) {
             console.log(`CTF: Adding Player [${this.playerId}] with join order ${this.joinOrder}. Total: ${JSPlayer.playerInstances.length}`);
         }
+    }
+
+    initUI(): void {
+        // Create scoreboard UI for human players
+        if(!this.scoreboardUI){
+            if (!mod.GetSoldierState(this.player, mod.SoldierStateBool.IsAISoldier)) {
+                if (currentHUDClass) {
+                    this.scoreboardUI = new currentHUDClass(this.player);
+                }
+            }
+        }
+    }
+
+    resetUI(): void {
+        delete this.scoreboardUI;
+        this.initUI();
     }
 
     static get(player: mod.Player): JSPlayer | undefined {

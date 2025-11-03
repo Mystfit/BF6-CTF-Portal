@@ -19,7 +19,8 @@
     # Level 2: Core infrastructure (uses Level 0-1)
     2 = @(
         "Utility/Raycasts.ts",
-        "Utility/Animation.ts"
+        "Utility/Animation.ts",
+        "Utility/EventDispatcher.ts"
     )
     
     # Level 3: Game data classes (uses Level 0-2)

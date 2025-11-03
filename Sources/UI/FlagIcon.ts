@@ -232,7 +232,7 @@ class FlagIcon {
         return this.params.showOutline ?? false;
     }
 
-    async StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
+    async StartThrob(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
         if(this.isPulsing)
             return;
 
@@ -246,7 +246,6 @@ class FlagIcon {
         while(this.isPulsing){
             blink_on = !blink_on;
             let alpha = blink_on ? maxAlpha : minAlpha;
-            console.log(`Flag icon pulse. Setting alpha to ${alpha}`);
             this.SetFillAlpha(alpha);
             if(this.params.showOutline)
                 this.SetOutlineAlpha(alpha);
@@ -254,9 +253,8 @@ class FlagIcon {
         }
     }
 
-    StopPulse(): void {
+    StopThrob(): void {
         this.isPulsing = false;
-        console.log("Stopping pulse");
     }
     
     /**

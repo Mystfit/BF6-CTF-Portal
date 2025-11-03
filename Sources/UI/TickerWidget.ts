@@ -280,7 +280,7 @@ abstract class TickerWidget {
     }
 
     
-    async StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
+    async StartThrob(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
         if(this.isPulsing)
             return;
 
@@ -298,7 +298,7 @@ abstract class TickerWidget {
         }
     }
 
-    StopPulse(): void {
+    StopThrob(): void {
         this.isPulsing = false;
     }
     

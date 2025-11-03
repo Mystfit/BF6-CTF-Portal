@@ -15,14 +15,14 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
     // Team scores
     teamScoreTickers: Map<number, ScoreTicker> = new Map<number, ScoreTicker>();
     teamScoreSpacing: number = 490;
-    teamScorePaddingTop: number = 64;
+    teamScorePaddingTop: number = 68;
     teamWidgetSize: number[] = [76, 30];
 
     // Round timer
     timerTicker: RoundTimer | undefined;
     timerWidgetSize: number[] = [74, 22];
     timerScorePaddingTop: number = 48;
-    teamOrdersPaddingTop: number = 90;
+    teamOrdersPaddingTop: number = 100;
 
     // Flag bar
     flagBar: FlagBar | undefined;

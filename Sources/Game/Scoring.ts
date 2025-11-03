@@ -86,7 +86,10 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
     }
 
     // Return all captured flags to their home spawners
-    GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => flag.ResetFlag());
+    GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => {
+        flag.events.emit("flagCaptured", {flag});
+        flag.ResetFlag();
+    });
     
     // Check win condition
     if (currentScore >= GAMEMODE_TARGET_SCORE) {
@@ -124,6 +127,7 @@ async function CaptureFeedback(pos: mod.Vector): Promise<void> {
     let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
     let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
     mod.PlaySound(sfx, 1);
+    mod.EnableVFX(vfx, true);
 
     // Cleanup
     mod.Wait(5);

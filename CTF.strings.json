@@ -83,7 +83,10 @@
     "order_flag_taken": "{} flag taken",
     "order_flag_dropped": "{} flag dropped",
     "order_flag_returned": "{} flag returned!",
-    "order_friendly": "Friendly!",
+    "order_flag_captured": "{} flag was captured!",
+    "order_flag_captured_friendly": "Your flag was captured",
+    "order_flag_captured_enemy": "The enemy flag was captured",
+    "order_friendly": "Friendly",
     "order_enemy": "Enemy"
 }
 

@@ -321,12 +321,6 @@ export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
     }
 
-    // Make sure we create a JSPlayer for our new player
-    JSPlayer.get(eventPlayer);
-
-    // Trigger team balance check
-    CheckAndBalanceTeams();
-
     // Refresh scoreboard to update new player team entry and score
     RefreshScoreboard();
 }
@@ -357,7 +351,10 @@ export function OnPlayerDeployed(eventPlayer: mod.Player): void {
     }
 
     // If we don't have a JSPlayer by now, we really should create one
-    JSPlayer.get(eventPlayer);
+    let jsPlayer = JSPlayer.get(eventPlayer);
+
+    // Set up the player UI on spawn
+    jsPlayer?.initUI();
 
     for(let [captureZoneId, captureZone] of captureZones){
         captureZone.UpdateIcons();
@@ -2389,6 +2386,154 @@ const animationManager = new AnimationManager();
 
 
 //==============================================================================================
+// EVENT DISPATCHER SYSTEM
+//==============================================================================================
+// A generic, type-safe event dispatcher for handling game events
+
+/**
+ * Event handler signature
+ */
+type EventHandler<T = any> = (data: T) => void;
+
+/**
+ * Generic EventDispatcher class that provides type-safe event handling
+ * 
+ * Usage example:
+ * ```typescript
+ * interface MyEventMap {
+ *     'playerJoined': { player: Player };
+ *     'scoreChanged': { score: number };
+ * }
+ * 
+ * const events = new EventDispatcher<MyEventMap>();
+ * events.on('playerJoined', (data) => console.log(data.player));
+ * events.emit('playerJoined', { player: somePlayer });
+ * ```
+ */
+class EventDispatcher<TEventMap = Record<string, any>> {
+    private listeners: Map<string, Set<EventHandler>> = new Map();
+    
+    /**
+     * Subscribe to an event
+     * @param event - The event name to listen for
+     * @param callback - The callback function to invoke when the event is emitted
+     * @returns A function to unsubscribe from the event
+     */
+    on<K extends keyof TEventMap>(event: K, callback: EventHandler<TEventMap[K]>): () => void {
+        const eventName = event as string;
+        
+        if (!this.listeners.has(eventName)) {
+            this.listeners.set(eventName, new Set());
+        }
+        
+        this.listeners.get(eventName)!.add(callback);
+        
+        // Return unsubscribe function
+        return () => this.off(event, callback);
+    }
+    
+    /**
+     * Unsubscribe from an event
+     * @param event The event name to stop listening for
+     * @param handler The callback function to remove
+     */
+    off<K extends keyof TEventMap>(event: K, handler: EventHandler<TEventMap[K]>): void {
+        const eventName = event as string;
+        const handlers = this.listeners.get(eventName);
+        
+        if (handlers) {
+            handlers.delete(handler);
+            
+            // Clean up empty sets
+            if (handlers.size === 0) {
+                this.listeners.delete(eventName);
+            }
+        }
+    }
+    
+    /**
+     * Subscribe to an event for a single execution (auto-unsubscribes after first emission)
+     * @param event The event name to listen for
+     * @param handler The callback function to execute once
+     */
+    once<K extends keyof TEventMap>(event: K, handler: EventHandler<TEventMap[K]>): void {
+        const onceWrapper: EventHandler<TEventMap[K]> = (data) => {
+            handler(data);
+            this.off(event, onceWrapper);
+        };
+        
+        this.on(event, onceWrapper);
+    }
+    
+    /**
+     * Dispatch an event to all registered listeners
+     * @param event The event name to emit
+     * @param data The data to pass to event handlers
+     */
+    emit<K extends keyof TEventMap>(event: K, data: TEventMap[K]): void {
+        const eventName = event as string;
+        const handlers = this.listeners.get(eventName);
+        
+        if (handlers) {
+            // Create a copy of the handlers set to avoid issues if handlers modify the set
+            const handlersCopy = Array.from(handlers);
+            
+            for (const handler of handlersCopy) {
+                try {
+                    handler(data);
+                } catch (error) {
+                    console.error(`Error in event handler for '${eventName}':`, error);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Check if an event has any listeners
+     * @param event The event name to check
+     * @returns True if the event has listeners
+     */
+    hasListeners<K extends keyof TEventMap>(event: K): boolean {
+        const eventName = event as string;
+        const handlers = this.listeners.get(eventName);
+        return handlers ? handlers.size > 0 : false;
+    }
+    
+    /**
+     * Get the number of listeners for an event
+     * @param event The event name to check
+     * @returns The number of registered listeners
+     */
+    listenerCount<K extends keyof TEventMap>(event: K): number {
+        const eventName = event as string;
+        const handlers = this.listeners.get(eventName);
+        return handlers ? handlers.size : 0;
+    }
+    
+    /**
+     * Remove all listeners for a specific event, or all events if no event is specified
+     * @param event Optional event name to clear listeners for. If not provided, clears all listeners.
+     */
+    clear<K extends keyof TEventMap>(event?: K): void {
+        if (event !== undefined) {
+            const eventName = event as string;
+            this.listeners.delete(eventName);
+        } else {
+            this.listeners.clear();
+        }
+    }
+    
+    /**
+     * Get all event names that have listeners
+     * @returns Array of event names
+     */
+    eventNames(): string[] {
+        return Array.from(this.listeners.keys());
+    }
+}
+
+
+//==============================================================================================
 // JSPLAYER CLASS
 //==============================================================================================
 
@@ -2432,16 +2577,25 @@ class JSPlayer {
         this.joinOrder = JSPlayer.#nextJoinOrder++;
         JSPlayer.playerInstances.push(this.player);
         
-        // Create scoreboard UI for human players
-        if (!mod.GetSoldierState(player, mod.SoldierStateBool.IsAISoldier)) {
-            if (currentHUDClass) {
-                this.scoreboardUI = new currentHUDClass(player);
-            }
-        }
-        
         if (DEBUG_MODE) {
             console.log(`CTF: Adding Player [${this.playerId}] with join order ${this.joinOrder}. Total: ${JSPlayer.playerInstances.length}`);
         }
+    }
+
+    initUI(): void {
+        // Create scoreboard UI for human players
+        if(!this.scoreboardUI){
+            if (!mod.GetSoldierState(this.player, mod.SoldierStateBool.IsAISoldier)) {
+                if (currentHUDClass) {
+                    this.scoreboardUI = new currentHUDClass(this.player);
+                }
+            }
+        }
+    }
+
+    resetUI(): void {
+        delete this.scoreboardUI;
+        this.initUI();
     }
 
     static get(player: mod.Player): JSPlayer | undefined {
@@ -2583,7 +2737,10 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
     }
 
     // Return all captured flags to their home spawners
-    GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => flag.ResetFlag());
+    GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => {
+        flag.events.emit("flagCaptured", {flag});
+        flag.ResetFlag();
+    });
     
     // Check win condition
     if (currentScore >= GAMEMODE_TARGET_SCORE) {
@@ -2621,6 +2778,7 @@ async function CaptureFeedback(pos: mod.Vector): Promise<void> {
     let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
     let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
     mod.PlaySound(sfx, 1);
+    mod.EnableVFX(vfx, true);
 
     // Cleanup
     mod.Wait(5);
@@ -2632,6 +2790,48 @@ async function CaptureFeedback(pos: mod.Vector): Promise<void> {
 //==============================================================================================
 // FLAG CLASS
 //==============================================================================================
+
+/**
+ * Flag-specific event map defining all possible flag events and their data
+ */
+interface FlagEventMap {
+    /** Emitted when a flag is picked up by a player */
+    'flagTaken': { 
+        flag: Flag; 
+        player: mod.Player;
+        isAtHome: boolean;  // Was the flag taken from home or picked up after being dropped?
+    };
+    
+    /** Emitted when a flag is dropped by a player */
+    'flagDropped': { 
+        flag: Flag; 
+        position: mod.Vector;
+        previousCarrier: mod.Player | null;
+    };
+    
+    /** Emitted when a flag is returned to its home position */
+    'flagReturned': { 
+        flag: Flag;
+        wasAutoReturned: boolean;  // True if auto-returned due to timeout
+    };
+    
+    /** Emitted when a flag reaches its home position (same as return, but separate for clarity) */
+    'flagAtHome': { 
+        flag: Flag;
+    };
+    
+    /** Emitted when a flag's state changes in any way */
+    'flagStateChanged': {
+        flag: Flag;
+        isAtHome: boolean;
+        isBeingCarried: boolean;
+        isDropped: boolean;
+    };
+    'flagCaptured': {
+        flag: Flag;
+    };
+}
+
 
 class Flag {
     readonly flagId: number;
@@ -2683,6 +2883,8 @@ class Flag {
     alarmSFX : mod.SFX | null = null;
     dragSFX: mod.SFX | null = null;
 
+    // Event system
+    readonly events: EventDispatcher<FlagEventMap>;
     
     constructor(
         team: mod.Team, 
@@ -2709,6 +2911,10 @@ class Flag {
         this.flagHomeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
         this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
         this.hoverVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Missile_Javelin, this.homePosition, ZERO_VEC);
+        
+        // Initialize event system
+        this.events = new EventDispatcher<FlagEventMap>();
+        
         this.Initialize();
     }
     
@@ -2801,6 +3007,9 @@ class Flag {
             return;
         }
 
+        // Store initial state for event
+        const wasAtHome = this.isAtHome;
+
         // Play spawner sound alarm
         if(this.isAtHome){
             this.PlayFlagAlarm().then(() => console.log("Flag alarm stopped"));
@@ -2867,6 +3076,21 @@ class Flag {
             mod.UnspawnObject(this.flagInteractionPoint);
         }
         
+        // Emit flag taken event
+        this.events.emit('flagTaken', {
+            flag: this,
+            player: player,
+            isAtHome: wasAtHome
+        });
+        
+        // Emit state changed event
+        this.events.emit('flagStateChanged', {
+            flag: this,
+            isAtHome: this.isAtHome,
+            isBeingCarried: this.isBeingCarried,
+            isDropped: this.isDropped
+        });
+        
         if (DEBUG_MODE) {
             const carrierTeam = mod.GetTeam(this.carrierPlayer);
             const carrierTeamId = mod.GetObjId(carrierTeam);
@@ -2876,6 +3100,9 @@ class Flag {
     
     async DropFlag(position?: mod.Vector, direction?: mod.Vector, dropDistance: number = FLAG_DROP_DISTANCE, useProjectileThrow?: boolean): Promise<void> {
         if (!this.isBeingCarried) return;
+
+        // Store previous carrier for event
+        const previousCarrier = this.carrierPlayer;
 
         this.isAtHome = false;
         this.isBeingCarried = false;
@@ -3078,6 +3305,21 @@ class Flag {
         this.StartAutoReturn(FLAG_AUTO_RETURN_TIME, this.numFlagTimesPickedUp).then( () => {console.log(`Flag ${this.teamId} auto-returning to base`)});
         this.StartPickupDelay().then(() => {console.log("Flag pickup delay expired")});
         
+        // Emit flag dropped event
+        this.events.emit('flagDropped', {
+            flag: this,
+            position: this.currentPosition,
+            previousCarrier: previousCarrier
+        });
+        
+        // Emit state changed event
+        this.events.emit('flagStateChanged', {
+            flag: this,
+            isAtHome: this.isAtHome,
+            isBeingCarried: this.isBeingCarried,
+            isDropped: this.isDropped
+        });
+        
         if (DEBUG_MODE) {
             console.log(`Flag dropped`);
             mod.DisplayHighlightedWorldLogMessage(
@@ -3114,6 +3356,13 @@ class Flag {
     ReturnFlag(): void {
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
         this.PlayFlagReturnedSFX();
+        
+        // Emit flag returned event (before reset)
+        this.events.emit('flagReturned', {
+            flag: this,
+            wasAutoReturned: false  // Manual return
+        });
+        
         this.ResetFlag();
     }
     
@@ -3156,7 +3405,17 @@ class Flag {
         await mod.Wait(returnDelay);
         if(this.isDropped && !this.isBeingCarried && !this.isAtHome && currFlagTimesPickedUp === this.numFlagTimesPickedUp){
             console.log(`Flag auto return. Number of times returned ${this.numFlagTimesPickedUp}. Expected ${currFlagTimesPickedUp}`);
-            this.ReturnFlag();
+            
+            this.PlayFlagReturnedSFX();
+            
+            // Emit flag returned event with auto-return flag
+            this.events.emit('flagReturned', {
+                flag: this,
+                wasAutoReturned: true
+            });
+
+            
+            this.ResetFlag();
         }
     }
 
@@ -3971,7 +4230,7 @@ abstract class TickerWidget {
     }
 
     
-    async StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
+    async StartThrob(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
         if(this.isPulsing)
             return;
 
@@ -3989,7 +4248,7 @@ abstract class TickerWidget {
         }
     }
 
-    StopPulse(): void {
+    StopThrob(): void {
         this.isPulsing = false;
     }
     
@@ -4455,10 +4714,10 @@ class FlagBar {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
             //flagIcon.SetFillAlpha(0.4);
             //flagIcon.SetOutlineAlpha(0.4);      
-            flagIcon.StartPulse(1, 0.1, 0.8);
+            flagIcon.StartThrob(1, 0.1, 0.8);
         } else if(!flag.isDropped && flagIcon.isPulsing) {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
-            flagIcon.StopPulse();
+            flagIcon.StopThrob();
             flagIcon.SetFillAlpha(1);
         }
         
@@ -4887,14 +5146,14 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
     // Team scores
     teamScoreTickers: Map<number, ScoreTicker> = new Map<number, ScoreTicker>();
     teamScoreSpacing: number = 490;
-    teamScorePaddingTop: number = 64;
+    teamScorePaddingTop: number = 68;
     teamWidgetSize: number[] = [76, 30];
 
     // Round timer
     timerTicker: RoundTimer | undefined;
     timerWidgetSize: number[] = [74, 22];
     timerScorePaddingTop: number = 48;
-    teamOrdersPaddingTop: number = 90;
+    teamOrdersPaddingTop: number = 100;
 
     // Flag bar
     flagBar: FlagBar | undefined;
@@ -5263,7 +5522,7 @@ class FlagIcon {
         return this.params.showOutline ?? false;
     }
 
-    async StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
+    async StartThrob(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
         if(this.isPulsing)
             return;
 
@@ -5277,7 +5536,6 @@ class FlagIcon {
         while(this.isPulsing){
             blink_on = !blink_on;
             let alpha = blink_on ? maxAlpha : minAlpha;
-            console.log(`Flag icon pulse. Setting alpha to ${alpha}`);
             this.SetFillAlpha(alpha);
             if(this.params.showOutline)
                 this.SetOutlineAlpha(alpha);
@@ -5285,9 +5543,8 @@ class FlagIcon {
         }
     }
 
-    StopPulse(): void {
+    StopThrob(): void {
         this.isPulsing = false;
-        console.log("Stopping pulse");
     }
     
     /**
@@ -5416,14 +5673,19 @@ enum TeamOrders {
     OurFlagTaken = 0,
     OurFlagDropped,
     OurFlagReturned,
+    OurFlagCaptured,
     EnemyFlagTaken,
     EnemyFlagDropped,
     EnemyFlagReturned,
+    EnemyFlagCaptured,
     TeamIdentify
 }
 
 class TeamOrdersBar extends TickerWidget {
     team: mod.Team;
+    teamId: number;
+    lastOrder: TeamOrders;
+    private eventUnsubscribers: Array<() => void> = [];
 
     constructor(team:mod.Team, tickerParams: TickerWidgetParams) {
          // Call parent constructor with team-specific colors
@@ -5445,10 +5707,104 @@ class TeamOrdersBar extends TickerWidget {
         });
 
         this.team = team;
-        this.SetTeamOrder(TeamOrders.TeamIdentify);
+        this.teamId = mod.GetObjId(team);
+        this.lastOrder = TeamOrders.TeamIdentify;
+        this.SetTeamOrder(this.lastOrder);
+        
+        // Bind to all flag events
+        this.bindFlagEvents();
     }
     
-    refresh(): void{
+    private bindFlagEvents(): void {
+        // Bind to each flag's events
+        for (let [flagId, flag] of flags) {
+            // Flag taken event
+            const unsubTaken = flag.events.on('flagTaken', (data) => {
+                this.handleFlagTaken(data.flag, data.player, data.isAtHome);
+            });
+            this.eventUnsubscribers.push(unsubTaken);
+            
+            // Flag dropped event
+            const unsubDropped = flag.events.on('flagDropped', (data) => {
+                this.handleFlagDropped(data.flag, data.position, data.previousCarrier);
+            });
+            this.eventUnsubscribers.push(unsubDropped);
+            
+            // Flag returned event
+            const unsubReturned = flag.events.on('flagReturned', (data) => {
+                this.handleFlagReturned(data.flag, data.wasAutoReturned);
+            });
+            this.eventUnsubscribers.push(unsubReturned);
+
+            const unsubCaptured = flag.events.on("flagCaptured", (data) => {
+                this.handleFlagCaptured(data.flag);
+            });
+            this.eventUnsubscribers.push(unsubCaptured);
+        }
+    }
+    
+    private handleFlagTaken(flag: Flag, player: mod.Player, wasAtHome: boolean): void {
+        const playerTeamId = mod.GetObjId(mod.GetTeam(player));
+        
+        // Check if this is our team's flag
+        if (flag.teamId === this.teamId) {
+            // Our flag was taken
+            this.SetTeamOrder(TeamOrders.OurFlagTaken);
+        } else if (playerTeamId === this.teamId) {
+            // We took the enemy flag
+            this.SetTeamOrder(TeamOrders.EnemyFlagTaken);
+        }
+    }
+    
+    private handleFlagDropped(flag: Flag, position: mod.Vector, previousCarrier: mod.Player | null): void {
+        // Check if this is our team's flag
+        if (flag.teamId === this.teamId) {
+            // Our flag was dropped
+            this.SetTeamOrder(TeamOrders.OurFlagDropped);
+        } else {
+            // Enemy flag was dropped (check if we were carrying it)
+            if (previousCarrier) {
+                const carrierTeamId = mod.GetObjId(mod.GetTeam(previousCarrier));
+                if (carrierTeamId === this.teamId) {
+                    this.SetTeamOrder(TeamOrders.EnemyFlagDropped);
+                }
+            }
+        }
+    }
+    
+    private handleFlagReturned(flag: Flag, wasAutoReturned: boolean): void {
+        // Check if this is our team's flag
+        if (flag.teamId === this.teamId) {
+            // Our flag was returned
+            this.SetTeamOrder(TeamOrders.OurFlagReturned);
+        } else {
+            // Enemy flag was returned
+            this.SetTeamOrder(TeamOrders.EnemyFlagReturned);
+        }
+    }
+
+     private handleFlagCaptured(flag: Flag): void {
+        // Check if this is our team's flag
+        if (flag.teamId === this.teamId) {
+            // Our flag was captured
+            this.SetTeamOrder(TeamOrders.OurFlagCaptured);
+        } else {
+            // Enemy flag was returned
+            this.SetTeamOrder(TeamOrders.EnemyFlagCaptured);
+        }
+    }
+    
+    refresh(): void {
+        // Update display based on current flag states
+        // This is called periodically to ensure UI is in sync
+    }
+    
+    destroy(): void {
+        // Clean up event listeners
+        for (const unsubscribe of this.eventUnsubscribers) {
+            unsubscribe();
+        }
+        this.eventUnsubscribers = [];
     }
 
     SetTeamOrder(teamOrder: TeamOrders): void {
@@ -5463,19 +5819,22 @@ class TeamOrdersBar extends TickerWidget {
                 return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_friendly);
             case TeamOrders.OurFlagReturned:
                 return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_friendly);
+            case TeamOrders.OurFlagCaptured:
+                return mod.Message(mod.stringkeys.order_flag_captured_friendly);
             case TeamOrders.EnemyFlagTaken:
                 return mod.Message(mod.stringkeys.order_flag_taken, mod.stringkeys.order_enemy);
             case TeamOrders.EnemyFlagDropped:
                 return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_enemy);
             case TeamOrders.EnemyFlagReturned:
                 return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_enemy);
+            case TeamOrders.EnemyFlagCaptured:
+                return mod.Message(mod.stringkeys.order_flag_captured_enemy);
             case TeamOrders.TeamIdentify:
                 return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
         }
         return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
     }
 }
-
 
 
 //==============================================================================================
@@ -5815,6 +6174,8 @@ async function CheckAndBalanceTeams(): Promise<void> {
         if (jsPlayers[i].player && updatedSmallest.team) {
             try{
                 mod.SetTeam(jsPlayers[i].player, updatedSmallest.team);
+                // Reset team specific UI elements for this player
+                jsPlayers[i].resetUI();
             } catch(error: unknown){
                 console.log(`Could not move player to team`);
             }

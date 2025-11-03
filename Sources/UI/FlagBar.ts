@@ -232,10 +232,10 @@ class FlagBar {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
             //flagIcon.SetFillAlpha(0.4);
             //flagIcon.SetOutlineAlpha(0.4);      
-            flagIcon.StartPulse(1, 0.1, 0.8);
+            flagIcon.StartThrob(1, 0.1, 0.8);
         } else if(!flag.isDropped && flagIcon.isPulsing) {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
-            flagIcon.StopPulse();
+            flagIcon.StopThrob();
             flagIcon.SetFillAlpha(1);
         }
         

@@ -68,6 +68,8 @@ async function CheckAndBalanceTeams(): Promise<void> {
         if (jsPlayers[i].player && updatedSmallest.team) {
             try{
                 mod.SetTeam(jsPlayers[i].player, updatedSmallest.team);
+                // Reset team specific UI elements for this player
+                jsPlayers[i].resetUI();
             } catch(error: unknown){
                 console.log(`Could not move player to team`);
             }

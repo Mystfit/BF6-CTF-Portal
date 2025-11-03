@@ -319,12 +319,6 @@ export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
     }
 
-    // Make sure we create a JSPlayer for our new player
-    JSPlayer.get(eventPlayer);
-
-    // Trigger team balance check
-    CheckAndBalanceTeams();
-
     // Refresh scoreboard to update new player team entry and score
     RefreshScoreboard();
 }
@@ -355,7 +349,10 @@ export function OnPlayerDeployed(eventPlayer: mod.Player): void {
     }
 
     // If we don't have a JSPlayer by now, we really should create one
-    JSPlayer.get(eventPlayer);
+    let jsPlayer = JSPlayer.get(eventPlayer);
+
+    // Set up the player UI on spawn
+    jsPlayer?.initUI();
 
     for(let [captureZoneId, captureZone] of captureZones){
         captureZone.UpdateIcons();

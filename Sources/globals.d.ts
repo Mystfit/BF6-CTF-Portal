@@ -214,6 +214,52 @@ declare class rgba {
     static FromModVector3(vector: mod.Vector): rgba;
 }
 
+// ============================================================================
+// EVENT SYSTEM
+// ============================================================================
+
+declare type EventHandler<T = any> = (data: T) => void;
+
+declare class EventDispatcher<TEventMap = Record<string, any>> {
+    on<K extends keyof TEventMap>(event: K, handler: EventHandler<TEventMap[K]>): () => void;
+    off<K extends keyof TEventMap>(event: K, handler: EventHandler<TEventMap[K]>): void;
+    once<K extends keyof TEventMap>(event: K, handler: EventHandler<TEventMap[K]>): void;
+    emit<K extends keyof TEventMap>(event: K, data: TEventMap[K]): void;
+    hasListeners<K extends keyof TEventMap>(event: K): boolean;
+    listenerCount<K extends keyof TEventMap>(event: K): number;
+    clear<K extends keyof TEventMap>(event?: K): void;
+    eventNames(): string[];
+}
+
+declare interface FlagEventMap {
+    'flagTaken': { 
+        flag: Flag; 
+        player: mod.Player;
+        isAtHome: boolean;
+    };
+    'flagDropped': { 
+        flag: Flag; 
+        position: mod.Vector;
+        previousCarrier: mod.Player | null;
+    };
+    'flagReturned': { 
+        flag: Flag;
+        wasAutoReturned: boolean;
+    };
+    'flagAtHome': { 
+        flag: Flag;
+    };
+    'flagStateChanged': {
+        flag: Flag;
+        isAtHome: boolean;
+        isBeingCarried: boolean;
+        isDropped: boolean;
+    };
+    'flagCaptured': {
+        flag: Flag;
+    };
+}
+
 declare interface AnimationOptions {
     speed?: number;              // Units per second (alternative to duration)
     duration?: number;           // Total duration in seconds (overrides speed)
@@ -260,6 +306,8 @@ declare class JSPlayer {
     scoreboardUI?: BaseScoreboardHUD;
     static playerInstances: mod.Player[];
     constructor(player: mod.Player);
+    initUI(): void;
+    resetUI(): void;
     static get(player: mod.Player): JSPlayer | undefined;
     static removeInvalidJSPlayers(invalidPlayerId: number): void;
     static getAllAsArray(): JSPlayer[];
@@ -297,6 +345,9 @@ declare class Flag {
     tetherFlagVFX: mod.VFX | null;
     tetherPlayerVFX: mod.VFX | null;
     hoverVFX: mod.VFX | null;
+    
+    // Event system
+    readonly events: EventDispatcher<FlagEventMap>;
 
     constructor(team: mod.Team, homePosition: mod.Vector, flagId?: number, allowedCapturingTeams?: number[], customColor?: mod.Vector);
     Initialize(): void;
@@ -451,8 +502,8 @@ declare class FlagIcon {
     IsOutlineVisible(): boolean;
     SetFillColor(color: mod.Vector, alpha?: number): void;
     SetFillAlpha(alpha: number): void;
-    StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void>;
-    StopPulse():void;
+    StartThrob(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void>;
+    StopThrob():void;
     SetOutlineColor(color: mod.Vector, alpha?: number): void;
     SetOutlineAlpha(alpha:number): void;
     SetColor(color: mod.Vector, alpha?: number): void;
@@ -468,9 +519,11 @@ declare enum TeamOrders {
     OurFlagTaken = 0,
     OurFlagDropped,
     OurFlagReturned,
+    OurFlagCaptured,
     EnemyFlagTaken,
     EnemyFlagDropped,
     EnemyFlagReturned,
+    EnemyFlagCaptured,
     TeamIdentify
 }
 

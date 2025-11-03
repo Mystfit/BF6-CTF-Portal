@@ -2,6 +2,48 @@
 // FLAG CLASS
 //==============================================================================================
 
+/**
+ * Flag-specific event map defining all possible flag events and their data
+ */
+interface FlagEventMap {
+    /** Emitted when a flag is picked up by a player */
+    'flagTaken': { 
+        flag: Flag; 
+        player: mod.Player;
+        isAtHome: boolean;  // Was the flag taken from home or picked up after being dropped?
+    };
+    
+    /** Emitted when a flag is dropped by a player */
+    'flagDropped': { 
+        flag: Flag; 
+        position: mod.Vector;
+        previousCarrier: mod.Player | null;
+    };
+    
+    /** Emitted when a flag is returned to its home position */
+    'flagReturned': { 
+        flag: Flag;
+        wasAutoReturned: boolean;  // True if auto-returned due to timeout
+    };
+    
+    /** Emitted when a flag reaches its home position (same as return, but separate for clarity) */
+    'flagAtHome': { 
+        flag: Flag;
+    };
+    
+    /** Emitted when a flag's state changes in any way */
+    'flagStateChanged': {
+        flag: Flag;
+        isAtHome: boolean;
+        isBeingCarried: boolean;
+        isDropped: boolean;
+    };
+    'flagCaptured': {
+        flag: Flag;
+    };
+}
+
+
 class Flag {
     readonly flagId: number;
     readonly owningTeamId: number;
@@ -52,6 +94,8 @@ class Flag {
     alarmSFX : mod.SFX | null = null;
     dragSFX: mod.SFX | null = null;
 
+    // Event system
+    readonly events: EventDispatcher<FlagEventMap>;
     
     constructor(
         team: mod.Team, 
@@ -78,6 +122,10 @@ class Flag {
         this.flagHomeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
         this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
         this.hoverVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Missile_Javelin, this.homePosition, ZERO_VEC);
+        
+        // Initialize event system
+        this.events = new EventDispatcher<FlagEventMap>();
+        
         this.Initialize();
     }
     
@@ -170,6 +218,9 @@ class Flag {
             return;
         }
 
+        // Store initial state for event
+        const wasAtHome = this.isAtHome;
+
         // Play spawner sound alarm
         if(this.isAtHome){
             this.PlayFlagAlarm().then(() => console.log("Flag alarm stopped"));
@@ -236,6 +287,21 @@ class Flag {
             mod.UnspawnObject(this.flagInteractionPoint);
         }
         
+        // Emit flag taken event
+        this.events.emit('flagTaken', {
+            flag: this,
+            player: player,
+            isAtHome: wasAtHome
+        });
+        
+        // Emit state changed event
+        this.events.emit('flagStateChanged', {
+            flag: this,
+            isAtHome: this.isAtHome,
+            isBeingCarried: this.isBeingCarried,
+            isDropped: this.isDropped
+        });
+        
         if (DEBUG_MODE) {
             const carrierTeam = mod.GetTeam(this.carrierPlayer);
             const carrierTeamId = mod.GetObjId(carrierTeam);
@@ -245,6 +311,9 @@ class Flag {
     
     async DropFlag(position?: mod.Vector, direction?: mod.Vector, dropDistance: number = FLAG_DROP_DISTANCE, useProjectileThrow?: boolean): Promise<void> {
         if (!this.isBeingCarried) return;
+
+        // Store previous carrier for event
+        const previousCarrier = this.carrierPlayer;
 
         this.isAtHome = false;
         this.isBeingCarried = false;
@@ -447,6 +516,21 @@ class Flag {
         this.StartAutoReturn(FLAG_AUTO_RETURN_TIME, this.numFlagTimesPickedUp).then( () => {console.log(`Flag ${this.teamId} auto-returning to base`)});
         this.StartPickupDelay().then(() => {console.log("Flag pickup delay expired")});
         
+        // Emit flag dropped event
+        this.events.emit('flagDropped', {
+            flag: this,
+            position: this.currentPosition,
+            previousCarrier: previousCarrier
+        });
+        
+        // Emit state changed event
+        this.events.emit('flagStateChanged', {
+            flag: this,
+            isAtHome: this.isAtHome,
+            isBeingCarried: this.isBeingCarried,
+            isDropped: this.isDropped
+        });
+        
         if (DEBUG_MODE) {
             console.log(`Flag dropped`);
             mod.DisplayHighlightedWorldLogMessage(
@@ -483,6 +567,13 @@ class Flag {
     ReturnFlag(): void {
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
         this.PlayFlagReturnedSFX();
+        
+        // Emit flag returned event (before reset)
+        this.events.emit('flagReturned', {
+            flag: this,
+            wasAutoReturned: false  // Manual return
+        });
+        
         this.ResetFlag();
     }
     
@@ -525,7 +616,17 @@ class Flag {
         await mod.Wait(returnDelay);
         if(this.isDropped && !this.isBeingCarried && !this.isAtHome && currFlagTimesPickedUp === this.numFlagTimesPickedUp){
             console.log(`Flag auto return. Number of times returned ${this.numFlagTimesPickedUp}. Expected ${currFlagTimesPickedUp}`);
-            this.ReturnFlag();
+            
+            this.PlayFlagReturnedSFX();
+            
+            // Emit flag returned event with auto-return flag
+            this.events.emit('flagReturned', {
+                flag: this,
+                wasAutoReturned: true
+            });
+
+            
+            this.ResetFlag();
         }
     }
 
