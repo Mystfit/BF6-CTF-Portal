@@ -7,6 +7,7 @@
     0 = @(
         # Main constants file should be first
         "imports.ts"
+        "Config.ts",
         "Main.ts"
     )
     
@@ -53,6 +54,7 @@
         "Game/GameModeConfig.ts",
         "Game/Configs/ClassicCTF.ts",
         "Game/Configs/FourTeamCTF.ts"
+        "Game/GameModeLookup.ts"
     )
     
 

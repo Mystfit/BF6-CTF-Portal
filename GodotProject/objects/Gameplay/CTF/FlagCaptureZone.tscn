@@ -2,22 +2,22 @@
 
 [ext_resource type="Script" uid="uid://cjwkcifp7rxfw" path="res://objects/Gameplay/CTF/FlagCaptureZone.gd" id="1_poyb2"]
 [ext_resource type="PackedScene" path="res://objects/Global/Generic/Common/Props/FireAlarmButton_01.tscn" id="2_53k63"]
-[ext_resource type="Script" uid="uid://li0wi6akn80t" path="res://scripts/Gameplay/Common/AreaTrigger.gd" id="2_poyb2"]
+[ext_resource type="Script" uid="uid://cl3k7u8gchhdj" path="res://scripts/Gameplay/Common/AreaTrigger.gd" id="2_poyb2"]
 [ext_resource type="Script" uid="uid://ck5uniw0pl6u8" path="res://addons/bf_portal/portal_tools/types/PolygonVolume/PolygonVolume.gd" id="3_cm306"]
 
 [node name="Flag_Capture_Zone" type="Node3D"]
 script = ExtResource("1_poyb2")
-Team = 0
-ObjId = 100
+Team = 2
+ObjId = 120
 
 [node name="TEAM_capture_location" parent="." instance=ExtResource("2_53k63")]
 transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, 0)
+ObjId = 123
 
 [node name="TEAM_capture_zone_area" type="Node3D" parent="." node_paths=PackedStringArray("Area")]
 script = ExtResource("2_poyb2")
-ObjId = 102
+ObjId = 122
 Area = NodePath("TEAM_capture_zone_collision")
-metadata/_custom_type_script = "uid://li0wi6akn80t"
 
 [node name="TEAM_capture_zone_collision" type="Node3D" parent="TEAM_capture_zone_area"]
 script = ExtResource("3_cm306")

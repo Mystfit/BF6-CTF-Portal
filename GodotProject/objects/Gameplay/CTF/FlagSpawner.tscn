@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://8ap2cthex8jq" path="res://objects/Gameplay/CTF/FlagSpawner.gd" id="1_5ek4j"]
 [ext_resource type="PackedScene" path="res://objects/Global/Generic/Common/Props/FireAlarmButton_01.tscn" id="1_j1k3p"]
-[ext_resource type="Script" uid="uid://li0wi6akn80t" path="res://scripts/Gameplay/Common/AreaTrigger.gd" id="2_xieoy"]
+[ext_resource type="Script" uid="uid://cl3k7u8gchhdj" path="res://scripts/Gameplay/Common/AreaTrigger.gd" id="2_xieoy"]
 [ext_resource type="Script" uid="uid://ck5uniw0pl6u8" path="res://addons/bf_portal/portal_tools/types/PolygonVolume/PolygonVolume.gd" id="3_5ek4j"]
 
 [node name="Flag_Spawner" type="Node3D"]
@@ -18,7 +18,6 @@ ObjId = 104
 script = ExtResource("2_xieoy")
 ObjId = 105
 Area = NodePath("TEAM_flag_pickup_zone")
-metadata/_custom_type_script = "uid://li0wi6akn80t"
 
 [node name="TEAM_flag_pickup_zone" type="Node3D" parent="TEAM_flag_pickup"]
 script = ExtResource("3_5ek4j")

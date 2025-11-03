@@ -19,8 +19,13 @@ func UpdateIds():
 	ObjId = 100 + (int(Team) * 10)
 	var flag_spawn_prop = self.get_child(0) as Node3D
 	var flag_pickup_zone = self.get_child(1) as AreaTrigger
+	var flag_sector = self.get_child(2) as Sector
+	var flag_capture_point = self.get_child(3)
 	flag_spawn_prop.ObjId = ObjId + 4
 	flag_pickup_zone.ObjId = ObjId + 5
+	flag_sector.ObjId = ObjId + 6
+	flag_capture_point.ObjId = ObjId + 7
+	flag_capture_point.InitialOwner = int(Team)
 
 	print("Setting flag spawner obj id to ", ObjId)
 

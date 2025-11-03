@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3 uid="uid://dlp0f63p6niwu"]
+
+[ext_resource type="Script" uid="uid://rb2drwt325io" path="res://objects/Gameplay/CTF/GameModeConfig.gd" id="1_tw8gd"]
+[ext_resource type="PackedScene" path="res://objects/Global/Generic/Common/Props/Suitcase_01_B.tscn" id="2_2v3i0"]
+
+[node name="GameModeConfig" type="Node3D"]
+script = ExtResource("1_tw8gd")
+
+[node name="Suitcase_01_B" parent="." instance=ExtResource("2_2v3i0")]

@@ -1,6 +1,5 @@
 ﻿
 
-try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof Error) console.log(`Script line offset: ${error.stack}`);};
 /* 
  * Capture the Flag Game Mode
  * 
@@ -63,14 +62,12 @@ try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof
  * Then call LoadGameModeConfig(config) to apply it.
  */
 
-//@ts-ignore
-import * as modlib from 'modlib';
+//==============================================================================================
+// CONFIGURATION CONSTANTS
+// This file contains all configuration constants that need to be loaded before other modules
+//==============================================================================================
 
 const VERSION = [2, 0, 0];
-
-//==============================================================================================
-// CONFIGURATION
-//==============================================================================================
 
 const DEBUG_MODE = false;                                            // Print extra debug messages
 
@@ -135,6 +132,9 @@ const VEHICLE_FIRST_PASSENGER_SEAT = 1;                             // First pas
 const TICK_RATE = 0.032;                                            // ~30fps update rate for carrier position updates (portal server tickrate)
 
 
+//@ts-ignore
+import * as modlib from 'modlib';
+
 //==============================================================================================
 // CONSTANTS - Team and object IDs (you probably won't need to modify these)
 //==============================================================================================
@@ -170,7 +170,6 @@ const DEFAULT_TEAM_VO_FLAGS = new Map<number, mod.VoiceOverFlags | undefined>([
     [TeamID.TEAM_6, mod.VoiceOverFlags.Foxtrot],
     [TeamID.TEAM_7, mod.VoiceOverFlags.Golf]
 ]);
-
 
 const enum FlagIdOffsets{
     FLAG_INTERACT_ID_OFFSET = 1,
@@ -238,32 +237,25 @@ export function OnGameModeStarted() {
     // Load game mode configuration
     // let config = FourTeamCTFConfig;
     // LoadGameModeConfig(config);
-    let foundMode = false;
-    let currentModeId = 200;
-    while(!foundMode && currentModeId <= 201){
-        let config: GameModeConfig | undefined = undefined;
-        let gameModeConfigObj = mod.GetSpatialObject(currentModeId);
+    let activeConfig: GameModeConfig | undefined = undefined;
+    for(let [configID, config] of DEFAULT_GAMEMODES){
+        let gameModeConfigObj = mod.GetSpatialObject(configID);
         if(gameModeConfigObj){
-            let gameModeConfigId = mod.GetObjId(gameModeConfigObj);
-            console.log(`currentModeId: ${currentModeId}, gameModeConfigObj: ${gameModeConfigObj}, gameModeConfigId: ${gameModeConfigId}`);
-            if(gameModeConfigId == 200){
-                config = ClassicCTFConfig;
-                foundMode = true;
-                console.log(`Found 2team with id ${gameModeConfigId}`);
-
-            } else if(gameModeConfigId == 201){
-                config = FourTeamCTFConfig;
-                foundMode = true;
-                console.log(`Found 4team with id ${gameModeConfigId}`);
+            console.log(`currentModeId: ${configID}, gameModeConfigObj: ${gameModeConfigObj}, gameModeConfigId: ${configID}`);
+            
+            // Look up config from the map
+            activeConfig = config
+            if(activeConfig){
+                console.log(`Found game mode with id ${configID}`);
             }
         }
-        
-        if(config){
-            LoadGameModeConfig(config);
-            break;
-        }
-
-        currentModeId += 1;
+    }
+    
+    if(activeConfig){
+        LoadGameModeConfig(activeConfig);
+    } else {
+        console.log("Could not find a gamemode");
+        return;
     }
 
     // Set up initial player scores using JSPlayer
@@ -6217,6 +6209,11 @@ const FourTeamCTFConfig: GameModeConfig = {
     ]
 }
 
+
+const DEFAULT_GAMEMODES = new Map<number, GameModeConfig>([
+    [90, ClassicCTFConfig],
+    [91, FourTeamCTFConfig]
+]);
 
 //==============================================================================================
 // TEAM BALANCE FUNCTIONS

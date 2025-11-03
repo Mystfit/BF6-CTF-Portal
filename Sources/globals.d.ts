@@ -63,6 +63,7 @@ declare namespace modlib {
 // CONSTANTS
 // ============================================================================
 
+declare const VERSION:number[];
 declare const DEBUG_MODE: boolean;
 declare const GAMEMODE_TARGET_SCORE: number;
 declare const FLAG_PICKUP_DELAY: number;
@@ -99,10 +100,12 @@ declare const SPAWN_VALIDATION_MAX_ITERATIONS: number;
 declare const SPAWN_VALIDATION_HEIGHT_OFFSET: number;
 declare const VEHICLE_DRIVER_SEAT: number;
 declare const VEHICLE_FIRST_PASSENGER_SEAT: number;
+declare const VEHICLE_BLOCK_CARRIER_DRIVING: boolean;
 declare const TICK_RATE: number;
 declare const ZERO_VEC: mod.Vector;
 declare const ONE_VEC: mod.Vector;
 declare const NEUTRAL_COLOR: mod.Vector;
+declare const DEFAULT_GAMEMODES: Map<number, GameModeConfig>;
 declare const DEFAULT_TEAM_COLOURS: Map<number, mod.Vector>;
 declare const DEFAULT_TEAM_NAMES: Map<number, string>;
 declare const DEFAULT_TEAM_VO_FLAGS: Map<number, mod.VoiceOverFlags | undefined>;

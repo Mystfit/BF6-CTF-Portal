@@ -17,7 +17,7 @@ Bugs
 - [ ] Add animations to team orders bar
 - [x] Add pickup available VFX/SFX to MCOM
 - [ ] Add HQ spawn protection to firestorm
-- [ ] Move bases closer together
+- [x] Move bases closer together
 - [ ] 4 team on golf course
 - [ ] Neutral flag
 

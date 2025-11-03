@@ -20,8 +20,11 @@ func UpdateIds():
 	
 	var flag_capture_location = self.get_child(0) as Node3D
 	var flag_area_trigger = self.get_child(1) as AreaTrigger
+	var flag_capture_zone = self.get_child(2) as CapturePoint
 	flag_area_trigger.ObjId = ObjId + 2
 	flag_capture_location.ObjId = ObjId + 3
+	flag_capture_zone.ObjId = ObjId + 8
+	flag_capture_zone.InitialOwner = int(Team)
 	
 	print("Setting flag obj id to ", ObjId)
 
