@@ -126,6 +126,10 @@ export namespace Math2 {
     export function Remap(value:number, inMin:number, inMax:number, outMin:number, outMax:number): number {
         return outMin + (outMax - outMin) * ((value - inMin) / (inMax - inMin));
     }
+
+    export function TriangleWave(time:number, period:number, amplitude:number):number {
+        return amplitude - Math.abs((time % (2 * period)) - period);
+    } 
 }
 
 /**

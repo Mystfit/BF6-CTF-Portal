@@ -44,6 +44,7 @@
         "UI/MultiTeamScoreHUD.ts",
         "UI/ClassicCTFScoreHUD.ts",
         "UI/FlagIcon.ts"
+        "UI/TeamInstructionBar.ts"
     )
     
     # Level 6: Configuration (uses Level 0-4)

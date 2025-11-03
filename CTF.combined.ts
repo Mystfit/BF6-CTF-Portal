@@ -757,6 +757,10 @@ export namespace Math2 {
     export function Remap(value:number, inMin:number, inMax:number, outMin:number, outMax:number): number {
         return outMin + (outMax - outMin) * ((value - inMin) / (inMax - inMin));
     }
+
+    export function TriangleWave(time:number, period:number, amplitude:number):number {
+        return amplitude - Math.abs((time % (2 * period)) - period);
+    } 
 }
 
 /**
@@ -2704,7 +2708,7 @@ class Flag {
         this.flagProp = null;
         this.flagHomeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
         this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
-        this.hoverVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Missile_Javelin, this.homePosition, ZERO_VEC);
+        this.hoverVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Missile_Javelin, this.homePosition, ZERO_VEC);
         this.Initialize();
     }
     
@@ -3735,6 +3739,9 @@ abstract class TickerWidget {
     protected rightBracketSide: mod.UIWidget | undefined;
     protected rightBracketTop: mod.UIWidget | undefined;
     protected rightBracketBottom: mod.UIWidget | undefined;
+
+    // Animation
+    isPulsing = false;
     
     constructor(params: TickerWidgetParams) {
         this.parent = params.parent;
@@ -3961,6 +3968,29 @@ abstract class TickerWidget {
         if (this.rightBracketSide) mod.SetUIWidgetVisible(this.rightBracketSide, show);
         if (this.rightBracketTop) mod.SetUIWidgetVisible(this.rightBracketTop, show);
         if (this.rightBracketBottom) mod.SetUIWidgetVisible(this.rightBracketBottom, show);
+    }
+
+    
+    async StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
+        if(this.isPulsing)
+            return;
+
+        let minAlpha = minimumAlpha ?? 0;
+        let maxAlpha = maximumAlpha ?? 1;
+        let speed = pulseSpeed ?? 0.1;
+
+        this.isPulsing = true;
+        let time = 0;
+        while(this.isPulsing){
+            time = GetCurrentTime();
+            let blinkActive = Math.round(Math2.TriangleWave(time, 1, 1)) > 0;
+            this.showBrackets(blinkActive);
+            await mod.Wait(TICK_RATE);
+        }
+    }
+
+    StopPulse(): void {
+        this.isPulsing = false;
     }
     
     /**
@@ -4312,7 +4342,7 @@ class FlagBar {
         );
 
         const midColor = VectorClampToRange(
-            Math2.Vec3.FromVector(teamColor).Add(new Math2.Vec3(0.2, 0.2, 0.2)).ToVector(),
+            Math2.Vec3.FromVector(teamColor).Add(new Math2.Vec3(0.15, 0.15, 0.15)).ToVector(),
             0, 
             1
         );
@@ -4425,10 +4455,11 @@ class FlagBar {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
             //flagIcon.SetFillAlpha(0.4);
             //flagIcon.SetOutlineAlpha(0.4);      
-            flagIcon.StartPulse(2, 0.1, 0.8);
-        } else if(flagIcon.isPulsing) {
+            flagIcon.StartPulse(1, 0.1, 0.8);
+        } else if(!flag.isDropped && flagIcon.isPulsing) {
             //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
             flagIcon.StopPulse();
+            flagIcon.SetFillAlpha(1);
         }
         
         // Update bar progress (bar empties as flag advances). 
@@ -4861,13 +4892,17 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
 
     // Round timer
     timerTicker: RoundTimer | undefined;
-    timerWidgetSize: number[] = [66, 28];
-    timerScorePaddingTop: number = 90;
+    timerWidgetSize: number[] = [74, 22];
+    timerScorePaddingTop: number = 48;
+    teamOrdersPaddingTop: number = 90;
 
     // Flag bar
     flagBar: FlagBar | undefined;
     flagBarPadding = 20;
     flagBarHeight = 12;
+
+    // Team order bar
+    teamOrderBar: TeamOrdersBar | undefined;
 
     constructor(player: mod.Player) {
         this.player = player;
@@ -4901,15 +4936,17 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
             this.teamScoreTickers.set(teamId, new ScoreTicker(tickerParams));
         }
 
+        // Center flag bar positions
+        const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarPadding;
+        const barPosX = 0;  // Center horizontally
+        const barPosY = this.teamScorePaddingTop + (this.teamWidgetSize[1] / 2) - (this.flagBarHeight * 0.5);
+
         // Create flag bar (positioned between the two score tickers)
         const team1Ticker = this.teamScoreTickers.get(1);
         const team2Ticker = this.teamScoreTickers.get(2);
 
         if (team1Ticker && team2Ticker && team1 && team2) {
             // Calculate FlagBar dimensions and position
-            const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarPadding;
-            const barPosX = 0;  // Center horizontally
-            const barPosY = this.teamScorePaddingTop + (this.teamWidgetSize[1] / 2) - (this.flagBarHeight * 0.5);
             
             // Get capture zone positions
             const team1CaptureZone = captureZones.get(1);
@@ -4940,6 +4977,19 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
             bgAlpha: 0.5,
             textColor: mod.CreateVector(0.9, 0.9, 0.9)
         })!;
+
+        // Create team order bar
+        this.teamOrderBar = new TeamOrdersBar(
+            mod.GetTeam(this.player),
+            {
+                parent: this.rootWidget,
+                position: [0, this.teamOrdersPaddingTop],
+                size: [barWidth, 30],
+                bgColor: GetTeamColor(mod.GetTeam(this.player)),
+                textColor: GetTeamColorLight(mod.GetTeam(this.player)),
+                textSize: 20,
+            }
+        )!;
 
         // Initial refresh
         this.refresh();
@@ -5222,20 +5272,22 @@ class FlagIcon {
         let speed = pulseSpeed ?? 0.1;
 
         this.isPulsing = true;
-        let alpha = 1;
-        let time = 0;
+        let blink_on: boolean = false;
+
         while(this.isPulsing){
-            time = GetCurrentTime();
-            alpha = Math2.Remap(Math.abs(Math.sin(time * speed)), 0, 1, minAlpha, maxAlpha),
+            blink_on = !blink_on;
+            let alpha = blink_on ? maxAlpha : minAlpha;
+            console.log(`Flag icon pulse. Setting alpha to ${alpha}`);
             this.SetFillAlpha(alpha);
             if(this.params.showOutline)
                 this.SetOutlineAlpha(alpha);
-            await mod.Wait(TICK_RATE);
+            await mod.Wait(0.5);
         }
     }
 
     StopPulse(): void {
         this.isPulsing = false;
+        console.log("Stopping pulse");
     }
     
     /**
@@ -5358,6 +5410,72 @@ class FlagIcon {
         return this.rootContainer;
     }
 }
+
+
+enum TeamOrders {
+    OurFlagTaken = 0,
+    OurFlagDropped,
+    OurFlagReturned,
+    EnemyFlagTaken,
+    EnemyFlagDropped,
+    EnemyFlagReturned,
+    TeamIdentify
+}
+
+class TeamOrdersBar extends TickerWidget {
+    team: mod.Team;
+
+    constructor(team:mod.Team, tickerParams: TickerWidgetParams) {
+         // Call parent constructor with team-specific colors
+        super({
+            position: tickerParams.position,
+            size: tickerParams.size,
+            parent: tickerParams.parent,
+            textSize: tickerParams.textSize,
+            bracketTopBottomLength: tickerParams.bracketTopBottomLength,
+            bracketThickness: tickerParams.bracketThickness,
+            bgColor: GetTeamColor(team),
+            textColor: 
+            VectorClampToRange(
+                GetTeamColorLight(team), 
+                0, 
+                1
+            ),
+            bgAlpha: 0.75
+        });
+
+        this.team = team;
+        this.SetTeamOrder(TeamOrders.TeamIdentify);
+    }
+    
+    refresh(): void{
+    }
+
+    SetTeamOrder(teamOrder: TeamOrders): void {
+        this.updateText(this.TeamOrderToMessage(teamOrder));
+    }
+
+    TeamOrderToMessage(order:TeamOrders): mod.Message {
+        switch(order){
+            case TeamOrders.OurFlagTaken:
+                return mod.Message(mod.stringkeys.order_flag_taken, mod.stringkeys.order_friendly);
+            case TeamOrders.OurFlagDropped:
+                return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_friendly);
+            case TeamOrders.OurFlagReturned:
+                return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_friendly);
+            case TeamOrders.EnemyFlagTaken:
+                return mod.Message(mod.stringkeys.order_flag_taken, mod.stringkeys.order_enemy);
+            case TeamOrders.EnemyFlagDropped:
+                return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_enemy);
+            case TeamOrders.EnemyFlagReturned:
+                return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_enemy);
+            case TeamOrders.TeamIdentify:
+                return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
+        }
+        return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
+    }
+}
+
 
 
 //==============================================================================================

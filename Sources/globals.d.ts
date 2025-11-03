@@ -464,6 +464,24 @@ declare class FlagIcon {
     GetRootWidget(): mod.UIWidget;
 }
 
+declare enum TeamOrders {
+    OurFlagTaken = 0,
+    OurFlagDropped,
+    OurFlagReturned,
+    EnemyFlagTaken,
+    EnemyFlagDropped,
+    EnemyFlagReturned,
+    TeamIdentify
+}
+
+declare class TeamOrdersBar extends TickerWidget {
+    team: mod.Team;
+    constructor(team:mod.Team, tickerParams: TickerWidgetParams);
+    refresh(): void;
+    SetTeamOrder(teamOrder: TeamOrders): void; 
+    TeamOrderToMessage(order:TeamOrders): mod.Message;
+}
+
 interface TickerWidgetParams {
     position: number[];
     size: number[];
@@ -589,6 +607,7 @@ declare namespace Math2 {
     }
 
     function Remap(value:number, inMin:number, inMax:number, outMin:number, outMax:number): number;
+    function TriangleWave(time:number, period:number, amplitude:number):number;
 }
 
 declare function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean;

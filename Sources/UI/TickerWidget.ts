@@ -48,6 +48,9 @@ abstract class TickerWidget {
     protected rightBracketSide: mod.UIWidget | undefined;
     protected rightBracketTop: mod.UIWidget | undefined;
     protected rightBracketBottom: mod.UIWidget | undefined;
+
+    // Animation
+    isPulsing = false;
     
     constructor(params: TickerWidgetParams) {
         this.parent = params.parent;
@@ -274,6 +277,29 @@ abstract class TickerWidget {
         if (this.rightBracketSide) mod.SetUIWidgetVisible(this.rightBracketSide, show);
         if (this.rightBracketTop) mod.SetUIWidgetVisible(this.rightBracketTop, show);
         if (this.rightBracketBottom) mod.SetUIWidgetVisible(this.rightBracketBottom, show);
+    }
+
+    
+    async StartPulse(pulseSpeed?: number, minimumAlpha?: number, maximumAlpha?: number): Promise<void> {
+        if(this.isPulsing)
+            return;
+
+        let minAlpha = minimumAlpha ?? 0;
+        let maxAlpha = maximumAlpha ?? 1;
+        let speed = pulseSpeed ?? 0.1;
+
+        this.isPulsing = true;
+        let time = 0;
+        while(this.isPulsing){
+            time = GetCurrentTime();
+            let blinkActive = Math.round(Math2.TriangleWave(time, 1, 1)) > 0;
+            this.showBrackets(blinkActive);
+            await mod.Wait(TICK_RATE);
+        }
+    }
+
+    StopPulse(): void {
+        this.isPulsing = false;
     }
     
     /**

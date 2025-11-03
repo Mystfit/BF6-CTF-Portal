@@ -78,5 +78,12 @@
     "score_timer_label": "{}:{}{}",
     "score_timer_seperator": ":",
     "score_timer_minutes": "{}",
-    "score_timer_seconds": "{}{}"
+    "score_timer_seconds": "{}{}",
+    "order_team_identifier": "You are on Team {}",
+    "order_flag_taken": "{} flag taken",
+    "order_flag_dropped": "{} flag dropped",
+    "order_flag_returned": "{} flag returned!",
+    "order_friendly": "Friendly!",
+    "order_enemy": "Enemy"
 }
+

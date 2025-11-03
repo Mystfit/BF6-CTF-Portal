@@ -20,13 +20,17 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
 
     // Round timer
     timerTicker: RoundTimer | undefined;
-    timerWidgetSize: number[] = [66, 28];
-    timerScorePaddingTop: number = 90;
+    timerWidgetSize: number[] = [74, 22];
+    timerScorePaddingTop: number = 48;
+    teamOrdersPaddingTop: number = 90;
 
     // Flag bar
     flagBar: FlagBar | undefined;
     flagBarPadding = 20;
     flagBarHeight = 12;
+
+    // Team order bar
+    teamOrderBar: TeamOrdersBar | undefined;
 
     constructor(player: mod.Player) {
         this.player = player;
@@ -60,15 +64,17 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
             this.teamScoreTickers.set(teamId, new ScoreTicker(tickerParams));
         }
 
+        // Center flag bar positions
+        const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarPadding;
+        const barPosX = 0;  // Center horizontally
+        const barPosY = this.teamScorePaddingTop + (this.teamWidgetSize[1] / 2) - (this.flagBarHeight * 0.5);
+
         // Create flag bar (positioned between the two score tickers)
         const team1Ticker = this.teamScoreTickers.get(1);
         const team2Ticker = this.teamScoreTickers.get(2);
 
         if (team1Ticker && team2Ticker && team1 && team2) {
             // Calculate FlagBar dimensions and position
-            const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarPadding;
-            const barPosX = 0;  // Center horizontally
-            const barPosY = this.teamScorePaddingTop + (this.teamWidgetSize[1] / 2) - (this.flagBarHeight * 0.5);
             
             // Get capture zone positions
             const team1CaptureZone = captureZones.get(1);
@@ -99,6 +105,19 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
             bgAlpha: 0.5,
             textColor: mod.CreateVector(0.9, 0.9, 0.9)
         })!;
+
+        // Create team order bar
+        this.teamOrderBar = new TeamOrdersBar(
+            mod.GetTeam(this.player),
+            {
+                parent: this.rootWidget,
+                position: [0, this.teamOrdersPaddingTop],
+                size: [barWidth, 30],
+                bgColor: GetTeamColor(mod.GetTeam(this.player)),
+                textColor: GetTeamColorLight(mod.GetTeam(this.player)),
+                textSize: 20,
+            }
+        )!;
 
         // Initial refresh
         this.refresh();

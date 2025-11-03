@@ -241,20 +241,22 @@ class FlagIcon {
         let speed = pulseSpeed ?? 0.1;
 
         this.isPulsing = true;
-        let alpha = 1;
-        let time = 0;
+        let blink_on: boolean = false;
+
         while(this.isPulsing){
-            time = GetCurrentTime();
-            alpha = Math2.Remap(Math.abs(Math.sin(time * speed)), 0, 1, minAlpha, maxAlpha),
+            blink_on = !blink_on;
+            let alpha = blink_on ? maxAlpha : minAlpha;
+            console.log(`Flag icon pulse. Setting alpha to ${alpha}`);
             this.SetFillAlpha(alpha);
             if(this.params.showOutline)
                 this.SetOutlineAlpha(alpha);
-            await mod.Wait(TICK_RATE);
+            await mod.Wait(0.5);
         }
     }
 
     StopPulse(): void {
         this.isPulsing = false;
+        console.log("Stopping pulse");
     }
     
     /**
