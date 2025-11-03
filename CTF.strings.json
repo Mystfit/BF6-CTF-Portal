@@ -5,6 +5,7 @@
     "defend_flag_label": "DEFEND",
     "pickup_flag_label": "CAPTURE",
     "recover_flag_label": "RECOVER",
+    "locked_flag_label": "UNLOCKING",
     "purple_team_name": "Alpha",
     "orange_team_name": "Bravo",
     "green_team_name": "Charlie",

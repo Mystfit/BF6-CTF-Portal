@@ -68,7 +68,7 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
     // Play VFX at scoring team's flag base
     const scoringTeamFlag = flags.get(scoringTeamId);
     if (scoringTeamFlag) {
-        CaptureFeedback(scoringTeamFlag.homePosition);
+        CaptureFeedback(capturedFlag.currentPosition);
 
         // Play SFX
         // Play pickup SFX
@@ -124,13 +124,16 @@ function EndGameByTime(): void {
 }
 
 async function CaptureFeedback(pos: mod.Vector): Promise<void> {
-    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
-    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
-    mod.PlaySound(sfx, 1);
+    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Vehicle_Car_Destruction_Death_Explosion_PTV, pos, ZERO_VEC);
+    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Standoff_ZoneCaptured_OneShot2D, pos, ZERO_VEC);
+    mod.PlaySound(sfx, 1.5);
+
+    // Wait for a second so we can hear the stinger
+    await mod.Wait(1.1);
     mod.EnableVFX(vfx, true);
 
     // Cleanup
-    mod.Wait(5);
+    await mod.Wait(5);
     mod.UnspawnObject(sfx);
     mod.UnspawnObject(vfx);
 }

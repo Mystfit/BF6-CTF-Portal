@@ -76,7 +76,7 @@ const DEBUG_MODE = false;                                            // Print ex
 const GAMEMODE_TARGET_SCORE = 10;                                    // Points needed to win
 
 // Flag settings
-const FLAG_PICKUP_DELAY = 4;                                        // Seconds before dropped flag can be picked up and when carrier kills are still counted
+const FLAG_PICKUP_DELAY = 5;                                        // Seconds before dropped flag can be picked up and when carrier kills are still counted
 const FLAG_AUTO_RETURN_TIME = 30;                                   // Seconds before dropped flag auto-returns to base
 
 // Flag carrier settings

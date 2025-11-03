@@ -78,7 +78,7 @@ const DEBUG_MODE = false;                                            // Print ex
 const GAMEMODE_TARGET_SCORE = 10;                                    // Points needed to win
 
 // Flag settings
-const FLAG_PICKUP_DELAY = 4;                                        // Seconds before dropped flag can be picked up and when carrier kills are still counted
+const FLAG_PICKUP_DELAY = 5;                                        // Seconds before dropped flag can be picked up and when carrier kills are still counted
 const FLAG_AUTO_RETURN_TIME = 30;                                   // Seconds before dropped flag auto-returns to base
 
 // Flag carrier settings
@@ -2719,7 +2719,7 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
     // Play VFX at scoring team's flag base
     const scoringTeamFlag = flags.get(scoringTeamId);
     if (scoringTeamFlag) {
-        CaptureFeedback(scoringTeamFlag.homePosition);
+        CaptureFeedback(capturedFlag.currentPosition);
 
         // Play SFX
         // Play pickup SFX
@@ -2775,13 +2775,16 @@ function EndGameByTime(): void {
 }
 
 async function CaptureFeedback(pos: mod.Vector): Promise<void> {
-    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, pos, ZERO_VEC);
-    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gamemode_Shared_CaptureObjectives_OnCapturedByFriendly_OneShot2D, pos, ZERO_VEC);
-    mod.PlaySound(sfx, 1);
+    let vfx: mod.VFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Vehicle_Car_Destruction_Death_Explosion_PTV, pos, ZERO_VEC);
+    let sfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Standoff_ZoneCaptured_OneShot2D, pos, ZERO_VEC);
+    mod.PlaySound(sfx, 1.5);
+
+    // Wait for a second so we can hear the stinger
+    await mod.Wait(1.1);
     mod.EnableVFX(vfx, true);
 
     // Cleanup
-    mod.Wait(5);
+    await mod.Wait(5);
     mod.UnspawnObject(sfx);
     mod.UnspawnObject(vfx);
 }
@@ -2874,14 +2877,21 @@ class Flag {
     flagProp: mod.Object | null = null;
     
     // VFX
-    flagHomeVFX: mod.VFX;
+    flagSmokeVFX: mod.VFX;
     tetherFlagVFX: mod.VFX | null = null;
     tetherPlayerVFX: mod.VFX | null = null;
     hoverVFX: mod.VFX | null = null;
+    pickupChargingVFX: mod.VFX | null = null;
+    pickupAvailableVFX: mod.VFX | null = null;
+    flagImpactVFX: mod.VFX | null = null;
+    flagSparksVFX: mod.VFX | null = null;
 
     // SFX
     alarmSFX : mod.SFX | null = null;
     dragSFX: mod.SFX | null = null;
+    pickupTimerStartSFX:mod.SFX | null = null;
+    pickupTimerRiseSFX:mod.SFX | null = null;
+    pickupTimerStopSFX:mod.SFX | null = null;
 
     // Event system
     readonly events: EventDispatcher<FlagEventMap>;
@@ -2908,9 +2918,17 @@ class Flag {
         this.flagInteractionPoint = null;
         this.flagRecoverIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, ZERO_VEC, ZERO_VEC);
         this.flagProp = null;
-        this.flagHomeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
+        this.flagSmokeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
         this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
         this.hoverVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Missile_Javelin, this.homePosition, ZERO_VEC);
+        this.pickupChargingVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Gadget_InterativeSpectator_Camera_Light_Red, this.homePosition, ZERO_VEC);
+        this.pickupAvailableVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Gadget_InterativeSpectator_Camera_Light_Green, this.homePosition, ZERO_VEC);
+        this.flagImpactVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Impact_LootCrate_Generic, this.homePosition, ZERO_VEC);
+        this.flagSparksVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, this.homePosition, ZERO_VEC);
+
+        this.pickupTimerStartSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheStart_OneShot2D, this.homePosition, ZERO_VEC);
+        this.pickupTimerRiseSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheTimer_OneShot2D, this.homePosition, ZERO_VEC);
+        this.pickupTimerStopSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheStop_OneShot2D, this.homePosition, ZERO_VEC);
         
         // Initialize event system
         this.events = new EventDispatcher<FlagEventMap>();
@@ -2958,9 +2976,9 @@ class Flag {
         }
         
         // Enable flag VFX
-        mod.SetVFXColor(this.flagHomeVFX, GetTeamColor(this.team));
-        mod.EnableVFX(this.flagHomeVFX, true);
-        mod.MoveVFX(this.flagHomeVFX, this.currentPosition, ZERO_VEC);
+        mod.SetVFXColor(this.flagSmokeVFX, GetTeamColor(this.team));
+        mod.EnableVFX(this.flagSmokeVFX, true);
+        mod.MoveVFX(this.flagSmokeVFX, this.currentPosition, ZERO_VEC);
 
         this.flagProp = mod.SpawnObject(
             FLAG_PROP, 
@@ -3034,6 +3052,11 @@ class Flag {
             mod.PlaySound(pickupSfxCapturer, 1, mod.GetTeam(teamID));
         }
 
+        // Disable VFX
+        if(this.pickupAvailableVFX){
+            mod.EnableVFX(this.pickupAvailableVFX, false); 
+        }
+
         // Remove flag prop
         if(!FLAG_FOLLOW_MODE){
             if (this.flagProp) {
@@ -3065,7 +3088,7 @@ class Flag {
         mod.EnableWorldIconText(this.flagRecoverIcon, true);
 
         // Set VFX properties
-        mod.SetVFXColor(this.flagHomeVFX, GetTeamColor(this.team));
+        mod.SetVFXColor(this.flagSmokeVFX, GetTeamColor(this.team));
         
         // Notify all players
         const message = mod.Message(mod.stringkeys.team_flag_taken, GetTeamName(this.team));
@@ -3168,11 +3191,6 @@ class Flag {
         }
 
         if(DEBUG_MODE) console.log("this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);");
-        
-        // If we're using an MCOM, disable it to hide the objective marker
-        let mcom: mod.MCOM = this.flagProp as mod.MCOM;
-        if(mcom)
-            mod.EnableGameModeObjective(mcom, false);
 
         // Play yeet SFX
         let yeetSfx: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Soldier_Ragdoll_OnDeath_OneShot3D, initialPosition, ZERO_VEC);
@@ -3244,11 +3262,20 @@ class Flag {
                 {
                     speed: 800,
                     onSpawnAtStart: ():mod.Object | null  => {
+                        // Disable smoke whilst flag is thrown to avoid flare leaking out
+                        mod.EnableVFX(this.flagSmokeVFX, false);
+
+                        // Spawn prop
                         this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
+
+                        // If we're using an MCOM, disable it to hide the objective marker
+                        let mcom: mod.MCOM = this.flagProp as mod.MCOM;
+                        if(mcom)
+                            mod.EnableGameModeObjective(mcom, false);
+                        
                         return this.flagProp;
                     },
                     onProgress: (progress: number, position: mod.Vector) => {
-                        mod.MoveVFX(this.flagHomeVFX, position, ZERO_VEC);
                     },
                     rotation: flagRotation
                 }
@@ -3268,6 +3295,12 @@ class Flag {
             }
         }
 
+        // Play impact VFX
+        if(this.flagImpactVFX){
+            mod.MoveVFX(this.flagImpactVFX, this.currentPosition, ZERO_VEC);
+            mod.EnableVFX(this.flagImpactVFX, true);
+        }
+
         // Update the position of the flag interaction point
         this.UpdateFlagInteractionPoint();
 
@@ -3284,16 +3317,8 @@ class Flag {
         mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
         
         // Update VFX
-        mod.MoveVFX(this.flagHomeVFX, this.currentPosition, ZERO_VEC);
-        mod.SetVFXColor(this.flagHomeVFX, GetTeamDroppedColor(this.team));
-
-        // Play drop SFX
-        let dropSfxOwner: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheStart_OneShot2D, this.homePosition, ZERO_VEC);
-        mod.PlaySound(dropSfxOwner, 1, this.team);
-        // for(let teamID of GetOpposingTeamsForFlag(this)){
-        //     let dropSfxCapturer: mod.SFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_FriendlyCapturedCache_OneShot2D, this.homePosition, ZERO_VEC);
-        //     mod.PlaySound(dropSfxCapturer, 1, mod.GetTeam(teamID));
-        // }
+        mod.MoveVFX(this.flagSmokeVFX, this.currentPosition, ZERO_VEC);
+        mod.SetVFXColor(this.flagSmokeVFX, GetTeamDroppedColor(this.team));
 
         // Play drop VO
         let friendlyVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
@@ -3303,7 +3328,17 @@ class Flag {
 
         // Start timers
         this.StartAutoReturn(FLAG_AUTO_RETURN_TIME, this.numFlagTimesPickedUp).then( () => {console.log(`Flag ${this.teamId} auto-returning to base`)});
-        this.StartPickupDelay().then(() => {console.log("Flag pickup delay expired")});
+        this.StartPickupDelay().then(() => {
+            // Activate FX
+            mod.EnableVFX(this.flagSmokeVFX, true);
+            if(this.flagSparksVFX){
+                mod.MoveVFX(this.flagSparksVFX, this.currentPosition, ZERO_VEC);
+                mod.EnableVFX(this.flagSparksVFX, true);
+            }
+                
+            
+            console.log("Flag pickup delay complete");
+        });
         
         // Emit flag dropped event
         this.events.emit('flagDropped', {
@@ -3346,7 +3381,51 @@ class Flag {
     }
     
     async StartPickupDelay(): Promise<void> {
+        let vfxHeightOffset = mod.CreateVector(0, 1.7, 0);
+
+        // Lock the flag icons
+        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Alert);
+        mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.locked_flag_label))
+        for(let [teamId, icon] of this.flagCarriedIcons){
+            mod.SetWorldIconImage(icon, mod.WorldIconImages.Alert);
+            mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.locked_flag_label));
+        }
+
+        // Charging VFX
+        if(this.pickupChargingVFX){
+            mod.MoveVFX(this.pickupChargingVFX, mod.Add(this.currentPosition, vfxHeightOffset), ZERO_VEC);
+            mod.EnableVFX(this.pickupChargingVFX, true); 
+        }
+        
+        // Play drop SFX
+        if(this.pickupTimerStartSFX && this.pickupTimerRiseSFX && this.lastCarrier){
+            mod.PlaySound(this.pickupTimerStartSFX, 1);
+            await mod.Wait(0.1);
+            mod.PlaySound(this.pickupTimerRiseSFX, 1);
+        }
+
+        // Wait for flag timer to expire
         await mod.Wait(FLAG_PICKUP_DELAY);
+        
+        // Play final sound when flag is ready to pickup
+        if(this.pickupTimerStopSFX)
+            mod.PlaySound(this.pickupTimerStopSFX, 1);
+
+        // Activate flag pickup VFX
+        if(this.pickupChargingVFX && this.pickupAvailableVFX){
+            mod.EnableVFX(this.pickupChargingVFX, false);
+            mod.MoveVFX(this.pickupAvailableVFX, mod.Add(this.currentPosition, vfxHeightOffset), ZERO_VEC);
+            mod.EnableVFX(this.pickupAvailableVFX, true); 
+        }
+
+        // Reset flag icons
+        mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.recover_flag_label));
+        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Flag);
+        for(let [teamId, icon] of this.flagCarriedIcons){
+            mod.SetWorldIconImage(icon, mod.WorldIconImages.Flag);
+            mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.pickup_flag_label));
+        }
+
         if (this.isDropped) {
             this.canBePickedUp = true;
             this.lastCarrier = null;
@@ -3375,6 +3454,11 @@ class Flag {
         if (this.flagProp) {
             mod.UnspawnObject(this.flagProp);
             this.flagProp = null;
+        }
+
+        // Disable VFX
+        if(this.pickupAvailableVFX){
+            mod.EnableVFX(this.pickupAvailableVFX, false); 
         }
         
         this.SpawnFlagAtHome();
@@ -3407,7 +3491,7 @@ class Flag {
             console.log(`Flag auto return. Number of times returned ${this.numFlagTimesPickedUp}. Expected ${currFlagTimesPickedUp}`);
             
             this.PlayFlagReturnedSFX();
-            
+
             // Emit flag returned event with auto-return flag
             this.events.emit('flagReturned', {
                 flag: this,
@@ -3464,7 +3548,7 @@ class Flag {
         }
         
         // Make smoke effect follow carrier
-        mod.MoveVFX(this.flagHomeVFX, this.currentPosition, currentRotation);
+        mod.MoveVFX(this.flagSmokeVFX, this.currentPosition, currentRotation);
 
         if(this.hoverVFX){
             if(soldierParachuting){

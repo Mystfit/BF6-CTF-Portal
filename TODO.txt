@@ -13,11 +13,13 @@ Bugs
 - [x] Make flags filled with same colour by default (normal team colour, not light)
 - [x] Re-enable all world icons on every player deploy to fix desync
 - [ ] Flagbar readability improvements using blurred bgfill container
-- [ ] Add UI layer under flag bar to show your team colour, and your team task (recover, defend, capture)
-- [ ] Add pickup available VFX/SFX to MCOM
-- [ ] Add HQ spawn protection
+- [x] Add team order bar under flag bar to show your team colour, and your team specific events (recover, defend, capture)
+- [ ] Add animations to team orders bar
+- [x] Add pickup available VFX/SFX to MCOM
+- [ ] Add HQ spawn protection to firestorm
 - [ ] Move bases closer together
-    
+- [ ] 4 team on golf course
+- [ ] Neutral flag
 
 In progress:
 ------------

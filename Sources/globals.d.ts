@@ -339,12 +339,19 @@ declare class Flag {
     flagCarriedIcons: Map<number, mod.WorldIcon>;
     flagInteractionPoint: mod.InteractPoint | null;
     flagProp: mod.Object | null;
-    flagHomeVFX: mod.VFX;
+    flagSmokeVFX: mod.VFX;
+    pickupChargingVFX: mod.VFX | null;
+    pickupAvailableVFX: mod.VFX | null;
     alarmSFX: mod.SFX | null;
     dragSFX: mod.SFX | null;
+    pickupTimerStartSFX:mod.SFX | null;
+    pickupTimerRiseSFX:mod.SFX | null;
+    pickupTimerStopSFX:mod.SFX | null;
     tetherFlagVFX: mod.VFX | null;
     tetherPlayerVFX: mod.VFX | null;
     hoverVFX: mod.VFX | null;
+    flagImpactVFX: mod.VFX | null;
+    flagSparksVFX: mod.VFX | null;
     
     // Event system
     readonly events: EventDispatcher<FlagEventMap>;
