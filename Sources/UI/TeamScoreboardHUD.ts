@@ -91,11 +91,16 @@ class TeamScoreboardHUD {
      * Close and cleanup team widgets
      */
     close(): void {
-        if (this.rootWidget) {
-            mod.SetUIWidgetVisible(this.rootWidget, false);
+        // Destroy child widgets first
+        if (this.teamOrdersBar) {
+            this.teamOrdersBar.destroy();
         }
 
-        this.teamOrdersBar.destroy();
+        // Delete root widget
+        if (this.rootWidget) {
+            mod.SetUIWidgetVisible(this.rootWidget, false);
+            mod.DeleteUIWidget(this.rootWidget);
+        }
     }
 
     /**
@@ -106,12 +111,23 @@ class TeamScoreboardHUD {
     }
 
     /**
-     * Reset all team HUD instances (for game restart)
+     * Destroy all team HUD instances and clear the registry
      */
-    static reset(): void {
-        for (const instance of TeamScoreboardHUD.instances.values()) {
+    static destroyAll(): void {
+        for (const [teamId, instance] of TeamScoreboardHUD.instances.entries()) {
             instance.close();
         }
         TeamScoreboardHUD.instances.clear();
+
+        if (DEBUG_MODE) {
+            console.log('All team scoreboards destroyed');
+        }
+    }
+
+    /**
+     * Reset all team HUD instances (for game restart)
+     */
+    static reset(): void {
+        TeamScoreboardHUD.destroyAll();
     }
 }

@@ -110,4 +110,17 @@ class RoundTimer extends TickerWidget {
     public refresh(): void {
         this.updateTime();
     }
+
+    /**
+     * Destroy all UI widgets created by this timer
+     */
+    public destroy(): void {
+        // Delete timer-specific widgets
+        if (this.secondsText) mod.DeleteUIWidget(this.secondsText);
+        if (this.minutesText) mod.DeleteUIWidget(this.minutesText);
+        if (this.seperatorText) mod.DeleteUIWidget(this.seperatorText);
+
+        // Call parent destroy for base ticker widgets
+        super.destroy();
+    }
 }

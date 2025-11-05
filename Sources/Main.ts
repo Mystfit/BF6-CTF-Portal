@@ -87,6 +87,37 @@ let captureZones: Map<number, CaptureZone> = new Map();
 //==============================================================================================
 
 /**
+ * Position a team HUD below the global HUD
+ * @param teamId The team ID to position the HUD for
+ */
+function PositionTeamHUD(teamId: number): void {
+    // Get global HUD position and size
+    let globalHUD = GlobalScoreboardHUD.getInstance().getHUD();
+    if (!globalHUD?.rootWidget) return;
+
+    let globalHUDPos = mod.GetUIWidgetPosition(globalHUD.rootWidget);
+    let globalHUDSize = mod.GetUIWidgetSize(globalHUD.rootWidget);
+
+    // Get team HUD instance
+    let teamHUD = TeamScoreboardHUD.getInstance(teamId);
+    if (!teamHUD?.rootWidget) return;
+
+    // Calculate offset position below global HUD
+    let teamHUDPos = mod.GetUIWidgetPosition(teamHUD.rootWidget);
+    let offsetBarY = mod.YComponentOf(globalHUDPos) + mod.YComponentOf(globalHUDSize) + 10;
+
+    // Apply position
+    mod.SetUIWidgetPosition(
+        teamHUD.rootWidget,
+        mod.CreateVector(mod.XComponentOf(teamHUDPos), offsetBarY, 0)
+    );
+
+    if (DEBUG_MODE) {
+        console.log(`Positioned team ${teamId} HUD at Y offset: ${offsetBarY}`);
+    }
+}
+
+/**
  * Initialize the three-tier UI hierarchy:
  * 1. Global HUD (visible to all players)
  * 2. Team HUDs (visible to players on each team)
@@ -102,33 +133,12 @@ function InitializeUIHierarchy(): void {
         }
     }
 
-    // Get the position and size of the current global hud so we can offset team specific HUD elements underneath dynamically
-    let globalHUDInst = globalHUD.getHUD();
-    let globalHUDPos: mod.Vector = ZERO_VEC;
-    let globalHUDSize: mod.Vector = ZERO_VEC;
-    if(globalHUDInst?.rootWidget){
-        globalHUDPos = mod.GetUIWidgetPosition(globalHUDInst?.rootWidget);
-        globalHUDSize = mod.GetUIWidgetSize(globalHUDInst?.rootWidget);
-    }
-
     // 2. Create Team HUDs (one per team, not including neutral team)
     for (const [teamId, team] of teams.entries()) {
         if (teamId === 0) continue; // Skip neutral team
 
         TeamScoreboardHUD.create(team);
-
-        // Offset the team specific hud underneath our unique game mode hud
-        let teamHUD = TeamScoreboardHUD.getInstance(teamId);
-        if(teamHUD?.rootWidget){
-            let teamHUDPos = mod.GetUIWidgetPosition(teamHUD?.rootWidget);
-            let offsetBarY = mod.YComponentOf(globalHUDPos) + mod.YComponentOf(globalHUDSize) + 10;
-            if (DEBUG_MODE) {
-                // For 2 team - QuickJS: console.log: globalHUDSize: 100, globalHUDPos: 0, offset: 110
-                // For multi  - QuickJS: console.log: globalHUDSize: 100, globalHUDPos: 47, offset: 157
-                console.log(`globalHUDSize: ${mod.YComponentOf(globalHUDSize)}, globalHUDPos: ${mod.YComponentOf(globalHUDPos)}, offset: ${offsetBarY}`);
-            }
-            mod.SetUIWidgetPosition(teamHUD?.rootWidget, mod.CreateVector(mod.XComponentOf(teamHUDPos), offsetBarY, 0));
-        }
+        PositionTeamHUD(teamId);
 
         if (DEBUG_MODE) {
             console.log(`InitializeUIHierarchy: Created team HUD for team ${teamId}`);
@@ -282,12 +292,37 @@ async function SecondUpdate(): Promise<void> {
 
 async function FixTeamScopedUIVisibility(player: mod.Player): Promise<void> {
     // WORKAROUND: Fix for team-scoped UI visibility bug
-    // Swap player to neutral team and back to their assigned team
+    // Tear down and rebuild the team UI for the player's team
     // This ensures team-scoped UIs become visible to the newly joined player
-    const originalTeam = mod.GetTeam(player);
-    mod.SetTeam(player, teamNeutral);
-    await mod.Wait(0);
-    mod.SetTeam(player, originalTeam);
+
+    const playerTeam = mod.GetTeam(player);
+    const playerTeamId = mod.GetObjId(playerTeam);
+
+    // Skip neutral team
+    if (playerTeamId === 0) return;
+
+    if (DEBUG_MODE) {
+        console.log(`Rebuilding team UI for team ${playerTeamId} (player ${mod.GetObjId(player)} joined)`);
+    }
+
+    // Step 1: Destroy the existing team UI
+    const existingHUD = TeamScoreboardHUD.getInstance(playerTeamId);
+    if (existingHUD) {
+        existingHUD.close();
+    }
+
+    // Step 2: Wait a frame for cleanup to complete
+    //await mod.Wait(0);
+
+    // Step 3: Recreate the team UI
+    TeamScoreboardHUD.create(playerTeam);
+
+    // Step 4: Reposition using shared function
+    PositionTeamHUD(playerTeamId);
+
+    if (DEBUG_MODE) {
+        console.log(`Team UI rebuilt successfully for team ${playerTeamId}`);
+    }
 }
 
 export function OnPlayerJoinGame(eventPlayer: mod.Player): void {

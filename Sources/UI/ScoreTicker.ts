@@ -101,4 +101,11 @@ class ScoreTicker extends TickerWidget {
     public refresh(): void {
         this.updateScore();
     }
+
+    /**
+     * Destroy all UI widgets created by this score ticker
+     */
+    public destroy(): void {
+        super.destroy();
+    }
 }

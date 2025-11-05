@@ -501,6 +501,7 @@ declare class TeamScoreboardHUD {
     static getInstance(teamId: number): TeamScoreboardHUD | undefined;
     static getAllInstances(): TeamScoreboardHUD[];
     static reset(): void;
+    static destroyAll(): void;
     refresh(): void;
     close(): void;
     isOpen(): boolean;
@@ -608,13 +609,14 @@ declare abstract class TickerWidget {
     protected textColor: mod.Vector;
     protected bgAlpha: number;
     protected columnWidget: mod.UIWidget;
-    
+
     constructor(params: TickerWidgetParams);
     protected updateText(message: mod.Message): void;
     protected showBrackets(show: boolean): void;
     setProgressValue(value: number): void;
     setProgressDirection(direction: 'left' | 'right'): void;
     getProgressValue(): number;
+    destroy(): void;
     abstract refresh(): void;
 }
 
@@ -631,13 +633,14 @@ interface ScoreTickerParams {
 declare class ScoreTicker extends TickerWidget {
     readonly team: mod.Team;
     readonly teamId: number;
-    
+
     constructor(params: ScoreTickerParams);
     updateScore(): void;
     setLeading(isLeading: boolean): void;
     getScore(): number;
     getTeamId(): number;
     refresh(): void;
+    destroy(): void;
 }
 
 interface RoundTimerParams {
@@ -657,6 +660,7 @@ declare class RoundTimer extends TickerWidget {
     constructor(params: RoundTimerParams);
     updateTime(): void;
     refresh(): void;
+    destroy(): void;
 }
 
 interface FlagBarParams {
@@ -781,6 +785,14 @@ declare function EndGameByScore(winningTeamId: number): void;
 declare function EndGameByTime(): void;
 declare function CheckAndBalanceTeams(): Promise<void>;
 declare function RefreshScoreboard(): void;
+
+// ============================================================================
+// UI HELPER FUNCTIONS (continued)
+// ============================================================================
+
+declare function PositionTeamHUD(teamId: number): void;
+declare function InitializeUIHierarchy(): void;
+declare function FixTeamScopedUIVisibility(player: mod.Player): Promise<void>;
 
 // ============================================================================
 // CONFIGURATION FUNCTIONS

@@ -134,6 +134,9 @@ class TeamOrdersBar extends TickerWidget {
             unsubscribe();
         }
         this.eventUnsubscribers = [];
+
+        // Call parent destroy to clean up UI widgets
+        super.destroy();
     }
 
     SetTeamOrder(teamOrder: TeamOrders): void {

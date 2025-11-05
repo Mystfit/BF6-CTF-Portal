@@ -132,8 +132,31 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
      * Close and cleanup the scoreboard UI
      */
     close(): void {
+        // Destroy all child widgets first (bottom-up)
+
+        // 1. Destroy team score tickers
+        for (const [teamId, ticker] of this.teamScoreTickers.entries()) {
+            ticker.destroy();
+        }
+        this.teamScoreTickers.clear();
+
+        // 2. Destroy flag bar (which also destroys its children)
+        if (this.flagBar) {
+            this.flagBar.destroy();
+            this.flagBar = undefined;
+        }
+
+        // 3. Destroy timer ticker
+        if (this.timerTicker) {
+            this.timerTicker.destroy();
+            this.timerTicker = undefined;
+        }
+
+        // 4. Finally, hide and delete the root widget
         if (this.rootWidget) {
             mod.SetUIWidgetVisible(this.rootWidget, false);
+            mod.DeleteUIWidget(this.rootWidget);
+            this.rootWidget = undefined;
         }
     }
     

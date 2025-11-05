@@ -202,8 +202,26 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
      * Close and cleanup the scoreboard UI
      */
     close(): void {
+        // Destroy all child widgets first (bottom-up)
+
+        // 1. Destroy all team column widgets
+        for (const [teamId, column] of this.teamColumns.entries()) {
+            column.scoreTicker.destroy();
+            column.flagIcon.Destroy();
+        }
+        this.teamColumns.clear();
+
+        // 2. Delete team row container
+        if (this.teamRow) {
+            mod.DeleteUIWidget(this.teamRow);
+            this.teamRow = undefined;
+        }
+
+        // 3. Finally, hide and delete the root widget
         if (this.rootWidget) {
             mod.SetUIWidgetVisible(this.rootWidget, false);
+            mod.DeleteUIWidget(this.rootWidget);
+            this.rootWidget = undefined;
         }
     }
     

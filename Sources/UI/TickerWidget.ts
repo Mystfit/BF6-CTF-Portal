@@ -301,7 +301,31 @@ abstract class TickerWidget {
     StopThrob(): void {
         this.isPulsing = false;
     }
-    
+
+    /**
+     * Destroy all UI widgets created by this ticker
+     * Should be called before discarding the ticker instance
+     */
+    public destroy(): void {
+        // Delete all bracket widgets
+        if (this.leftBracketTop) mod.DeleteUIWidget(this.leftBracketTop);
+        if (this.leftBracketSide) mod.DeleteUIWidget(this.leftBracketSide);
+        if (this.leftBracketBottom) mod.DeleteUIWidget(this.leftBracketBottom);
+        if (this.rightBracketTop) mod.DeleteUIWidget(this.rightBracketTop);
+        if (this.rightBracketSide) mod.DeleteUIWidget(this.rightBracketSide);
+        if (this.rightBracketBottom) mod.DeleteUIWidget(this.rightBracketBottom);
+
+        // Delete progress bar
+        if (this.progressBarContainer) mod.DeleteUIWidget(this.progressBarContainer);
+
+        // Delete text widget
+        if (this.textWidget) mod.DeleteUIWidget(this.textWidget);
+
+        // Delete outline and main container
+        if (this.columnWidgetOutline) mod.DeleteUIWidget(this.columnWidgetOutline);
+        if (this.columnWidget) mod.DeleteUIWidget(this.columnWidget);
+    }
+
     /**
      * Refresh the widget - should be implemented by subclasses
      */
