@@ -48,12 +48,12 @@ class JSPlayer {
     }
 
     initUI(): void {
-        // Create scoreboard UI for human players
+        // Create PLAYER-SCOPED scoreboard UI for human players
+        // Global and team-scoped UIs are created in InitializeUIHierarchy()
         if(!this.scoreboardUI){
             if (!mod.GetSoldierState(this.player, mod.SoldierStateBool.IsAISoldier)) {
-                if (currentHUDClass) {
-                    this.scoreboardUI = new currentHUDClass(this.player);
-                }
+                // Create player-specific HUD (TeamOrdersBar)
+                this.scoreboardUI = new PlayerScoreboardHUD(this.player);
             }
         }
     }

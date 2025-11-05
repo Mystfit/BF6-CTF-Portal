@@ -451,7 +451,7 @@ declare class TeamColumnWidget {
 declare interface BaseScoreboardHUD {
     readonly player: mod.Player;
     readonly playerId: number;
-    readonly rootWidget: mod.UIWidget | undefined;
+    rootWidget: mod.UIWidget | undefined;
     create(): void;
     refresh(): void;
     close(): void;
@@ -462,8 +462,8 @@ declare class MultiTeamScoreHUD {
     readonly player: mod.Player;
     readonly playerId: number;
     readonly rootWidget: mod.UIWidget | undefined;
-    
-    constructor(player: mod.Player);
+
+    constructor(player?: mod.Player);
     create(): void;
     refresh(): void;
     close(): void;
@@ -471,6 +471,42 @@ declare class MultiTeamScoreHUD {
 }
 
 declare class ClassicCTFScoreHUD {
+    readonly player: mod.Player;
+    readonly playerId: number;
+    readonly rootWidget: mod.UIWidget | undefined;
+
+    constructor(player?: mod.Player);
+    create(): void;
+    refresh(): void;
+    close(): void;
+    isOpen(): boolean;
+}
+
+declare class GlobalScoreboardHUD {
+    static getInstance(): GlobalScoreboardHUD;
+    static reset(): void;
+    createGlobalHUD(hudClass: new (player?: mod.Player) => BaseScoreboardHUD): BaseScoreboardHUD;
+    refresh(): void;
+    close(): void;
+    getHUD(): BaseScoreboardHUD | null;
+}
+
+declare class TeamScoreboardHUD {
+    readonly team: mod.Team;
+    readonly teamId: number;
+    readonly rootWidget: mod.UIWidget | undefined;
+    position: number[];
+
+    static create(team: mod.Team): TeamScoreboardHUD;
+    static getInstance(teamId: number): TeamScoreboardHUD | undefined;
+    static getAllInstances(): TeamScoreboardHUD[];
+    static reset(): void;
+    refresh(): void;
+    close(): void;
+    isOpen(): boolean;
+}
+
+declare class PlayerScoreboardHUD {
     readonly player: mod.Player;
     readonly playerId: number;
     readonly rootWidget: mod.UIWidget | undefined;
@@ -541,6 +577,7 @@ declare class TeamOrdersBar extends TickerWidget {
     team: mod.Team;
     constructor(team:mod.Team, tickerParams: TickerWidgetParams);
     refresh(): void;
+    destroy(): void;
     SetTeamOrder(teamOrder: TeamOrders): void; 
     TeamOrderToMessage(order:TeamOrders): mod.Message;
 }
@@ -674,6 +711,7 @@ declare namespace Math2 {
 }
 
 declare function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean;
+declare function AreVectorsEqual(a: mod.Vector, b: mod.Vector, epsilon?: number): boolean;
 
 // ============================================================================
 // GLOBAL INSTANCES
@@ -701,7 +739,7 @@ declare let teamConfigs: Map<number, TeamConfig>;
 declare let teamScores: Map<number, number>;
 declare let flags: Map<number, Flag>;
 declare let captureZones: Map<number, CaptureZone>;
-declare let currentHUDClass: (new (player: mod.Player) => BaseScoreboardHUD) | undefined;
+declare let currentHUDClass: (new (player?: mod.Player) => BaseScoreboardHUD) | undefined;
 
 // ============================================================================
 // UTILITY FUNCTIONS

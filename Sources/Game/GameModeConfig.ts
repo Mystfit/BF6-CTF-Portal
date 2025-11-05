@@ -32,11 +32,11 @@ class CaptureZoneConfig {
 interface GameModeConfig {
     teams: TeamConfig[];
     flags: FlagConfig[];
-    HUDClass?: new (player: mod.Player) => BaseScoreboardHUD;
+    HUDClass?: new (player?: mod.Player) => BaseScoreboardHUD;
 }
 
-// Store the HUD class to use for player scoreboards
-let currentHUDClass: (new (player: mod.Player) => BaseScoreboardHUD) | undefined;
+// Store the HUD class to use for global HUD (player parameter is optional)
+let currentHUDClass: (new (player?: mod.Player) => BaseScoreboardHUD) | undefined;
 
 function LoadGameModeConfig(config: GameModeConfig): void {
     // Store HUD class for use in JSPlayer constructor

@@ -110,10 +110,12 @@ class CaptureZone {
             // Check if own flag is at home (get player's team flag)
             const ownFlag = flags.get(playerTeamId);
             if (ownFlag && !ownFlag.isAtHome) {
-                mod.DisplayHighlightedWorldLogMessage(
-                    mod.Message(mod.stringkeys.waiting_for_flag_return),
-                    player
-                );
+                if(DEBUG_MODE){
+                    mod.DisplayHighlightedWorldLogMessage(
+                        mod.Message(mod.stringkeys.waiting_for_flag_return),
+                        player
+                    );
+                }
                 return;
             }
         

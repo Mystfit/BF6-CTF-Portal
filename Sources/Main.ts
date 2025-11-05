@@ -83,13 +83,72 @@ let captureZones: Map<number, CaptureZone> = new Map();
 
 
 //==============================================================================================
+// UI HIERARCHY INITIALIZATION
+//==============================================================================================
+
+/**
+ * Initialize the three-tier UI hierarchy:
+ * 1. Global HUD (visible to all players)
+ * 2. Team HUDs (visible to players on each team)
+ * 3. Player HUDs (visible only to specific player) - created in JSPlayer.initUI()
+ */
+function InitializeUIHierarchy(): void {
+    // 1. Create Global HUD (one instance for the entire game)
+    const globalHUD = GlobalScoreboardHUD.getInstance();   
+    if (currentHUDClass) {
+        globalHUD.createGlobalHUD(currentHUDClass);
+        if (DEBUG_MODE) {
+            console.log(`InitializeUIHierarchy: Created global HUD with ${currentHUDClass.name}`);
+        }
+    }
+
+    // Get the position and size of the current global hud so we can offset team specific HUD elements underneath dynamically
+    let globalHUDInst = globalHUD.getHUD();
+    let globalHUDPos: mod.Vector = ZERO_VEC;
+    let globalHUDSize: mod.Vector = ZERO_VEC;
+    if(globalHUDInst?.rootWidget){
+        globalHUDPos = mod.GetUIWidgetPosition(globalHUDInst?.rootWidget);
+        globalHUDSize = mod.GetUIWidgetSize(globalHUDInst?.rootWidget);
+    }
+
+    // 2. Create Team HUDs (one per team, not including neutral team)
+    for (const [teamId, team] of teams.entries()) {
+        if (teamId === 0) continue; // Skip neutral team
+
+        TeamScoreboardHUD.create(team);
+
+        // Offset the team specific hud underneath our unique game mode hud
+        let teamHUD = TeamScoreboardHUD.getInstance(teamId);
+        if(teamHUD?.rootWidget){
+            let teamHUDPos = mod.GetUIWidgetPosition(teamHUD?.rootWidget);
+            let offsetBarY = mod.YComponentOf(globalHUDPos) + mod.YComponentOf(globalHUDSize) + 10;
+            if (DEBUG_MODE) {
+                // For 2 team - QuickJS: console.log: globalHUDSize: 100, globalHUDPos: 0, offset: 110
+                // For multi  - QuickJS: console.log: globalHUDSize: 100, globalHUDPos: 47, offset: 157
+                console.log(`globalHUDSize: ${mod.YComponentOf(globalHUDSize)}, globalHUDPos: ${mod.YComponentOf(globalHUDPos)}, offset: ${offsetBarY}`);
+            }
+            mod.SetUIWidgetPosition(teamHUD?.rootWidget, mod.CreateVector(mod.XComponentOf(teamHUDPos), offsetBarY, 0));
+        }
+
+        if (DEBUG_MODE) {
+            console.log(`InitializeUIHierarchy: Created team HUD for team ${teamId}`);
+        }
+    }
+
+    // 3. Player HUDs are created individually in JSPlayer.initUI() when players spawn
+    if (DEBUG_MODE) {
+        console.log(`InitializeUIHierarchy: UI hierarchy initialized (Global + ${teams.size - 1} team HUDs)`);
+    }
+}
+
+//==============================================================================================
 // MAIN GAME LOOP
 //==============================================================================================
 
-export function OnGameModeStarted() {
+export async function OnGameModeStarted() {
     console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
-    if(DEBUG_MODE)
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_author));
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
 
     // Initialize legacy team references (still needed for backwards compatibility)
     teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
@@ -98,7 +157,7 @@ export function OnGameModeStarted() {
     team3 = mod.GetTeam(TeamID.TEAM_3);
     team4 = mod.GetTeam(TeamID.TEAM_4);
 
-    //await mod.Wait(1);
+    await mod.Wait(1);
 
     // Load game mode configuration
     // let config = FourTeamCTFConfig;
@@ -106,9 +165,14 @@ export function OnGameModeStarted() {
     let activeConfig: GameModeConfig | undefined = undefined;
     for(let [configID, config] of DEFAULT_GAMEMODES){
         let gameModeConfigObj = mod.GetSpatialObject(configID);
-        if(gameModeConfigObj){
-            console.log(`currentModeId: ${configID}, gameModeConfigObj: ${gameModeConfigObj}, gameModeConfigId: ${configID}`);
-            
+        let gameModeExistsFallbackPos = mod.GetObjectPosition(gameModeConfigObj);
+        let isAtOrigin = AreVectorsEqual(gameModeExistsFallbackPos, ZERO_VEC, 0.1);
+        if(DEBUG_MODE)
+            console.log(`currentModeId: ${configID}, gameModeConfigObj: ${gameModeConfigObj}, is at origin: ${isAtOrigin}, position: ${VectorToString(gameModeExistsFallbackPos)}`);
+        
+        // Make sure the gameconfig object actual exists.
+        // If the game mode config object has a zero vector, it doesn't exist
+        if(gameModeConfigObj && !isAtOrigin){
             // Look up config from the map
             activeConfig = config
             if(activeConfig){
@@ -120,7 +184,8 @@ export function OnGameModeStarted() {
     if(activeConfig){
         LoadGameModeConfig(activeConfig);
     } else {
-        console.log("Could not find a gamemode");
+        LoadGameModeConfig(ClassicCTFConfig);
+        console.log("Could not find a gamemode. Falling back to classic 2-team CTF");
         return;
     }
 
@@ -136,13 +201,19 @@ export function OnGameModeStarted() {
 
     // Start game
     gameStarted = true;
-    
+
+    // Initialize UI hierarchy based on scope
+    InitializeUIHierarchy();
+
     // Start update loops
     TickUpdate();
     SecondUpdate();
-    
-    console.log("CTF: Game initialized and started");
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_initialized));
+
+    if(DEBUG_MODE){
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_initialized));
+        console.log("CTF: Game initialized and started");
+    }
+
 
     RefreshScoreboard();
 }
@@ -154,13 +225,19 @@ async function TickUpdate(): Promise<void> {
         let currentTime = GetCurrentTime();
         let timeDelta = currentTime - lastTickTime;
         // console.log(`Fast tick delta ${timeDelta}`);
-        
+
         // Update all flag carrier positions
         for (const [flagId, flag] of flags.entries()) {
             flag.FastUpdate(timeDelta);
         }
-        
-        // Update all players UI instances
+
+        // Refresh UI hierarchy:
+        // 1. Global HUD (scores, timer, flags)
+        GlobalScoreboardHUD.getInstance().refresh();
+
+        // 2. Team HUDs (team orders) - refresh on events, not in tick loop
+
+        // 3. Player HUDs (player-specific team orders)
         JSPlayer.getAllAsArray().forEach(jsPlayer => {
             jsPlayer.scoreboardUI?.refresh();
         });
@@ -256,7 +333,8 @@ export function OnPlayerDied(
     eventWeaponUnlock: mod.WeaponUnlock
 ): void {
     // If player was carrying a flag, drop it
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
     
     // Increment flag carrier kill score
     let killer = JSPlayer.get(eventOtherPlayer);
@@ -330,7 +408,8 @@ export function OnPlayerEnterVehicle(
     eventPlayer: mod.Player,
     eventVehicle: mod.Vehicle
 ): void {
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_player_enter_vehicle));
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_player_enter_vehicle));
 
     // Check if player is carrying a flag
     if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {

@@ -215,3 +215,10 @@ function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean
 {
     return Math.abs(a - b) < (epsilon ?? 1e-9);
 }
+
+function AreVectorsEqual(a: mod.Vector, b: mod.Vector, epsilon?: number): boolean
+{
+    return AreFloatsEqual(mod.XComponentOf(a), mod.XComponentOf(b), epsilon) &&
+        AreFloatsEqual(mod.YComponentOf(a), mod.YComponentOf(b), epsilon) &&
+        AreFloatsEqual(mod.ZComponentOf(a), mod.ZComponentOf(b), epsilon);
+}

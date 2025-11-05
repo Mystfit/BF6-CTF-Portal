@@ -27,10 +27,10 @@ async function CheckAndBalanceTeams(): Promise<void> {
     if (Math.abs(largestTeam.count - smallestTeam.count) <= 1) return;
     
     balanceInProgress = true;
-    
-    // Notify players
-    mod.DisplayHighlightedWorldLogMessage(
-        mod.Message("Teams will automatically balance in 5 seconds")
+
+    // Notify players a balance is about to occur
+    mod.DisplayNotificationMessage(
+        mod.Message(mod.stringkeys.team_balance_notif)
     );
     
     await mod.Wait(TEAM_BALANCE_DELAY);

@@ -67,7 +67,7 @@
 
 const VERSION = [2, 0, 0];
 
-const DEBUG_MODE = false;                                            // Print extra debug messages
+const DEBUG_MODE = true;                                            // Print extra debug messages
 
 // Game Settings
 const GAMEMODE_TARGET_SCORE = 10;                                    // Points needed to win

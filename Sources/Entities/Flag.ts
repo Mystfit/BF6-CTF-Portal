@@ -227,9 +227,10 @@ class Flag {
             }
             return;
         }
-
+        
         if(!CARRIER_CAN_HOLD_MULTIPLE_FLAGS && IsCarryingAnyFlag(player)){
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_already_holding_flag));
+            if(DEBUG_MODE)
+                mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_already_holding_flag));
             return;
         }
 
@@ -300,7 +301,8 @@ class Flag {
         
         // Notify all players
         const message = mod.Message(mod.stringkeys.team_flag_taken, GetTeamName(this.team));
-        mod.DisplayHighlightedWorldLogMessage(message);
+        if(DEBUG_MODE)
+            mod.DisplayHighlightedWorldLogMessage(message);
 
         // Remove roaming flag interaction point
         if(this.flagInteractionPoint){
@@ -641,7 +643,8 @@ class Flag {
     }
 
     ReturnFlag(): void {
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
+        if(DEBUG_MODE)
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
         this.PlayFlagReturnedSFX();
         
         // Emit flag returned event (before reset)
@@ -1013,7 +1016,8 @@ function HandleFlagInteraction(
     }
     // Own team trying to return dropped flag
     else if (playerTeamId === flag.teamId && flag.isDropped) {
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
+        if(DEBUG_MODE)
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
         flag.PlayFlagReturnedSFX();
         flag.ReturnFlag();
     }

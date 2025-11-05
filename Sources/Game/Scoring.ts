@@ -104,13 +104,15 @@ function EndGameByScore(winningTeamId: number): void {
     const teamName = winningTeamId === 1 ? "Blue" : "Red";
     
     console.log(`Game ended - Team ${winningTeamId} wins by score`);
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_score, winningTeamId))
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_score, winningTeamId))
     mod.EndGameMode(winningTeam);    
 }
 
 function EndGameByTime(): void {
     gameStarted = false;
-    // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_time));
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_time));
     console.log(`Game ended by time limit`);
     
     // Determine winner by score

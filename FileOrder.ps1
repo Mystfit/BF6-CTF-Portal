@@ -43,10 +43,13 @@
         "UI/ScoreTicker.ts",
         "UI/RoundTimer.ts"
         "UI/FlagBar.ts",
+        "UI/FlagIcon.ts"
+        "UI/TeamInstructionBar.ts",
         "UI/MultiTeamScoreHUD.ts",
         "UI/ClassicCTFScoreHUD.ts",
-        "UI/FlagIcon.ts"
-        "UI/TeamInstructionBar.ts"
+        "UI/GlobalScoreboardHUD.ts",
+        "UI/TeamScoreboardHUD.ts",
+        "UI/PlayerScoreboardHUD.ts"
     )
     
     # Level 6: Configuration (uses Level 0-4)

@@ -47,7 +47,7 @@ class TeamColumnWidget {
             name: `FlagHomeIcon_Team${this.teamId}`,
             parent: parent,
             position: mod.CreateVector(position[0], position[1] + size[1] + this.verticalPadding, 0),
-            size: mod.CreateVector(35, 35, 0),
+            size: mod.CreateVector(28, 28, 0),
             anchor: mod.UIAnchor.TopCenter,
             fillColor:  GetTeamColorById(this.teamId),
             fillAlpha: 1,
@@ -98,108 +98,73 @@ class TeamColumnWidget {
 
 /**
  * ScoreboardUI - Main scoring interface for CTF
- * Shows player's team and all team scores with flag statuses
+ * Shows all team scores with flag statuses
+ *
+ * GLOBAL SCOPE: Created once per game, visible to all players
  */
 class MultiTeamScoreHUD implements BaseScoreboardHUD {
     readonly player: mod.Player;
     readonly playerId: number;
-    
+
     rootWidget: mod.UIWidget | undefined;
-    private teamIndicatorContainer: mod.UIWidget | undefined;
-    private teamIndicatorText: mod.UIWidget | undefined;
     private teamRow: mod.UIWidget | undefined;
     private teamColumns: Map<number, TeamColumnWidget> = new Map();
-    
+
     private readonly ROOT_WIDTH = 700;
-    private readonly ROOT_HEIGHT = 100;
-    private readonly TOP_PADDING = 67;
-    private readonly TEAM_INDICATOR_HEIGHT = 25;
+    private readonly ROOT_HEIGHT = 110;
+    private readonly TOP_PADDING = 47;
     private readonly COLUMN_SPACING = 40;
-    
-    constructor(player: mod.Player) {
-        this.player = player;
-        this.playerId = mod.GetObjId(player);
+
+    constructor(player?: mod.Player) {
+        // Player is optional - only used to satisfy BaseScoreboardHUD interface
+        // This HUD is actually globally scoped
+        this.player = (null as any);
+        this.playerId = -1;
         this.create();
     }
-    
+
     create(): void {
         if (this.rootWidget) return;
-        
+
         // Calculate total width needed based on team count
         const teamCount = teams.size;
-        const columnWidth = 60; // Must match TeamColumnWidget.COLUMN_WIDTH
+        const columnWidth = 60;
         const totalColumnsWidth = (teamCount * columnWidth) + ((teamCount - 1) * this.COLUMN_SPACING);
-        const actualRootWidth = totalColumnsWidth;//Math.max(this.ROOT_WIDTH, totalColumnsWidth + 40); // 40px padding
-        
-        // Create root container
+
+        // Create GLOBAL root container (NO playerId, NO teamId)
         this.rootWidget = modlib.ParseUI({
             type: "Container",
-            size: [actualRootWidth, this.ROOT_HEIGHT],
-            position: [0, this.TOP_PADDING],
+            size: [totalColumnsWidth, this.ROOT_HEIGHT],
+            position: [0, 0],
             anchor: mod.UIAnchor.TopCenter,
             bgFill: mod.UIBgFill.Blur,
             bgColor: [0, 0, 0],
-            bgAlpha: 0.0,
-            playerId: this.player
+            bgAlpha: 0.0
+            // NO playerId or teamId = GLOBAL SCOPE
         })!;
 
-        // Create team indicator (Row 1)
-        this.teamIndicatorContainer = modlib.ParseUI({
-            type: "Container",
-            parent: this.rootWidget,
-            position: [0, 0],
-            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
-            anchor: mod.UIAnchor.TopCenter,
-            //bgFill: mod.UIBgFill.Blur,
-            bgColor: GetTeamColor(mod.GetTeam(this.player)),
-            bgAlpha: 0.5
-        })!;
-        
-        // Create team indicator (Row 1)
-        this.teamIndicatorText = modlib.ParseUI({
-            type: "Text",
-            parent: this.teamIndicatorContainer,
-            position: [0, 2],
-            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
-            anchor: mod.UIAnchor.TopCenter,
-            textAnchor: mod.UIAnchor.Center,
-            textSize: 20,
-            textLabel: mod.Message(mod.stringkeys.scoreUI_team_label, GetTeamName(mod.GetTeam(this.player))),
-            textColor: [1, 1, 1],
-            bgAlpha: 0
-        })!;
-        
+        // Create team row container
         this.teamRow = modlib.ParseUI({
             type: "Container",
             parent: this.rootWidget,
-            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
-            position: [0, this.TEAM_INDICATOR_HEIGHT + 8],
+            size: [totalColumnsWidth, 50],
+            position: [0, this.TOP_PADDING],
             anchor: mod.UIAnchor.TopCenter,
             bgFill: mod.UIBgFill.None,
             bgColor: [0, 0, 0],
-            bgAlpha: 0.0,
-            playerId: this.player
+            bgAlpha: 0.0
         })!;
-        
-        // Create team columns (Row 2)
-        const columnsStartY = 0;
-        
-        // Calculate starting X position for the first widget's CENTER point
-        // Start at left edge of group (-totalColumnsWidth/2) then offset by half a column width
+
+        // Create team columns
         let currentX = -(totalColumnsWidth / 2) + (columnWidth / 2);
-        
+
         for (const [teamId, team] of teams.entries()) {
-            let isPlayerTeam: boolean = mod.Equals(team, mod.GetTeam(this.player));
             const columnPos = [currentX, 0];
-            const column = new TeamColumnWidget(team, columnPos, [50, 30], this.teamRow, isPlayerTeam);
+            const column = new TeamColumnWidget(team, columnPos, [50, 30], this.teamRow, false);
             this.teamColumns.set(teamId, column);
             currentX += columnWidth + this.COLUMN_SPACING;
         }
 
-        // Update root widget width now that we have the total column width
-        mod.SetUIWidgetSize(this.rootWidget, mod.CreateVector(totalColumnsWidth, this.ROOT_HEIGHT, 0));
-        this.rootWidget
-        
         // Initial refresh
         this.refresh();
     }
@@ -208,22 +173,12 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
      * Update all UI elements with current game state
      */
     refresh(): void {
-        if (!this.rootWidget || !this.teamIndicatorContainer || !this.teamIndicatorText) return;
-        
-        // Update team indicator text with player's current team
-        const playerTeam = mod.GetTeam(this.player);
-        const playerTeamId = mod.GetObjId(playerTeam);
-        const teamName = GetTeamName(playerTeam);
-        const teamColor = GetTeamColor(playerTeam);
-        
-        mod.SetUITextLabel(this.teamIndicatorText, mod.Message(mod.stringkeys.scoreUI_team_label, teamName));
-        mod.SetUITextColor(this.teamIndicatorText, mod.CreateVector(1,1,1));
-        mod.SetUIWidgetBgColor(this.teamIndicatorContainer, teamColor);
-        
+        if (!this.rootWidget) return;
+
         // Determine which team is leading (if any)
         let maxScore = -1;
         let leadingTeams: number[] = [];
-        
+
         for (const [teamId, score] of teamScores.entries()) {
             if (score > maxScore) {
                 maxScore = score;
@@ -232,11 +187,11 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
                 leadingTeams.push(teamId);
             }
         }
-        
+
         // Update each team column
         for (const [teamId, column] of this.teamColumns.entries()) {
             column.update();
-            
+
             // Show brackets only if this team is the sole leader (no ties)
             const isLeading = leadingTeams.length === 1 && leadingTeams[0] === teamId;
             column.setLeading(isLeading);
