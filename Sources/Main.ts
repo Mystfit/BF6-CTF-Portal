@@ -280,11 +280,24 @@ async function SecondUpdate(): Promise<void> {
 // EVENT HANDLERS
 //==============================================================================================
 
+async function FixTeamScopedUIVisibility(player: mod.Player): Promise<void> {
+    // WORKAROUND: Fix for team-scoped UI visibility bug
+    // Swap player to neutral team and back to their assigned team
+    // This ensures team-scoped UIs become visible to the newly joined player
+    const originalTeam = mod.GetTeam(player);
+    mod.SetTeam(player, teamNeutral);
+    await mod.Wait(0);
+    mod.SetTeam(player, originalTeam);
+}
+
 export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
     if (DEBUG_MODE) {
         console.log(`Player joined: ${mod.GetObjId(eventPlayer)}`);
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
     }
+
+    // Apply UI visibility fix
+    FixTeamScopedUIVisibility(eventPlayer);
 
     // Refresh scoreboard to update new player team entry and score
     RefreshScoreboard();
@@ -415,9 +428,7 @@ export function OnPlayerEnterVehicle(
     if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {
         if (DEBUG_MODE) {
             console.log("Flag carrier entered vehicle");
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.carrier_enter_vehicle));
         }
-
         ForceToPassengerSeat(eventPlayer, eventVehicle);
     }
 }
@@ -431,7 +442,6 @@ export function OnPlayerEnterVehicleSeat(
     if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {      
         if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
             if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat))
             ForceToPassengerSeat(eventPlayer, eventVehicle);
         }
     }
@@ -449,13 +459,15 @@ export function OnGameModeEnding(): void {
 //==============================================================================================
 
 function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
-    const seatCount = mod.GetVehicleSeatCount(vehicle);
-    
+
     // Try to find an empty passenger seat
+    const seatCount = mod.GetVehicleSeatCount(vehicle);
+    let forcedToSeat = false;
     let lastSeat = seatCount - 1;
     for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
             mod.ForcePlayerToSeat(player, vehicle, i);
+            forcedToSeat = true;
             if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
             return;
         }
@@ -464,10 +476,12 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     // Try last seat as fallback
     if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
         mod.ForcePlayerToSeat(player, vehicle, lastSeat);
+        forcedToSeat = true;
         if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${lastSeat}`);
         return;
     }
-    
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(forcedToSeat ? mod.stringkeys.forced_to_seat : mod.stringkeys.no_passenger_seats), player);
+
     // No passenger seats available, force exit
     mod.ForcePlayerExitVehicle(player, vehicle);
     if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");

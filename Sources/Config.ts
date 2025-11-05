@@ -65,9 +65,9 @@
 // This file contains all configuration constants that need to be loaded before other modules
 //==============================================================================================
 
-const VERSION = [2, 0, 0];
+const VERSION = [2, 2, 0];
 
-const DEBUG_MODE = true;                                            // Print extra debug messages
+const DEBUG_MODE = false;                                            // Print extra debug messages
 
 // Game Settings
 const GAMEMODE_TARGET_SCORE = 10;                                    // Points needed to win
@@ -79,7 +79,7 @@ const FLAG_AUTO_RETURN_TIME = 30;                                   // Seconds b
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up
 const CARRIER_FORCED_WEAPON_SLOT = mod.InventorySlots.MeleeWeapon;  // Force flag carrier to swap to this slot on flag pickup, swapping will drop flag
-const CARRIER_CAN_HOLD_MULTIPLE_FLAGS = true;                       // Let the flag carrier pick up multiple flags at once
+const CARRIER_CAN_HOLD_MULTIPLE_FLAGS = false;                       // Let the flag carrier pick up multiple flags at once
 
 // Team balance
 const TEAM_AUTO_BALANCE: boolean = true;                            // Make sure teams are evenly balanced 
@@ -87,7 +87,7 @@ const TEAM_BALANCE_DELAY = 5.0;                                     // Seconds t
 const TEAM_BALANCE_CHECK_INTERVAL = 10;                             // Check balance every N seconds
 
 // Vehicles
-const VEHICLE_BLOCK_CARRIER_DRIVING: boolean = false;
+const VEHICLE_BLOCK_CARRIER_DRIVING: boolean = true;
 
 
 //==============================================================================================

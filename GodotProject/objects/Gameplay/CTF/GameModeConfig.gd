@@ -15,8 +15,8 @@ enum Configs {TwoTeam, FourTeam}
 var global_name = self.get_script().get_global_name()
 
 func UpdateIds():
-	var spatial = self.get_child(0) as Suitcase_01_B
-	spatial.ObjId = 90 + int(Config)
+	var dummyspatial = self.get_child(0) as AmmoChest_Small_01
+	dummyspatial.ObjId = 40000 + int(Config)
 
 func _validate_property(property: Dictionary):
 	if property.name == "id":

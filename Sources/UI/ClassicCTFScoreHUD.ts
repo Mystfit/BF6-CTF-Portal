@@ -46,7 +46,7 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
         // Create GLOBAL root container (NO playerId, NO teamId)
         this.rootWidget = modlib.ParseUI({
             type: "Container",
-            size: [700, 100],
+            size: [700, 50],
             position: [0, this.paddingTop],
             anchor: mod.UIAnchor.TopCenter,
             bgFill: mod.UIBgFill.Blur,
@@ -61,7 +61,7 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
 
             let tickerParams: ScoreTickerParams = {
                 parent: this.rootWidget,
-                position: [((teamId - 1) * this.teamScoreSpacing) - this.teamScoreSpacing * 0.5, this.paddingTop + this.teamScorePaddingTop],
+                position: [((teamId - 1) * this.teamScoreSpacing) - this.teamScoreSpacing * 0.5, this.teamScorePaddingTop],
                 size: this.teamWidgetSize,
                 team: team
             };
@@ -71,7 +71,7 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
         // Center flag bar positions
         const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarWidthPadding;
         const barPosX = 0;  // Center horizontally
-        const barPosY = this.paddingTop + this.teamScorePaddingTop + (this.teamWidgetSize[1] / 2) - (this.flagBarHeight * 0.5);
+        const barPosY = this.teamScorePaddingTop + (this.teamWidgetSize[1] / 2) - (this.flagBarHeight * 0.5);
 
         // Create flag bar (positioned between the two score tickers)
         const team1 = teams.get(1);

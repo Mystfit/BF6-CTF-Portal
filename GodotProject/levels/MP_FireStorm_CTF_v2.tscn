@@ -2,7 +2,6 @@
 
 [ext_resource type="PackedScene" path="res://static/MP_FireStorm_Terrain.tscn" id="1_btgkm"]
 [ext_resource type="Script" uid="uid://rb2drwt325io" path="res://objects/Gameplay/CTF/GameModeConfig.gd" id="1_ubgwg"]
-[ext_resource type="PackedScene" path="res://objects/Global/Generic/Common/Props/Suitcase_01_B.tscn" id="2_fm802"]
 [ext_resource type="PackedScene" path="res://static/MP_FireStorm_Assets.tscn" id="2_wec5p"]
 [ext_resource type="PackedScene" path="res://objects/Gameplay/Common/HQ_PlayerSpawner.tscn" id="3_13sbx"]
 [ext_resource type="PackedScene" path="res://objects/Gameplay/Common/Sector.tscn" id="4_vndvq"]
@@ -55,14 +54,16 @@
 [ext_resource type="PackedScene" path="res://objects/Shared/Generic/Industrial/Props/BeamRefinery_01_B_32x32x512.tscn" id="51_puyg1"]
 [ext_resource type="PackedScene" path="res://objects/Turkmenistan/MP_FireStorm/Generic/Industrial/Architecture/WalkwayPlatform_128x128.tscn" id="52_h4itx"]
 [ext_resource type="PackedScene" path="res://objects/Turkmenistan/MP_FireStorm/Generic/Industrial/Props/RefineryConstructionPlatform_01_576x1376.tscn" id="53_h4itx"]
+[ext_resource type="PackedScene" path="res://objects/Global/Generic/Common/Props/AmmoChest_Small_01.tscn" id="55_ubgwg"]
 
 [node name="MP_FireStorm" type="Node3D"]
 
 [node name="GameModeConfig" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.195, 112.306, 0.048)
 script = ExtResource("1_ubgwg")
 
-[node name="Suitcase_01_B" parent="GameModeConfig" instance=ExtResource("2_fm802")]
-ObjId = 90
+[node name="DummySpatialProp" parent="GameModeConfig" instance=ExtResource("55_ubgwg")]
+ObjId = 40000
 
 [node name="Static" type="Node3D" parent="."]
 

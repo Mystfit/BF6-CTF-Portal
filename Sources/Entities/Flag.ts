@@ -511,9 +511,6 @@ class Flag {
             mod.EnableVFX(this.flagImpactVFX, true);
         }
 
-        // Update the position of the flag interaction point
-        this.UpdateFlagInteractionPoint();
-
         // Update capture icons for all opposing teams
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2,0));
         for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
@@ -545,7 +542,9 @@ class Flag {
                 mod.MoveVFX(this.flagSparksVFX, this.currentPosition, ZERO_VEC);
                 mod.EnableVFX(this.flagSparksVFX, true);
             }
-                
+
+            // Update the position of the flag interaction point
+            this.UpdateFlagInteractionPoint();   
             
             console.log("Flag pickup delay complete");
         });
@@ -568,9 +567,9 @@ class Flag {
         if (DEBUG_MODE) {
             console.log(`Flag dropped`);
             mod.DisplayHighlightedWorldLogMessage(
-                mod.Message(mod.stringkeys.flag_dropped, GetTeamName(this.team))
-            );
+            mod.Message(mod.stringkeys.flag_dropped, GetTeamName(this.team)));
         }
+
     }
 
     UpdateFlagInteractionPoint(){
@@ -1015,11 +1014,15 @@ function HandleFlagInteraction(
         }
     }
     // Own team trying to return dropped flag
-    else if (playerTeamId === flag.teamId && flag.isDropped) {
-        if(DEBUG_MODE)
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
-        flag.PlayFlagReturnedSFX();
-        flag.ReturnFlag();
+    else if (playerTeamId === flag.teamId){
+        if(flag.isDropped){
+            if(DEBUG_MODE)
+                mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned, GetTeamName(flag.team)));
+            flag.PlayFlagReturnedSFX();
+            flag.ReturnFlag();
+        } else if(flag.isAtHome) {
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.flag_friendly_at_home), player);
+        }
     }
 }
 
