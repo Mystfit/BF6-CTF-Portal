@@ -1,0 +1,2280 @@
+{
+    "Portal_Dynamic": [
+        {
+            "name": "TEAM_1_HQ",
+            "AltTeam": "TeamNeutral",
+            "VehicleSpawnersEnabled": true,
+            "ObjId": 1,
+            "InfantrySpawns": [
+                "TEAM_1_HQ/SpawnPoint_1_1",
+                "TEAM_1_HQ/SpawnPoint_1_2",
+                "TEAM_1_HQ/SpawnPoint_1_3",
+                "TEAM_1_HQ/SpawnPoint_1_4"
+            ],
+            "HQArea": "TEAM_1_HQ/HQ_Team1",
+            "type": "HQ_PlayerSpawner",
+            "right": {
+                "x": 0.838556,
+                "y": 0,
+                "z": 0.544815
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.544815,
+                "y": 0,
+                "z": 0.838556
+            },
+            "position": {
+                "x": -738.728,
+                "y": 139.791,
+                "z": -379.317
+            },
+            "id": "TEAM_1_HQ",
+            "linked": [
+                "HQArea",
+                "InfantrySpawns"
+            ]
+        },
+        {
+            "name": "HQ_Team1",
+            "type": "PolygonVolume",
+            "id": "TEAM_1_HQ/HQ_Team1",
+            "height": 0,
+            "points": [
+                {
+                    "x": -720.5656,
+                    "y": 144.791,
+                    "z": -370.74534
+                },
+                {
+                    "x": -727.8421,
+                    "y": 144.791,
+                    "z": -393.5689
+                },
+                {
+                    "x": -747.53763,
+                    "y": 144.791,
+                    "z": -390.7802
+                },
+                {
+                    "x": -738.73599561,
+                    "y": 144.791,
+                    "z": -366.8672
+                }
+            ]
+        },
+        {
+            "name": "SpawnPoint_1_1",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.04170081134,
+                "y": 0,
+                "z": -0.999130481698
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.999130481698,
+                "y": 0,
+                "z": -0.04170081134
+            },
+            "position": {
+                "x": -731.2483067003,
+                "y": 139.64447,
+                "z": -393.38909982505
+            },
+            "id": "TEAM_1_HQ/SpawnPoint_1_1"
+        },
+        {
+            "name": "SpawnPoint_1_2",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.432352149514,
+                "y": 0,
+                "z": -0.901704479778
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.901704479778,
+                "y": 0,
+                "z": -0.432352149514
+            },
+            "position": {
+                "x": -730.25575730325,
+                "y": 139.489517,
+                "z": -366.1060135034
+            },
+            "id": "TEAM_1_HQ/SpawnPoint_1_2"
+        },
+        {
+            "name": "SpawnPoint_1_3",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.167595357784,
+                "y": 0,
+                "z": -0.985855591589
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.985855591589,
+                "y": 0,
+                "z": 0.167595357784
+            },
+            "position": {
+                "x": -740.52016187509,
+                "y": 139.791,
+                "z": -384.37947072222
+            },
+            "id": "TEAM_1_HQ/SpawnPoint_1_3"
+        },
+        {
+            "name": "SpawnPoint_1_4",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.110531320258,
+                "y": 0,
+                "z": -0.993871336933
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.993871336933,
+                "y": 0,
+                "z": -0.110531320258
+            },
+            "position": {
+                "x": -739.64305897936,
+                "y": 139.791,
+                "z": -370.33281942947
+            },
+            "id": "TEAM_1_HQ/SpawnPoint_1_4"
+        },
+        {
+            "name": "VehicleSpawner5",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.043026803235,
+                "y": 0,
+                "z": -0.999073364326
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.999073364326,
+                "y": 0,
+                "z": 0.043026803235
+            },
+            "position": {
+                "x": -686.4089599158,
+                "y": 148.01131,
+                "z": -405.0812657085
+            },
+            "id": "TEAM_1_HQ/VehicleSpawner5"
+        },
+        {
+            "name": "VehicleSpawner6",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.753368238632,
+                "y": 0,
+                "z": 0.6575985976
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.6575985976,
+                "y": 0,
+                "z": -0.753368238632
+            },
+            "position": {
+                "x": -745.3852561403,
+                "y": 140.183319,
+                "z": -421.902657423
+            },
+            "id": "TEAM_1_HQ/VehicleSpawner6"
+        },
+        {
+            "name": "VehicleSpawner7",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.921294094647,
+                "y": 0,
+                "z": -0.388865841621
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.388865841621,
+                "y": 0,
+                "z": 0.921294094647
+            },
+            "position": {
+                "x": -728.1369455086,
+                "y": 142.19806,
+                "z": -285.0984476921
+            },
+            "id": "TEAM_1_HQ/VehicleSpawner7"
+        },
+        {
+            "name": "VehicleSpawner8",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.5554399856842,
+                "y": 0,
+                "z": -0.831556286756
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.831556286756,
+                "y": 0,
+                "z": 0.5554399856842
+            },
+            "position": {
+                "x": -698.5767732172,
+                "y": 144.29525,
+                "z": -366.3396966673
+            },
+            "id": "TEAM_1_HQ/VehicleSpawner8"
+        },
+        {
+            "name": "VehicleSpawner9",
+            "VehicleType": "Vector",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.939280814506,
+                "y": 0,
+                "z": -0.343151039126
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.343151039126,
+                "y": 0,
+                "z": 0.939280814506
+            },
+            "position": {
+                "x": -726.3827786783,
+                "y": 142.46594,
+                "z": -308.0459842861
+            },
+            "id": "TEAM_1_HQ/VehicleSpawner9"
+        },
+        {
+            "name": "TEAM_2_HQ",
+            "Team": "Team2",
+            "AltTeam": "TeamNeutral",
+            "VehicleSpawnersEnabled": true,
+            "ObjId": 2,
+            "InfantrySpawns": [
+                "TEAM_2_HQ/SpawnPoint_2_1",
+                "TEAM_2_HQ/SpawnPoint_2_2",
+                "TEAM_2_HQ/SpawnPoint_2_3",
+                "TEAM_2_HQ/SpawnPoint_2_4"
+            ],
+            "HQArea": "TEAM_2_HQ/HQ_Team2",
+            "type": "HQ_PlayerSpawner",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -803.608,
+                "y": 149.912,
+                "z": -763.833
+            },
+            "id": "TEAM_2_HQ",
+            "linked": [
+                "HQArea",
+                "InfantrySpawns"
+            ]
+        },
+        {
+            "name": "HQ_Team2",
+            "type": "PolygonVolume",
+            "id": "TEAM_2_HQ/HQ_Team2",
+            "height": 0,
+            "points": [
+                {
+                    "x": -795.19491,
+                    "y": 154.912,
+                    "z": -746.3744
+                },
+                {
+                    "x": -786.9728,
+                    "y": 154.912,
+                    "z": -775.552
+                },
+                {
+                    "x": -801.88901,
+                    "y": 154.912,
+                    "z": -779.1174
+                },
+                {
+                    "x": -811.9302,
+                    "y": 154.912,
+                    "z": -751.5405
+                }
+            ]
+        },
+        {
+            "name": "SpawnPoint_2_1",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.83299,
+                "y": 0,
+                "z": -0.55329
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.55329,
+                "y": 0,
+                "z": 0.83299
+            },
+            "position": {
+                "x": -798.87756,
+                "y": 149.912,
+                "z": -775.5078
+            },
+            "id": "TEAM_2_HQ/SpawnPoint_2_1"
+        },
+        {
+            "name": "SpawnPoint_2_2",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.389462,
+                "y": 0,
+                "z": -0.921043
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.921043,
+                "y": 0,
+                "z": 0.389462
+            },
+            "position": {
+                "x": -794.21342,
+                "y": 150.455121,
+                "z": -767.5068
+            },
+            "id": "TEAM_2_HQ/SpawnPoint_2_2"
+        },
+        {
+            "name": "SpawnPoint_2_3",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.162758,
+                "y": 0,
+                "z": -0.986666
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.986666,
+                "y": 0,
+                "z": 0.162758
+            },
+            "position": {
+                "x": -805.59808,
+                "y": 149.581785,
+                "z": -737.9092
+            },
+            "id": "TEAM_2_HQ/SpawnPoint_2_3"
+        },
+        {
+            "name": "SpawnPoint_2_4",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.902548,
+                "y": 0,
+                "z": -0.430589
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.430589,
+                "y": 0,
+                "z": 0.902548
+            },
+            "position": {
+                "x": -800.03906,
+                "y": 151.18123,
+                "z": -753.3522
+            },
+            "id": "TEAM_2_HQ/SpawnPoint_2_4"
+        },
+        {
+            "name": "VehicleSpawner",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.0947685,
+                "y": 0,
+                "z": -0.995499
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.995499,
+                "y": 0,
+                "z": -0.0947685
+            },
+            "position": {
+                "x": -784.9536,
+                "y": 151.82005,
+                "z": -787.6499
+            },
+            "id": "TEAM_2_HQ/VehicleSpawner"
+        },
+        {
+            "name": "VehicleSpawner2",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.228079,
+                "y": 0,
+                "z": -0.973643
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.973643,
+                "y": 0,
+                "z": -0.228079
+            },
+            "position": {
+                "x": -772.079,
+                "y": 154.81535,
+                "z": -774.5871
+            },
+            "id": "TEAM_2_HQ/VehicleSpawner2"
+        },
+        {
+            "name": "VehicleSpawner5",
+            "VehicleType": "Flyer60",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.973643,
+                "y": 0,
+                "z": -0.228079
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.228079,
+                "y": 0,
+                "z": 0.973643
+            },
+            "position": {
+                "x": -748.7116,
+                "y": 158.81535,
+                "z": -780.061
+            },
+            "id": "TEAM_2_HQ/VehicleSpawner5"
+        },
+        {
+            "name": "VehicleSpawner3",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.228079,
+                "y": 0,
+                "z": -0.973643
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.973643,
+                "y": 0,
+                "z": -0.228079
+            },
+            "position": {
+                "x": -766.5051,
+                "y": 156.37538,
+                "z": -752.6158
+            },
+            "id": "TEAM_2_HQ/VehicleSpawner3"
+        },
+        {
+            "name": "VehicleSpawner4",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.457517,
+                "y": 0,
+                "z": -0.889201
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.889201,
+                "y": 0,
+                "z": 0.457517
+            },
+            "position": {
+                "x": -769.8433,
+                "y": 157.02034,
+                "z": -732.026
+            },
+            "id": "TEAM_2_HQ/VehicleSpawner4"
+        },
+        {
+            "name": "TEAM_3_HQ",
+            "Team": "Team3",
+            "AltTeam": "TeamNeutral",
+            "VehicleSpawnersEnabled": true,
+            "ObjId": 1,
+            "InfantrySpawns": [
+                "TEAM_3_HQ/SpawnPoint_1_1",
+                "TEAM_3_HQ/SpawnPoint_1_2",
+                "TEAM_3_HQ/SpawnPoint_1_3",
+                "TEAM_3_HQ/SpawnPoint_1_4"
+            ],
+            "HQArea": "TEAM_3_HQ/HQ_Team3",
+            "type": "HQ_PlayerSpawner",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -276.386,
+                "y": 185.095,
+                "z": -892.545
+            },
+            "id": "TEAM_3_HQ",
+            "linked": [
+                "HQArea",
+                "InfantrySpawns"
+            ]
+        },
+        {
+            "name": "HQ_Team3",
+            "type": "PolygonVolume",
+            "id": "TEAM_3_HQ/HQ_Team3",
+            "height": 0,
+            "points": [
+                {
+                    "x": -271.386,
+                    "y": 190.095,
+                    "z": -887.545
+                },
+                {
+                    "x": -271.386,
+                    "y": 190.095,
+                    "z": -897.545
+                },
+                {
+                    "x": -281.386,
+                    "y": 190.095,
+                    "z": -897.545
+                },
+                {
+                    "x": -281.386,
+                    "y": 190.095,
+                    "z": -887.545
+                }
+            ]
+        },
+        {
+            "name": "SpawnPoint_1_1",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.999884,
+                "y": 0,
+                "z": 0.0152535
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.0152535,
+                "y": 0,
+                "z": 0.999884
+            },
+            "position": {
+                "x": -276.386,
+                "y": 185.095,
+                "z": -895.545
+            },
+            "id": "TEAM_3_HQ/SpawnPoint_1_1"
+        },
+        {
+            "name": "SpawnPoint_1_2",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.9995,
+                "y": 0,
+                "z": 0.0316198
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.0316198,
+                "y": 0,
+                "z": -0.9995
+            },
+            "position": {
+                "x": -273.386,
+                "y": 185.095,
+                "z": -892.545
+            },
+            "id": "TEAM_3_HQ/SpawnPoint_1_2"
+        },
+        {
+            "name": "SpawnPoint_1_3",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.0428871,
+                "y": 0,
+                "z": -0.99908
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.99908,
+                "y": 0,
+                "z": -0.0428871
+            },
+            "position": {
+                "x": -279.386,
+                "y": 185.095,
+                "z": -892.545
+            },
+            "id": "TEAM_3_HQ/SpawnPoint_1_3"
+        },
+        {
+            "name": "SpawnPoint_1_4",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.0841819,
+                "y": 0,
+                "z": 0.99645
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.99645,
+                "y": 0,
+                "z": 0.0841819
+            },
+            "position": {
+                "x": -276.386,
+                "y": 185.095,
+                "z": -889.545
+            },
+            "id": "TEAM_3_HQ/SpawnPoint_1_4"
+        },
+        {
+            "name": "VehicleSpawner",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.639278,
+                "y": 0,
+                "z": -0.768976
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.768976,
+                "y": 0,
+                "z": -0.639278
+            },
+            "position": {
+                "x": -268.44111,
+                "y": 186.49724,
+                "z": -880.5818
+            },
+            "id": "TEAM_3_HQ/VehicleSpawner"
+        },
+        {
+            "name": "VehicleSpawner2",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.27317,
+                "y": 0,
+                "z": -0.961966
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.961966,
+                "y": 0,
+                "z": 0.27317
+            },
+            "position": {
+                "x": -259.9863,
+                "y": 186.047545,
+                "z": -859.4873
+            },
+            "id": "TEAM_3_HQ/VehicleSpawner2"
+        },
+        {
+            "name": "VehicleSpawner3",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.515456,
+                "y": 0,
+                "z": 0.856916
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.856916,
+                "y": 0,
+                "z": 0.515456
+            },
+            "position": {
+                "x": -327.8347,
+                "y": 185.1424854,
+                "z": -907.5051
+            },
+            "id": "TEAM_3_HQ/VehicleSpawner3"
+        },
+        {
+            "name": "VehicleSpawner4",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.363137,
+                "y": 0,
+                "z": 0.931736
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.931736,
+                "y": 0,
+                "z": 0.363137
+            },
+            "position": {
+                "x": -364.2951,
+                "y": 184.639479,
+                "z": -869.4114
+            },
+            "id": "TEAM_3_HQ/VehicleSpawner4"
+        },
+        {
+            "name": "VehicleSpawner5",
+            "VehicleType": "Flyer60",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.806001,
+                "y": 0,
+                "z": -0.591914
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.591914,
+                "y": 0,
+                "z": 0.806001
+            },
+            "position": {
+                "x": -285.46554,
+                "y": 183.63948,
+                "z": -837.8852
+            },
+            "id": "TEAM_3_HQ/VehicleSpawner5"
+        },
+        {
+            "name": "TEAM_4_HQ",
+            "Team": "Team4",
+            "AltTeam": "TeamNeutral",
+            "VehicleSpawnersEnabled": true,
+            "ObjId": 2,
+            "InfantrySpawns": [
+                "TEAM_4_HQ/SpawnPoint_2_1",
+                "TEAM_4_HQ/SpawnPoint_2_2",
+                "TEAM_4_HQ/SpawnPoint_2_3",
+                "TEAM_4_HQ/SpawnPoint_2_4"
+            ],
+            "HQArea": "TEAM_4_HQ/HQ_Team4",
+            "type": "HQ_PlayerSpawner",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -122.265,
+                "y": 179.611,
+                "z": -400.039
+            },
+            "id": "TEAM_4_HQ",
+            "linked": [
+                "HQArea",
+                "InfantrySpawns"
+            ]
+        },
+        {
+            "name": "HQ_Team4",
+            "type": "PolygonVolume",
+            "id": "TEAM_4_HQ/HQ_Team4",
+            "height": 0,
+            "points": [
+                {
+                    "x": -117.265,
+                    "y": 184.611,
+                    "z": -395.039
+                },
+                {
+                    "x": -117.265,
+                    "y": 184.611,
+                    "z": -405.039
+                },
+                {
+                    "x": -127.265,
+                    "y": 184.611,
+                    "z": -405.039
+                },
+                {
+                    "x": -127.265,
+                    "y": 184.611,
+                    "z": -395.039
+                }
+            ]
+        },
+        {
+            "name": "SpawnPoint_2_1",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.0160743,
+                "y": 0,
+                "z": 0.999872
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999872,
+                "y": 0,
+                "z": -0.0160743
+            },
+            "position": {
+                "x": -122.265,
+                "y": 180.474083,
+                "z": -403.039
+            },
+            "id": "TEAM_4_HQ/SpawnPoint_2_1"
+        },
+        {
+            "name": "SpawnPoint_2_2",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.0383183,
+                "y": 0,
+                "z": 0.999266
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999266,
+                "y": 0,
+                "z": -0.0383183
+            },
+            "position": {
+                "x": -124.88712,
+                "y": 180.463585,
+                "z": -410.7836
+            },
+            "id": "TEAM_4_HQ/SpawnPoint_2_2"
+        },
+        {
+            "name": "SpawnPoint_2_3",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.526348,
+                "y": 0,
+                "z": 0.850269
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.850269,
+                "y": 0,
+                "z": -0.526348
+            },
+            "position": {
+                "x": -131.09232,
+                "y": 179.010582,
+                "z": -386.6199
+            },
+            "id": "TEAM_4_HQ/SpawnPoint_2_3"
+        },
+        {
+            "name": "SpawnPoint_2_4",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.165771,
+                "y": 0,
+                "z": 0.986164
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.986164,
+                "y": 0,
+                "z": -0.165771
+            },
+            "position": {
+                "x": -124.2356,
+                "y": 180.74375,
+                "z": -385.316
+            },
+            "id": "TEAM_4_HQ/SpawnPoint_2_4"
+        },
+        {
+            "name": "VehicleSpawner",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.35739,
+                "y": 0,
+                "z": 0.933955
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.933955,
+                "y": 0,
+                "z": 0.35739
+            },
+            "position": {
+                "x": -169.7586,
+                "y": 188.52515,
+                "z": -440.9371
+            },
+            "id": "TEAM_4_HQ/VehicleSpawner"
+        },
+        {
+            "name": "VehicleSpawner2",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.242989,
+                "y": 0,
+                "z": 0.970029
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.970029,
+                "y": 0,
+                "z": -0.242989
+            },
+            "position": {
+                "x": -187.701,
+                "y": 188.02114,
+                "z": -420.6763
+            },
+            "id": "TEAM_4_HQ/VehicleSpawner2"
+        },
+        {
+            "name": "VehicleSpawner5",
+            "VehicleType": "Vector",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.242989,
+                "y": 0,
+                "z": 0.970029
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.970029,
+                "y": 0,
+                "z": -0.242989
+            },
+            "position": {
+                "x": -192.0767,
+                "y": 184.02114,
+                "z": -399.092674
+            },
+            "id": "TEAM_4_HQ/VehicleSpawner5"
+        },
+        {
+            "name": "VehicleSpawner3",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.242989,
+                "y": 0,
+                "z": 0.970029
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.970029,
+                "y": 0,
+                "z": -0.242989
+            },
+            "position": {
+                "x": -127.58727,
+                "y": 181.46465,
+                "z": -414.2232
+            },
+            "id": "TEAM_4_HQ/VehicleSpawner3"
+        },
+        {
+            "name": "VehicleSpawner4",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.242989,
+                "y": 0,
+                "z": 0.970029
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.970029,
+                "y": 0,
+                "z": -0.242989
+            },
+            "position": {
+                "x": -177.5076,
+                "y": 183.72529,
+                "z": -392.68857
+            },
+            "id": "TEAM_4_HQ/VehicleSpawner4"
+        },
+        {
+            "name": "CombatArea",
+            "CombatVolume": "CombatArea/CombatVolume",
+            "type": "CombatArea",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "id": "CombatArea",
+            "linked": [
+                "CombatVolume"
+            ]
+        },
+        {
+            "name": "CombatVolume",
+            "type": "PolygonVolume",
+            "id": "CombatArea/CombatVolume",
+            "height": 10,
+            "points": [
+                {
+                    "x": -573.976,
+                    "y": 182.889,
+                    "z": -918.816
+                },
+                {
+                    "x": -669.197,
+                    "y": 182.889,
+                    "z": -900.386
+                },
+                {
+                    "x": -784.896,
+                    "y": 182.889,
+                    "z": -853.288
+                },
+                {
+                    "x": -819.648,
+                    "y": 182.889,
+                    "z": -738.856
+                },
+                {
+                    "x": -831.387,
+                    "y": 182.889,
+                    "z": -628.659
+                },
+                {
+                    "x": -800.322,
+                    "y": 182.889,
+                    "z": -530.623
+                },
+                {
+                    "x": -835.622,
+                    "y": 182.889,
+                    "z": -452.257
+                },
+                {
+                    "x": -840.419,
+                    "y": 182.889,
+                    "z": -354.716
+                },
+                {
+                    "x": -816.434,
+                    "y": 182.889,
+                    "z": -287.557
+                },
+                {
+                    "x": -730.086,
+                    "y": 182.889,
+                    "z": -255.577
+                },
+                {
+                    "x": -610.159,
+                    "y": 182.889,
+                    "z": -218.799
+                },
+                {
+                    "x": -496.628,
+                    "y": 182.889,
+                    "z": -261.973
+                },
+                {
+                    "x": -418.275,
+                    "y": 182.889,
+                    "z": -206.007
+                },
+                {
+                    "x": -323.123,
+                    "y": 182.889,
+                    "z": -190.832
+                },
+                {
+                    "x": -259.642,
+                    "y": 182.889,
+                    "z": -196.976
+                },
+                {
+                    "x": -173.635,
+                    "y": 182.889,
+                    "z": -206.191
+                },
+                {
+                    "x": -136.775,
+                    "y": 182.889,
+                    "z": -230.764
+                },
+                {
+                    "x": -97.8676,
+                    "y": 182.889,
+                    "z": -232.812
+                },
+                {
+                    "x": -73.2944,
+                    "y": 182.889,
+                    "z": -241.003
+                },
+                {
+                    "x": -56.9122,
+                    "y": 182.889,
+                    "z": -261.48
+                },
+                {
+                    "x": -40.53,
+                    "y": 182.889,
+                    "z": -291.173
+                },
+                {
+                    "x": -30.2911,
+                    "y": 182.889,
+                    "z": -314.723
+                },
+                {
+                    "x": -24.1478,
+                    "y": 182.889,
+                    "z": -331.105
+                },
+                {
+                    "x": -20.0523,
+                    "y": 182.889,
+                    "z": -349.535
+                },
+                {
+                    "x": -24.1478,
+                    "y": 182.889,
+                    "z": -366.941
+                },
+                {
+                    "x": -32.3389,
+                    "y": 182.889,
+                    "z": -394.586
+                },
+                {
+                    "x": -16.9805,
+                    "y": 182.889,
+                    "z": -405.849
+                },
+                {
+                    "x": -22.0999,
+                    "y": 182.889,
+                    "z": -437.589
+                },
+                {
+                    "x": -28.2434,
+                    "y": 182.889,
+                    "z": -487.76
+                },
+                {
+                    "x": -43.6018,
+                    "y": 182.889,
+                    "z": -516.429
+                },
+                {
+                    "x": -41.5539,
+                    "y": 182.889,
+                    "z": -591.172
+                },
+                {
+                    "x": -31.315,
+                    "y": 182.889,
+                    "z": -666.94
+                },
+                {
+                    "x": -20.0523,
+                    "y": 182.889,
+                    "z": -720.182
+                },
+                {
+                    "x": -28.2434,
+                    "y": 182.889,
+                    "z": -805.165
+                },
+                {
+                    "x": -50.769,
+                    "y": 182.889,
+                    "z": -873.765
+                },
+                {
+                    "x": -225.947,
+                    "y": 182.889,
+                    "z": -1007.52
+                },
+                {
+                    "x": -316.3,
+                    "y": 182.889,
+                    "z": -1018.02
+                },
+                {
+                    "x": -438.714,
+                    "y": 182.889,
+                    "z": -1005.34
+                },
+                {
+                    "x": -494.732,
+                    "y": 182.889,
+                    "z": -973.633
+                }
+            ]
+        },
+        {
+            "name": "DeployCam",
+            "type": "DeployCam",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 0.101056,
+                "z": -0.994881
+            },
+            "front": {
+                "x": 0,
+                "y": 0.994881,
+                "z": 0.101056
+            },
+            "position": {
+                "x": -490.88,
+                "y": 508.426,
+                "z": -598.183
+            },
+            "id": "Camera3D/DeployCam"
+        },
+        {
+            "name": "TEAM_capture_location",
+            "ObjId": 113,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 0.94764,
+                "y": 0,
+                "z": 0.31934
+            },
+            "up": {
+                "x": 0.31934,
+                "y": -4.37114e-08,
+                "z": -0.94764
+            },
+            "front": {
+                "x": 1.3958798476e-08,
+                "y": 1,
+                "z": -4.1422671096e-08
+            },
+            "position": {
+                "x": -674.914,
+                "y": 144.187,
+                "z": -367.049
+            },
+            "id": "Team1_capturezone/TEAM_capture_location"
+        },
+        {
+            "name": "TEAM_capture_zone_area",
+            "type": "AreaTrigger",
+            "ObjId": 112,
+            "Area": "Team1_capturezone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "right": {
+                "x": 0.94764,
+                "y": 0,
+                "z": 0.31934
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.31934,
+                "y": 0,
+                "z": 0.94764
+            },
+            "position": {
+                "x": -674.914,
+                "y": 144.187,
+                "z": -367.049
+            },
+            "id": "Team1_capturezone/TEAM_capture_zone_area",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_capture_zone_collision",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "Team1_capturezone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "height": 0,
+            "points": [
+                {
+                    "x": -677.314,
+                    "y": 144.187,
+                    "z": -369.449
+                },
+                {
+                    "x": -677.314,
+                    "y": 144.187,
+                    "z": -364.649
+                },
+                {
+                    "x": -672.514,
+                    "y": 144.187,
+                    "z": -364.649
+                },
+                {
+                    "x": -672.514,
+                    "y": 144.187,
+                    "z": -369.449
+                }
+            ]
+        },
+        {
+            "name": "TEAM_flag_spawn_location",
+            "ObjId": 104,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 0.948329,
+                "y": 0,
+                "z": 0.317288
+            },
+            "up": {
+                "x": 0.317288,
+                "y": -4.37114e-08,
+                "z": -0.948329
+            },
+            "front": {
+                "x": 1.38691026832e-08,
+                "y": 1,
+                "z": -4.14527882506e-08
+            },
+            "position": {
+                "x": -674.7750878365156,
+                "y": 144.339,
+                "z": -367.0985652266996
+            },
+            "id": "Team1_flagspawner/TEAM_flag_spawn_location"
+        },
+        {
+            "name": "TEAM_flag_pickup",
+            "type": "AreaTrigger",
+            "ObjId": 105,
+            "Area": "Team1_flagspawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "right": {
+                "x": 0.948329,
+                "y": 0,
+                "z": 0.317288
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.317288,
+                "y": 0,
+                "z": 0.948329
+            },
+            "position": {
+                "x": -674.82,
+                "y": 144.339,
+                "z": -366.983
+            },
+            "id": "Team1_flagspawner/TEAM_flag_pickup",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_flag_pickup_zone",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "Team1_flagspawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "height": 0,
+            "points": [
+                {
+                    "x": -677.22,
+                    "y": 144.339,
+                    "z": -369.383
+                },
+                {
+                    "x": -677.22,
+                    "y": 144.339,
+                    "z": -364.583
+                },
+                {
+                    "x": -672.42,
+                    "y": 144.339,
+                    "z": -364.583
+                },
+                {
+                    "x": -672.42,
+                    "y": 144.339,
+                    "z": -369.383
+                }
+            ]
+        },
+        {
+            "name": "TEAM_capture_location",
+            "ObjId": 123,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": -4.37114e-08,
+                "z": -1
+            },
+            "front": {
+                "x": 0,
+                "y": 1,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": -792.675,
+                "y": 155.459,
+                "z": -728.35
+            },
+            "id": "Team2_flagspawner/TEAM_capture_location"
+        },
+        {
+            "name": "TEAM_capture_zone_area",
+            "type": "AreaTrigger",
+            "ObjId": 122,
+            "Area": "Team2_flagspawner/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -792.675,
+                "y": 155.459,
+                "z": -728.35
+            },
+            "id": "Team2_flagspawner/TEAM_capture_zone_area",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_capture_zone_collision",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "Team2_flagspawner/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "height": 0,
+            "points": [
+                {
+                    "x": -795.075,
+                    "y": 155.459,
+                    "z": -730.75
+                },
+                {
+                    "x": -795.075,
+                    "y": 155.459,
+                    "z": -725.95
+                },
+                {
+                    "x": -790.275,
+                    "y": 155.459,
+                    "z": -725.95
+                },
+                {
+                    "x": -790.275,
+                    "y": 155.459,
+                    "z": -730.75
+                }
+            ]
+        },
+        {
+            "name": "TEAM_flag_spawn_location",
+            "ObjId": 124,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": -4.37114e-08,
+                "z": -1
+            },
+            "front": {
+                "x": 0,
+                "y": 1,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": -792.64707595,
+                "y": 155.57,
+                "z": -728.381844
+            },
+            "id": "Team2_capturezone/TEAM_flag_spawn_location"
+        },
+        {
+            "name": "TEAM_flag_pickup",
+            "type": "AreaTrigger",
+            "ObjId": 125,
+            "Area": "Team2_capturezone/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -792.653,
+                "y": 155.57,
+                "z": -728.258
+            },
+            "id": "Team2_capturezone/TEAM_flag_pickup",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_flag_pickup_zone",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "Team2_capturezone/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "height": 0,
+            "points": [
+                {
+                    "x": -795.053,
+                    "y": 155.57,
+                    "z": -730.658
+                },
+                {
+                    "x": -795.053,
+                    "y": 155.57,
+                    "z": -725.858
+                },
+                {
+                    "x": -790.253,
+                    "y": 155.57,
+                    "z": -725.858
+                },
+                {
+                    "x": -790.253,
+                    "y": 155.57,
+                    "z": -730.658
+                }
+            ]
+        },
+        {
+            "name": "TEAM_capture_location",
+            "ObjId": 133,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 0.813019,
+                "y": 0,
+                "z": 0.582236
+            },
+            "up": {
+                "x": 0.582236,
+                "y": -4.37114e-08,
+                "z": -0.813019
+            },
+            "front": {
+                "x": 2.54503506904e-08,
+                "y": 1,
+                "z": -3.55381987166e-08
+            },
+            "position": {
+                "x": -342.025,
+                "y": 183.079,
+                "z": -855.464
+            },
+            "id": "team3_capturezone/TEAM_capture_location"
+        },
+        {
+            "name": "TEAM_capture_zone_area",
+            "type": "AreaTrigger",
+            "ObjId": 132,
+            "Area": "team3_capturezone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "right": {
+                "x": 0.813019,
+                "y": 0,
+                "z": 0.582236
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.582236,
+                "y": 0,
+                "z": 0.813019
+            },
+            "position": {
+                "x": -342.025,
+                "y": 183.079,
+                "z": -855.464
+            },
+            "id": "team3_capturezone/TEAM_capture_zone_area",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_capture_zone_collision",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "team3_capturezone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "height": 0,
+            "points": [
+                {
+                    "x": -344.425,
+                    "y": 183.079,
+                    "z": -857.864
+                },
+                {
+                    "x": -344.425,
+                    "y": 183.079,
+                    "z": -853.064
+                },
+                {
+                    "x": -339.625,
+                    "y": 183.079,
+                    "z": -853.064
+                },
+                {
+                    "x": -339.625,
+                    "y": 183.079,
+                    "z": -857.864
+                }
+            ]
+        },
+        {
+            "name": "TEAM_flag_spawn_location",
+            "ObjId": 134,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 0.82267,
+                "y": 0,
+                "z": 0.568519
+            },
+            "up": {
+                "x": 0.568519,
+                "y": -4.37114e-08,
+                "z": -0.82267
+            },
+            "front": {
+                "x": 2.48507614166e-08,
+                "y": 1,
+                "z": -3.5960057438e-08
+            },
+            "position": {
+                "x": -342.0317187947505,
+                "y": 183.093,
+                "z": -855.476514808498
+            },
+            "id": "team3_flagspawner/TEAM_flag_spawn_location"
+        },
+        {
+            "name": "TEAM_flag_pickup",
+            "type": "AreaTrigger",
+            "ObjId": 135,
+            "Area": "team3_flagspawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "right": {
+                "x": 0.82267,
+                "y": 0,
+                "z": 0.568519
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.568519,
+                "y": 0,
+                "z": 0.82267
+            },
+            "position": {
+                "x": -342.107,
+                "y": 183.093,
+                "z": -855.378
+            },
+            "id": "team3_flagspawner/TEAM_flag_pickup",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_flag_pickup_zone",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "team3_flagspawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "height": 0,
+            "points": [
+                {
+                    "x": -344.507,
+                    "y": 183.093,
+                    "z": -857.778
+                },
+                {
+                    "x": -344.507,
+                    "y": 183.093,
+                    "z": -852.978
+                },
+                {
+                    "x": -339.707,
+                    "y": 183.093,
+                    "z": -852.978
+                },
+                {
+                    "x": -339.707,
+                    "y": 183.093,
+                    "z": -857.778
+                }
+            ]
+        },
+        {
+            "name": "TEAM_flag_spawn_location",
+            "ObjId": 144,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 0.894844,
+                "y": 0.0514812,
+                "z": -0.4434
+            },
+            "up": {
+                "x": -0.4463229996916283,
+                "y": 0.0874912565144131,
+                "z": -0.8905850044265661
+            },
+            "front": {
+                "x": -0.007054739509403182,
+                "y": 0.9948340038243673,
+                "z": 0.10126796107128283
+            },
+            "position": {
+                "x": -136.7429733250138,
+                "y": 191.85714024976005,
+                "z": -448.86692033251
+            },
+            "id": "team4_flagspawner/TEAM_flag_spawn_location"
+        },
+        {
+            "name": "TEAM_flag_pickup",
+            "type": "AreaTrigger",
+            "ObjId": 145,
+            "Area": "team4_flagspawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "right": {
+                "x": 0.894844,
+                "y": 0.0514812,
+                "z": -0.4434
+            },
+            "up": {
+                "x": -0.00705472,
+                "y": 0.994834,
+                "z": 0.101268
+            },
+            "front": {
+                "x": 0.446323,
+                "y": -0.0874913,
+                "z": 0.890585
+            },
+            "position": {
+                "x": -136.693,
+                "y": 191.846,
+                "z": -448.754
+            },
+            "id": "team4_flagspawner/TEAM_flag_pickup",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_flag_pickup_zone",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "team4_flagspawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "height": 0,
+            "points": [
+                {
+                    "x": -139.093,
+                    "y": 191.846,
+                    "z": -451.154
+                },
+                {
+                    "x": -139.093,
+                    "y": 191.846,
+                    "z": -446.354
+                },
+                {
+                    "x": -134.293,
+                    "y": 191.846,
+                    "z": -446.354
+                },
+                {
+                    "x": -134.293,
+                    "y": 191.846,
+                    "z": -451.154
+                }
+            ]
+        },
+        {
+            "name": "TEAM_capture_location",
+            "ObjId": 143,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 0.867218,
+                "y": 0,
+                "z": -0.497928
+            },
+            "up": {
+                "x": -0.497928,
+                "y": -4.37114e-08,
+                "z": -0.867218
+            },
+            "front": {
+                "x": -2.17651299792e-08,
+                "y": 1,
+                "z": -3.79073128852e-08
+            },
+            "position": {
+                "x": -136.828,
+                "y": 191.816,
+                "z": -448.856
+            },
+            "id": "team4_capturezone/TEAM_capture_location"
+        },
+        {
+            "name": "TEAM_capture_zone_area",
+            "type": "AreaTrigger",
+            "ObjId": 142,
+            "Area": "team4_capturezone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "right": {
+                "x": 0.867218,
+                "y": 0,
+                "z": -0.497928
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.497928,
+                "y": 0,
+                "z": 0.867218
+            },
+            "position": {
+                "x": -136.828,
+                "y": 191.816,
+                "z": -448.856
+            },
+            "id": "team4_capturezone/TEAM_capture_zone_area",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_capture_zone_collision",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "team4_capturezone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "height": 0,
+            "points": [
+                {
+                    "x": -139.228,
+                    "y": 191.816,
+                    "z": -451.256
+                },
+                {
+                    "x": -139.228,
+                    "y": 191.816,
+                    "z": -446.456
+                },
+                {
+                    "x": -134.428,
+                    "y": 191.816,
+                    "z": -446.456
+                },
+                {
+                    "x": -134.428,
+                    "y": 191.816,
+                    "z": -451.256
+                }
+            ]
+        },
+        {
+            "name": "DummySpatialProp",
+            "ObjId": 40001,
+            "type": "AmmoChest_Small_01",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -211.366,
+                "y": 119.029,
+                "z": -388.989
+            },
+            "id": "GameModeConfig/DummySpatialProp"
+        }
+    ],
+    "Static": [
+        {
+            "name": "MP_Granite_ClubHouse_Portal_Terrain",
+            "metadata/_edit_lock_": true,
+            "type": "MP_Granite_ClubHouse_Portal_Terrain",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "id": "Static/MP_Granite_ClubHouse_Portal_Terrain"
+        },
+        {
+            "name": "MP_Granite_ClubHouse_Portal_Assets",
+            "metadata/_edit_lock_": true,
+            "type": "MP_Granite_ClubHouse_Portal_Assets",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "id": "Static/MP_Granite_ClubHouse_Portal_Assets"
+        }
+    ]
+}

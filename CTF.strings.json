@@ -1,5 +1,7 @@
 {
     "error_failed_to_load_game_config": "Failed to load game config",
+    "found_gamemode_id": "Found gamemode ID: {}",
+    "loading_gamemode_id": "Loading gamemode ID: {}",
     "red_flag_label": "RED BASE",
     "blue_flag_label": "BLUE BASE",
     "capture_zone_label": "{} Base",
@@ -30,6 +32,7 @@
     "flag_can_pickup": "Flag can now be picked up",
     "flag_returned": "Flag returned to base for team {}",
     "flag_auto_return": "Flag auto-returning to base",
+    "flag_friendly_at_home": "Your flag is safe at the base",
     "carrier_weapons_restricted": "Carrier weapons restricted",
     "carrier_weapons_restored": "Carrier weapons restored",
     "ctf_version_started": "Capture the Flag v{}.{}.{}",

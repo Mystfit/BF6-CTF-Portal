@@ -560,10 +560,10 @@ transform = Transform3D(0.836391, 0, 0.548133, 0, 1, 0, -0.548133, 0, 0.836391, 
 transform = Transform3D(-0.0198605, 0, -0.999803, 0, 1, 0, 0.999803, 0, -0.0198605, 178.502, 117.477, -68.0178)
 
 [node name="CliffLarge_04" parent="Team_2_basegeo" instance=ExtResource("42_jk8vn")]
-transform = Transform3D(1.10151, -0.293727, 0, 0.293727, 1.10151, 0, 0, 0, 1.14, 211.637, 113.494, -81.5565)
+transform = Transform3D(1.10151, -0.293727, 0, 0.293727, 1.10151, 0, 0, 0, 1.14, 211.637, 112.755, -81.5565)
 
 [node name="CliffHuge_08B" parent="Team_2_basegeo" instance=ExtResource("43_iposn")]
-transform = Transform3D(0.629969, 0.232404, 0.158833, -0.281495, 0.520106, 0.355458, 2.05636e-08, -0.38933, 0.569668, 203.099, 116.5, -72.3479)
+transform = Transform3D(0.629969, 0.232404, 0.158833, -0.281495, 0.520106, 0.355458, 2.05636e-08, -0.38933, 0.569668, 203.099, 116.461, -72.3479)
 
 [node name="CliffHuge_08B_B" parent="Team_2_basegeo" instance=ExtResource("44_hg4rr")]
 transform = Transform3D(0.915199, 0.230841, -0.330338, 3.39663e-09, 0.819692, 0.572804, 0.403002, -0.52423, 0.750181, 180.998, 116.196, -18.421)

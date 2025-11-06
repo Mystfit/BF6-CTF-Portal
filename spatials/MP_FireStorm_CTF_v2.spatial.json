@@ -1,0 +1,4295 @@
+{
+    "Portal_Dynamic": [
+        {
+            "name": "DummySpatialProp",
+            "ObjId": 40000,
+            "type": "AmmoChest_Small_01",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -6.195,
+                "y": 112.306,
+                "z": 0.048
+            },
+            "id": "GameModeConfig/DummySpatialProp"
+        },
+        {
+            "name": "TEAM_1_HQ",
+            "AltTeam": "Team1",
+            "VehicleSpawnersEnabled": true,
+            "ObjId": 1,
+            "InfantrySpawns": [
+                "TEAM_1_HQ/SpawnPoint_1_1",
+                "TEAM_1_HQ/SpawnPoint_1_2",
+                "TEAM_1_HQ/SpawnPoint_1_3",
+                "TEAM_1_HQ/SpawnPoint_1_4"
+            ],
+            "ForwardSpawns": [
+                "TEAM_1_HQ/ForwardSpawnPoint_1_1",
+                "TEAM_1_HQ/ForwardSpawnPoint_1_2",
+                "TEAM_1_HQ/ForwardSpawnPoint_1_3",
+                "TEAM_1_HQ/ForwardSpawnPoint_1_4"
+            ],
+            "HQArea": "TEAM_1_HQ/HQ_Team1",
+            "type": "HQ_PlayerSpawner",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -328.13,
+                "y": 133.899,
+                "z": -102.548
+            },
+            "id": "TEAM_1_HQ",
+            "linked": [
+                "HQArea",
+                "InfantrySpawns",
+                "ForwardSpawns"
+            ]
+        },
+        {
+            "name": "TEAM_1_Sector",
+            "SectorArea": "TEAM_1_HQ/HQ_Team1",
+            "type": "Sector",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -328.368037,
+                "y": 147.1156,
+                "z": -93.46685
+            },
+            "id": "TEAM_1_HQ/TEAM_1_Sector",
+            "linked": [
+                "SectorArea"
+            ]
+        },
+        {
+            "name": "HQ_Team1",
+            "type": "PolygonVolume",
+            "id": "TEAM_1_HQ/HQ_Team1",
+            "height": 20,
+            "points": [
+                {
+                    "x": -307.0195,
+                    "y": 134.487287,
+                    "z": -57.5433
+                },
+                {
+                    "x": -306.9389,
+                    "y": 134.487287,
+                    "z": -125.4314
+                },
+                {
+                    "x": -374.7475,
+                    "y": 134.487287,
+                    "z": -124.8672
+                },
+                {
+                    "x": -374.2749,
+                    "y": 134.487287,
+                    "z": -57.7961
+                }
+            ]
+        },
+        {
+            "name": "SpawnPoint_1_1",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.324149,
+                "y": 0,
+                "z": -0.946007
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.946007,
+                "y": 0,
+                "z": 0.324149
+            },
+            "position": {
+                "x": -319.64576,
+                "y": 134.66429,
+                "z": -118.1822
+            },
+            "id": "TEAM_1_HQ/SpawnPoint_1_1"
+        },
+        {
+            "name": "SpawnPoint_1_2",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.296058,
+                "y": 0,
+                "z": -0.95517
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.95517,
+                "y": 0,
+                "z": -0.296058
+            },
+            "position": {
+                "x": -324.64247,
+                "y": 133.9637125,
+                "z": -84.4985
+            },
+            "id": "TEAM_1_HQ/SpawnPoint_1_2"
+        },
+        {
+            "name": "SpawnPoint_1_3",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.519609,
+                "y": 0,
+                "z": -0.854404
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.854404,
+                "y": 0,
+                "z": -0.519609
+            },
+            "position": {
+                "x": -318.39324,
+                "y": 133.899,
+                "z": -71.8005
+            },
+            "id": "TEAM_1_HQ/SpawnPoint_1_3"
+        },
+        {
+            "name": "SpawnPoint_1_4",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.179128,
+                "y": 0,
+                "z": -0.983825
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.983825,
+                "y": 0,
+                "z": -0.179128
+            },
+            "position": {
+                "x": -330.4121,
+                "y": 134.175932,
+                "z": -97.0714
+            },
+            "id": "TEAM_1_HQ/SpawnPoint_1_4"
+        },
+        {
+            "name": "ForwardSpawnPoint_1_1",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.0452933,
+                "y": 0,
+                "z": -0.998974
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.998974,
+                "y": 0,
+                "z": -0.0452933
+            },
+            "position": {
+                "x": -167.291,
+                "y": 133.759962,
+                "z": -173.8373
+            },
+            "id": "TEAM_1_HQ/ForwardSpawnPoint_1_1"
+        },
+        {
+            "name": "ForwardSpawnPoint_1_2",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.0150616,
+                "y": 0,
+                "z": -0.999887
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.999887,
+                "y": 0,
+                "z": -0.0150616
+            },
+            "position": {
+                "x": -167.291,
+                "y": 133.744795,
+                "z": -150.9582
+            },
+            "id": "TEAM_1_HQ/ForwardSpawnPoint_1_2"
+        },
+        {
+            "name": "ForwardSpawnPoint_1_3",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.0795553,
+                "y": 0,
+                "z": -0.996831
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.996831,
+                "y": 0,
+                "z": 0.0795553
+            },
+            "position": {
+                "x": -152.802,
+                "y": 133.361021,
+                "z": -130.7425
+            },
+            "id": "TEAM_1_HQ/ForwardSpawnPoint_1_3"
+        },
+        {
+            "name": "ForwardSpawnPoint_1_4",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.514724,
+                "y": 0,
+                "z": -0.857356
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.857356,
+                "y": 0,
+                "z": -0.514724
+            },
+            "position": {
+                "x": -174.147,
+                "y": 133.8453348,
+                "z": -94.45326
+            },
+            "id": "TEAM_1_HQ/ForwardSpawnPoint_1_4"
+        },
+        {
+            "name": "TEAM_1_ATV_Spawn4",
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "P_DefaultRespawnTime": 10,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.998754,
+                "y": 0,
+                "z": -0.0498956
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.0498956,
+                "y": 0,
+                "z": -0.998754
+            },
+            "position": {
+                "x": -331.67337,
+                "y": 134.931,
+                "z": -137.4983
+            },
+            "id": "TEAM_1_HQ/TEAM_1_ATV_Spawn4"
+        },
+        {
+            "name": "TEAM_1_ATV_Spawn3",
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "P_DefaultRespawnTime": 10,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.859085,
+                "y": 0,
+                "z": -0.511833
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.511833,
+                "y": 0,
+                "z": 0.859085
+            },
+            "position": {
+                "x": -323.80834,
+                "y": 134.547211,
+                "z": -94.26663
+            },
+            "id": "TEAM_1_HQ/TEAM_1_ATV_Spawn3"
+        },
+        {
+            "name": "TEAM_1_Jeep_Spawn2",
+            "VehicleType": "Vector",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.0230887,
+                "y": 0,
+                "z": -0.999733
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.999733,
+                "y": 0,
+                "z": -0.0230887
+            },
+            "position": {
+                "x": -322.37891,
+                "y": 134.303175,
+                "z": -104.08422
+            },
+            "id": "TEAM_1_HQ/TEAM_1_Jeep_Spawn2"
+        },
+        {
+            "name": "TEAM_1_Jeep_Spawn3",
+            "VehicleType": "Vector",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.154003,
+                "y": 0,
+                "z": -0.98807
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.98807,
+                "y": 0,
+                "z": 0.154003
+            },
+            "position": {
+                "x": -310.5839,
+                "y": 134.89986,
+                "z": -66.7765
+            },
+            "id": "TEAM_1_HQ/TEAM_1_Jeep_Spawn3"
+        },
+        {
+            "name": "TEAM_1_Heli_Spawn1",
+            "VehicleType": "UH60",
+            "P_AutoSpawnEnabled": true,
+            "P_DefaultRespawnTime": 180,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.309598,
+                "y": 0,
+                "z": -0.950868
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.950868,
+                "y": 0,
+                "z": -0.309598
+            },
+            "position": {
+                "x": -366.927,
+                "y": 133.9220713,
+                "z": -85.5834
+            },
+            "id": "TEAM_1_HQ/TEAM_1_Heli_Spawn1"
+        },
+        {
+            "name": "TEAM_1_AA",
+            "P_AutoSpawnEnabled": true,
+            "P_DefaultRespawnTime": 20,
+            "type": "StationaryEmplacementSpawner",
+            "right": {
+                "x": -0.142871,
+                "y": 0,
+                "z": -0.989741
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.989741,
+                "y": 0,
+                "z": -0.142871
+            },
+            "position": {
+                "x": -261.0792,
+                "y": 144.24,
+                "z": -98.09089
+            },
+            "id": "TEAM_1_HQ/TEAM_1_AA"
+        },
+        {
+            "name": "VEH_Stationary_GDF009",
+            "type": "VEH_Stationary_GDF009",
+            "right": {
+                "x": 0.0538697,
+                "y": 0,
+                "z": -0.998548
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.998548,
+                "y": 0,
+                "z": 0.0538697
+            },
+            "position": {
+                "x": -353.1111,
+                "y": 133.485777,
+                "z": -88.4066
+            },
+            "id": "TEAM_1_HQ/VEH_Stationary_GDF009"
+        },
+        {
+            "name": "TEAM_capture_location",
+            "ObjId": 113,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": -0.0274331,
+                "y": 0,
+                "z": -0.999624
+            },
+            "up": {
+                "x": -0.999624,
+                "y": -4.37114e-08,
+                "z": 0.0274331
+            },
+            "front": {
+                "x": -4.36949645136e-08,
+                "y": 1,
+                "z": 1.19913920734e-09
+            },
+            "position": {
+                "x": -264.26,
+                "y": 139.092,
+                "z": -95.6102
+            },
+            "id": "TEAM1_Flag_Base/TEAM1_Flag_Capture_Zone/TEAM_capture_location"
+        },
+        {
+            "name": "TEAM_capture_zone_area",
+            "type": "AreaTrigger",
+            "ObjId": 112,
+            "Area": "TEAM1_Flag_Base/TEAM1_Flag_Capture_Zone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "right": {
+                "x": -0.0274331,
+                "y": 0,
+                "z": -0.999624
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.999624,
+                "y": 0,
+                "z": -0.0274331
+            },
+            "position": {
+                "x": -264.26,
+                "y": 139.092,
+                "z": -95.6102
+            },
+            "id": "TEAM1_Flag_Base/TEAM1_Flag_Capture_Zone/TEAM_capture_zone_area",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_capture_zone_collision",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "TEAM1_Flag_Base/TEAM1_Flag_Capture_Zone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "height": 0,
+            "points": [
+                {
+                    "x": -266.66,
+                    "y": 139.092,
+                    "z": -98.0102
+                },
+                {
+                    "x": -266.66,
+                    "y": 139.092,
+                    "z": -93.2102
+                },
+                {
+                    "x": -261.86,
+                    "y": 139.092,
+                    "z": -93.2102
+                },
+                {
+                    "x": -261.86,
+                    "y": 139.092,
+                    "z": -98.0102
+                }
+            ]
+        },
+        {
+            "name": "TEAM_flag_spawn_location",
+            "ObjId": 114,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": -0.0274331,
+                "y": 0,
+                "z": -0.999624
+            },
+            "up": {
+                "x": -0.999624,
+                "y": -4.37114e-08,
+                "z": 0.0274331
+            },
+            "front": {
+                "x": -4.36949645136e-08,
+                "y": 1,
+                "z": 1.19913920734e-09
+            },
+            "position": {
+                "x": -264.2487987374888,
+                "y": 139.0550127,
+                "z": -95.6014134250904
+            },
+            "id": "TEAM1_Flag_Base/TEAM1_Flag_Spawner/TEAM_flag_spawn_location"
+        },
+        {
+            "name": "TEAM_flag_pickup",
+            "type": "AreaTrigger",
+            "ObjId": 115,
+            "Area": "TEAM1_Flag_Base/TEAM1_Flag_Spawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "right": {
+                "x": -0.0274331,
+                "y": 0,
+                "z": -0.999624
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.999624,
+                "y": 0,
+                "z": -0.0274331
+            },
+            "position": {
+                "x": -264.12483878777675,
+                "y": 139.0550127,
+                "z": -95.5988890273696
+            },
+            "id": "TEAM1_Flag_Base/TEAM1_Flag_Spawner/TEAM_flag_pickup",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_flag_pickup_zone",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "TEAM1_Flag_Base/TEAM1_Flag_Spawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "height": 0,
+            "points": [
+                {
+                    "x": -266.52483878777673,
+                    "y": 139.0550127,
+                    "z": -97.9988890273696
+                },
+                {
+                    "x": -266.52483878777673,
+                    "y": 139.0550127,
+                    "z": -93.1988890273696
+                },
+                {
+                    "x": -261.7248387877767,
+                    "y": 139.0550127,
+                    "z": -93.1988890273696
+                },
+                {
+                    "x": -261.7248387877767,
+                    "y": 139.0550127,
+                    "z": -97.9988890273696
+                }
+            ]
+        },
+        {
+            "name": "TEAM_2_HQ",
+            "Team": "Team2",
+            "AltTeam": "TeamNeutral",
+            "VehicleSpawnersEnabled": true,
+            "ObjId": 2,
+            "InfantrySpawns": [
+                "TEAM_2_HQ/SpawnPoint_2_1",
+                "TEAM_2_HQ/SpawnPoint_2_2",
+                "TEAM_2_HQ/SpawnPoint_2_3",
+                "TEAM_2_HQ/SpawnPoint_2_4"
+            ],
+            "ForwardSpawns": [
+                "TEAM_2_HQ/Forward_SpawnPoint1",
+                "TEAM_2_HQ/Forward_SpawnPoint2",
+                "TEAM_2_HQ/Forward_SpawnPoint3",
+                "TEAM_2_HQ/Forward_SpawnPoint4"
+            ],
+            "HQArea": "TEAM_2_HQ/HQ_Team2",
+            "type": "HQ_PlayerSpawner",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 229.953,
+                "y": 116.661,
+                "z": -64.7838
+            },
+            "id": "TEAM_2_HQ",
+            "linked": [
+                "HQArea",
+                "InfantrySpawns",
+                "ForwardSpawns"
+            ]
+        },
+        {
+            "name": "TEAM_2_Sector",
+            "SectorArea": "TEAM_2_HQ/HQ_Team2",
+            "type": "Sector",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 229.953,
+                "y": 116.661,
+                "z": -64.7838
+            },
+            "id": "TEAM_2_HQ/TEAM_2_Sector",
+            "linked": [
+                "SectorArea"
+            ]
+        },
+        {
+            "name": "HQ_Team2",
+            "type": "PolygonVolume",
+            "id": "TEAM_2_HQ/HQ_Team2",
+            "height": 20,
+            "points": [
+                {
+                    "x": 258.7028,
+                    "y": 119.161,
+                    "z": -25.8351
+                },
+                {
+                    "x": 257.7347,
+                    "y": 119.161,
+                    "z": -93.996
+                },
+                {
+                    "x": 218.2279,
+                    "y": 119.161,
+                    "z": -94.5455
+                },
+                {
+                    "x": 217.4586,
+                    "y": 119.161,
+                    "z": -24.9007
+                }
+            ]
+        },
+        {
+            "name": "SpawnPoint_2_1",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.612314,
+                "y": 0,
+                "z": 0.790616
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.790616,
+                "y": 0,
+                "z": 0.612314
+            },
+            "position": {
+                "x": 223.90568,
+                "y": 116.449672,
+                "z": -87.9927
+            },
+            "id": "TEAM_2_HQ/SpawnPoint_2_1"
+        },
+        {
+            "name": "SpawnPoint_2_2",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.0350911,
+                "y": 0,
+                "z": 0.999384
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999384,
+                "y": 0,
+                "z": 0.0350911
+            },
+            "position": {
+                "x": 234.22398,
+                "y": 114.69974,
+                "z": -79.8115
+            },
+            "id": "TEAM_2_HQ/SpawnPoint_2_2"
+        },
+        {
+            "name": "SpawnPoint_2_3",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.0722812,
+                "y": 0,
+                "z": 0.997384
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.997384,
+                "y": 0,
+                "z": -0.0722812
+            },
+            "position": {
+                "x": 234.20945,
+                "y": 116.464611,
+                "z": -51.3913
+            },
+            "id": "TEAM_2_HQ/SpawnPoint_2_3"
+        },
+        {
+            "name": "SpawnPoint_2_4",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.33882,
+                "y": 0,
+                "z": 0.940851
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.940851,
+                "y": 0,
+                "z": -0.33882
+            },
+            "position": {
+                "x": 231.3587,
+                "y": 116.788777,
+                "z": -32.7255
+            },
+            "id": "TEAM_2_HQ/SpawnPoint_2_4"
+        },
+        {
+            "name": "TEAM_2_ATV_Spawn1",
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.726695,
+                "y": 0,
+                "z": 0.686961
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.686961,
+                "y": 0,
+                "z": 0.726695
+            },
+            "position": {
+                "x": 231.84122,
+                "y": 118.20919,
+                "z": -27.913
+            },
+            "id": "TEAM_2_HQ/TEAM_2_ATV_Spawn1"
+        },
+        {
+            "name": "TEAM_2_ATV_Spawn2",
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.51734,
+                "y": 0,
+                "z": 0.85578
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.85578,
+                "y": 0,
+                "z": 0.51734
+            },
+            "position": {
+                "x": 224.87954,
+                "y": 117.585428,
+                "z": -92.2173
+            },
+            "id": "TEAM_2_HQ/TEAM_2_ATV_Spawn2"
+        },
+        {
+            "name": "TEAM_2_Jeep_Spawn3",
+            "VehicleType": "Flyer60",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.359655,
+                "y": 0,
+                "z": 0.933085
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.933085,
+                "y": 0,
+                "z": -0.359655
+            },
+            "position": {
+                "x": 223.35567,
+                "y": 116.449675,
+                "z": -58.69326
+            },
+            "id": "TEAM_2_HQ/TEAM_2_Jeep_Spawn3"
+        },
+        {
+            "name": "TEAM_2_Jeep_Spawn4",
+            "VehicleType": "Flyer60",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": 0.00178024,
+                "y": 0,
+                "z": 0.999998
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999998,
+                "y": 0,
+                "z": 0.00178024
+            },
+            "position": {
+                "x": 221.89502,
+                "y": 117.511113,
+                "z": -37.6842
+            },
+            "id": "TEAM_2_HQ/TEAM_2_Jeep_Spawn4"
+        },
+        {
+            "name": "TEAM_2_Heli_Spawn1",
+            "VehicleType": "UH60",
+            "P_AutoSpawnEnabled": true,
+            "P_DefaultRespawnTime": 180,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.00256574,
+                "y": 0,
+                "z": 0.999997
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999997,
+                "y": 0,
+                "z": -0.00256574
+            },
+            "position": {
+                "x": 252.261,
+                "y": 114.73672,
+                "z": -85.679
+            },
+            "id": "TEAM_2_HQ/TEAM_2_Heli_Spawn1"
+        },
+        {
+            "name": "TEAM_2_AA",
+            "StationaryEmplacementType": "GDF009",
+            "P_AutoSpawnEnabled": true,
+            "P_DefaultRespawnTime": 20,
+            "type": "StationaryEmplacementSpawner",
+            "right": {
+                "x": 0.253403,
+                "y": 0,
+                "z": 0.967361
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.967361,
+                "y": 0,
+                "z": 0.253403
+            },
+            "position": {
+                "x": 175.8319,
+                "y": 128.4626,
+                "z": -75.3083
+            },
+            "id": "TEAM_2_HQ/TEAM_2_AA"
+        },
+        {
+            "name": "Forward_SpawnPoint1",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.0855212,
+                "y": 0,
+                "z": 0.996336
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.996336,
+                "y": 0,
+                "z": -0.0855212
+            },
+            "position": {
+                "x": 58.491,
+                "y": 122.31269,
+                "z": 12.6502
+            },
+            "id": "TEAM_2_HQ/Forward_SpawnPoint1"
+        },
+        {
+            "name": "Forward_SpawnPoint2",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.43743,
+                "y": 0,
+                "z": 0.899253
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.899253,
+                "y": 0,
+                "z": 0.43743
+            },
+            "position": {
+                "x": 64.839,
+                "y": 124.88019,
+                "z": -5.2607
+            },
+            "id": "TEAM_2_HQ/Forward_SpawnPoint2"
+        },
+        {
+            "name": "Forward_SpawnPoint3",
+            "type": "SpawnPoint",
+            "right": {
+                "x": -0.104563,
+                "y": 0,
+                "z": 0.994518
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.994518,
+                "y": 0,
+                "z": -0.104563
+            },
+            "position": {
+                "x": 70.603,
+                "y": 120.29851,
+                "z": -42.4544
+            },
+            "id": "TEAM_2_HQ/Forward_SpawnPoint3"
+        },
+        {
+            "name": "Forward_SpawnPoint4",
+            "type": "SpawnPoint",
+            "right": {
+                "x": 0.390281,
+                "y": 0,
+                "z": 0.920696
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.920696,
+                "y": 0,
+                "z": 0.390281
+            },
+            "position": {
+                "x": 79.644,
+                "y": 120.19806,
+                "z": -78.2539
+            },
+            "id": "TEAM_2_HQ/Forward_SpawnPoint4"
+        },
+        {
+            "name": "VEH_Stationary_GDF009",
+            "type": "VEH_Stationary_GDF009",
+            "right": {
+                "x": 0.147855,
+                "y": 0.0597768,
+                "z": 0.987201
+            },
+            "up": {
+                "x": -0.00885414,
+                "y": 0.998212,
+                "z": -0.0591174
+            },
+            "front": {
+                "x": -0.988969,
+                "y": 2.79397e-09,
+                "z": 0.14812
+            },
+            "position": {
+                "x": 244.7417,
+                "y": 113.52813,
+                "z": -74.9108
+            },
+            "id": "TEAM_2_HQ/VEH_Stationary_GDF009"
+        },
+        {
+            "name": "TankerTrailer_01_Base",
+            "type": "TankerTrailer_01_Base",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 0.999711,
+                "z": -0.0240483
+            },
+            "front": {
+                "x": 0,
+                "y": 0.0240483,
+                "z": 0.999711
+            },
+            "position": {
+                "x": -37.959,
+                "y": 121.2031,
+                "z": -5.2956
+            },
+            "id": "TEAM_2_HQ/TankerTrailer_01_Base"
+        },
+        {
+            "name": "TankerTrailer_01_A",
+            "type": "TankerTrailer_01_A",
+            "right": {
+                "x": 0.8479,
+                "y": 0,
+                "z": -0.530156
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.530156,
+                "y": 0,
+                "z": 0.8479
+            },
+            "position": {
+                "x": 126.184,
+                "y": 122.44546,
+                "z": -3.0674
+            },
+            "id": "TEAM_2_HQ/TankerTrailer_01_A"
+        },
+        {
+            "name": "TEAM_flag_spawn_location",
+            "ObjId": 124,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 0.235261,
+                "y": 0,
+                "z": 0.971932
+            },
+            "up": {
+                "x": 0.971932,
+                "y": -4.37114e-08,
+                "z": -0.235261
+            },
+            "front": {
+                "x": 4.24845084248e-08,
+                "y": 1,
+                "z": -1.02835876754e-08
+            },
+            "position": {
+                "x": 185.23676164453505,
+                "y": 122.622,
+                "z": -72.5843778895194
+            },
+            "id": "TEAM2_Flag_Base/TEAM2_Flag_Spawner/TEAM_flag_spawn_location"
+        },
+        {
+            "name": "TEAM_flag_pickup",
+            "type": "AreaTrigger",
+            "ObjId": 125,
+            "Area": "TEAM2_Flag_Base/TEAM2_Flag_Spawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "right": {
+                "x": 0.235261,
+                "y": 0,
+                "z": 0.971932
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.971932,
+                "y": 0,
+                "z": 0.235261
+            },
+            "position": {
+                "x": 185.115,
+                "y": 122.622,
+                "z": -72.561
+            },
+            "id": "TEAM2_Flag_Base/TEAM2_Flag_Spawner/TEAM_flag_pickup",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_flag_pickup_zone",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "TEAM2_Flag_Base/TEAM2_Flag_Spawner/TEAM_flag_pickup/TEAM_flag_pickup_zone",
+            "height": 0,
+            "points": [
+                {
+                    "x": 182.715,
+                    "y": 122.622,
+                    "z": -74.961
+                },
+                {
+                    "x": 182.715,
+                    "y": 122.622,
+                    "z": -70.161
+                },
+                {
+                    "x": 187.515,
+                    "y": 122.622,
+                    "z": -70.161
+                },
+                {
+                    "x": 187.515,
+                    "y": 122.622,
+                    "z": -74.961
+                }
+            ]
+        },
+        {
+            "name": "TEAM_capture_location",
+            "ObjId": 123,
+            "type": "FireAlarmButton_01",
+            "right": {
+                "x": 0.226532,
+                "y": 0,
+                "z": 0.974004
+            },
+            "up": {
+                "x": 0.974004,
+                "y": -4.37114e-08,
+                "z": -0.226532
+            },
+            "front": {
+                "x": 4.25750784456e-08,
+                "y": 1,
+                "z": -9.9020308648e-09
+            },
+            "position": {
+                "x": 185.11298584,
+                "y": 122.622,
+                "z": -72.561
+            },
+            "id": "TEAM2_Flag_Base/TEAM2_Flag_Capture_Zone/TEAM_capture_location"
+        },
+        {
+            "name": "TEAM_capture_zone_area",
+            "type": "AreaTrigger",
+            "ObjId": 122,
+            "Area": "TEAM2_Flag_Base/TEAM2_Flag_Capture_Zone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "right": {
+                "x": 0.226532,
+                "y": 0,
+                "z": 0.974004
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.974004,
+                "y": 0,
+                "z": 0.226532
+            },
+            "position": {
+                "x": 185.11298584,
+                "y": 122.622,
+                "z": -72.561
+            },
+            "id": "TEAM2_Flag_Base/TEAM2_Flag_Capture_Zone/TEAM_capture_zone_area",
+            "linked": [
+                "Area"
+            ]
+        },
+        {
+            "name": "TEAM_capture_zone_collision",
+            "type": "PolygonVolume",
+            "metadata/_custom_type_script": "uid://ck5uniw0pl6u8",
+            "color": [
+                0,
+                0.6,
+                0.7,
+                0.42
+            ],
+            "id": "TEAM2_Flag_Base/TEAM2_Flag_Capture_Zone/TEAM_capture_zone_area/TEAM_capture_zone_collision",
+            "height": 0,
+            "points": [
+                {
+                    "x": 182.71298584,
+                    "y": 122.622,
+                    "z": -74.961
+                },
+                {
+                    "x": 182.71298584,
+                    "y": 122.622,
+                    "z": -70.161
+                },
+                {
+                    "x": 187.51298584,
+                    "y": 122.622,
+                    "z": -70.161
+                },
+                {
+                    "x": 187.51298584,
+                    "y": 122.622,
+                    "z": -74.961
+                }
+            ]
+        },
+        {
+            "name": "CombatArea",
+            "CombatVolume": "CombatArea/CollisionPolygon3D",
+            "type": "CombatArea",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -58.2441,
+                "y": 93.4144,
+                "z": 34.2265
+            },
+            "id": "CombatArea",
+            "linked": [
+                "CombatVolume"
+            ]
+        },
+        {
+            "name": "CollisionPolygon3D",
+            "type": "PolygonVolume",
+            "id": "CombatArea/CollisionPolygon3D",
+            "height": 100,
+            "points": [
+                {
+                    "x": -261.6231,
+                    "y": 177.7954,
+                    "z": -367.2085
+                },
+                {
+                    "x": -395.9111,
+                    "y": 177.7954,
+                    "z": -290.7395
+                },
+                {
+                    "x": -479.8411,
+                    "y": 177.7954,
+                    "z": -173.2375
+                },
+                {
+                    "x": -504.0871,
+                    "y": 177.7954,
+                    "z": -37.0843
+                },
+                {
+                    "x": -478.5551,
+                    "y": 177.7954,
+                    "z": 109.8955
+                },
+                {
+                    "x": -437.2091,
+                    "y": 177.7954,
+                    "z": 185.3595
+                },
+                {
+                    "x": -325.2921,
+                    "y": 177.7954,
+                    "z": 244.5805
+                },
+                {
+                    "x": -175.8281,
+                    "y": 177.7954,
+                    "z": 255.7375
+                },
+                {
+                    "x": -24.7541,
+                    "y": 177.7954,
+                    "z": 250.1425
+                },
+                {
+                    "x": 124.4547,
+                    "y": 177.7954,
+                    "z": 250.1425
+                },
+                {
+                    "x": 266.2029,
+                    "y": 177.7954,
+                    "z": 235.2215
+                },
+                {
+                    "x": 378.1099,
+                    "y": 177.7954,
+                    "z": 153.1565
+                },
+                {
+                    "x": 439.6579,
+                    "y": 177.7954,
+                    "z": 39.3855
+                },
+                {
+                    "x": 467.6349,
+                    "y": 177.7954,
+                    "z": -91.1725
+                },
+                {
+                    "x": 434.0629,
+                    "y": 177.7954,
+                    "z": -214.2695
+                },
+                {
+                    "x": 353.8629,
+                    "y": 177.7954,
+                    "z": -333.6365
+                },
+                {
+                    "x": 253.1469,
+                    "y": 177.7954,
+                    "z": -406.3755
+                },
+                {
+                    "x": 77.82696,
+                    "y": 177.7954,
+                    "z": -423.1625
+                },
+                {
+                    "x": -110.5491,
+                    "y": 177.7954,
+                    "z": -411.9715
+                }
+            ]
+        },
+        {
+            "name": "DeployCam",
+            "type": "DeployCam",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": -4.37114e-08,
+                "z": -1
+            },
+            "front": {
+                "x": 0,
+                "y": 1,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": 0,
+                "y": 500,
+                "z": -92.3955
+            },
+            "id": "DeployCam"
+        },
+        {
+            "name": "CinderblockStack_01_B_180",
+            "type": "CinderblockStack_01_B_180",
+            "right": {
+                "x": 0.998884,
+                "y": 0,
+                "z": -0.0472285
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.0472285,
+                "y": 0,
+                "z": 0.998884
+            },
+            "position": {
+                "x": -371.225,
+                "y": 136.632,
+                "z": -52.0687
+            },
+            "id": "Team1_base_props/CinderblockStack_01_B_180"
+        },
+        {
+            "name": "CinderblockStack_01_B_181",
+            "type": "CinderblockStack_01_B_180",
+            "right": {
+                "x": -0.999411,
+                "y": 0,
+                "z": 0.0343064
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.0343064,
+                "y": 0,
+                "z": -0.999411
+            },
+            "position": {
+                "x": -371.113,
+                "y": 136.632,
+                "z": -50.1054
+            },
+            "id": "Team1_base_props/CinderblockStack_01_B_181"
+        },
+        {
+            "name": "CinderblockStack_01_A_180",
+            "type": "CinderblockStack_01_A_180",
+            "right": {
+                "x": -0.0304513,
+                "y": 0,
+                "z": -0.999536
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.999536,
+                "y": 0,
+                "z": -0.0304513
+            },
+            "position": {
+                "x": -371.023,
+                "y": 136.659,
+                "z": -48.2716
+            },
+            "id": "Team1_base_props/CinderblockStack_01_A_180"
+        },
+        {
+            "name": "CinderblockStack_01_A_181",
+            "type": "CinderblockStack_01_A_180",
+            "right": {
+                "x": 0.997671,
+                "y": 0,
+                "z": -0.0682068
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.0682068,
+                "y": 0,
+                "z": 0.997671
+            },
+            "position": {
+                "x": -371.252,
+                "y": 136.58,
+                "z": -53.764
+            },
+            "id": "Team1_base_props/CinderblockStack_01_A_181"
+        },
+        {
+            "name": "Container_02_Closed",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": -0.0171907,
+                "y": 0,
+                "z": -0.999852
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.999852,
+                "y": 0,
+                "z": -0.0171907
+            },
+            "position": {
+                "x": -377.339,
+                "y": 133.834,
+                "z": -54.8397
+            },
+            "id": "Team1_base_props/Container_02_Closed"
+        },
+        {
+            "name": "Container_02_Closed2",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": -0.0392074,
+                "y": 0,
+                "z": 0.999231
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999231,
+                "y": 0,
+                "z": -0.0392074
+            },
+            "position": {
+                "x": -370.136,
+                "y": 133.834,
+                "z": -46.9381
+            },
+            "id": "Team1_base_props/Container_02_Closed2"
+        },
+        {
+            "name": "PlankStack_01_B",
+            "type": "PlankStack_01_B",
+            "right": {
+                "x": 0.99965,
+                "y": 0,
+                "z": -0.0264561
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.0264561,
+                "y": 0,
+                "z": 0.99965
+            },
+            "position": {
+                "x": -375.384,
+                "y": 133.88,
+                "z": -54.0872
+            },
+            "id": "Team1_base_props/PlankStack_01_B"
+        },
+        {
+            "name": "PlankStackMedium_01_512x120x128_DDPF",
+            "type": "PlankStackMedium_01_512x120x128_DDPF",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -375.139,
+                "y": 133.982,
+                "z": -47.9233
+            },
+            "id": "Team1_base_props/PlankStackMedium_01_512x120x128_DDPF"
+        },
+        {
+            "name": "Neutral_Quad_Spawn_1",
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.324264,
+                "y": 0,
+                "z": -0.945967
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.945967,
+                "y": 0,
+                "z": -0.324264
+            },
+            "position": {
+                "x": -290.42,
+                "y": 133.94,
+                "z": -4.92937
+            },
+            "id": "Neutral_Vehicle_Spawns/Neutral_Quad_Spawn_1"
+        },
+        {
+            "name": "Neutral_jeep_Spawn_center",
+            "VehicleType": "GolfCart",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.998602,
+                "y": 0,
+                "z": 0.052859
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.052859,
+                "y": 0,
+                "z": -0.998602
+            },
+            "position": {
+                "x": -55.4045,
+                "y": 126.092,
+                "z": -37.6166
+            },
+            "id": "Neutral_Vehicle_Spawns/Neutral_jeep_Spawn_center"
+        },
+        {
+            "name": "Neutral_quad_Spawn_2",
+            "VehicleType": "Quadbike",
+            "P_AutoSpawnEnabled": true,
+            "type": "VehicleSpawner",
+            "right": {
+                "x": -0.580674,
+                "y": 0,
+                "z": 0.814136
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.814136,
+                "y": 0,
+                "z": -0.580674
+            },
+            "position": {
+                "x": 130.995,
+                "y": 117.626,
+                "z": -174.453
+            },
+            "id": "Neutral_Vehicle_Spawns/Neutral_quad_Spawn_2"
+        },
+        {
+            "name": "ContainerBox_02",
+            "type": "ContainerBox_02",
+            "right": {
+                "x": 0.275503,
+                "y": 0,
+                "z": 0.9613
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.9613,
+                "y": 0,
+                "z": 0.275503
+            },
+            "position": {
+                "x": 186.167,
+                "y": 120.061,
+                "z": -73.9639
+            },
+            "id": "Team_2_basegeo/ContainerBox_02"
+        },
+        {
+            "name": "ContainerBox_03",
+            "type": "ContainerBox_02",
+            "right": {
+                "x": 0.275503,
+                "y": 0,
+                "z": 0.9613
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.9613,
+                "y": 0,
+                "z": 0.275503
+            },
+            "position": {
+                "x": 188.541,
+                "y": 120.088,
+                "z": -74.7749
+            },
+            "id": "Team_2_basegeo/ContainerBox_03"
+        },
+        {
+            "name": "Container_02_Open_D",
+            "type": "Container_02_Open_D",
+            "right": {
+                "x": -0.27656,
+                "y": 0,
+                "z": -0.960997
+            },
+            "up": {
+                "x": 0.615388,
+                "y": 0.768071,
+                "z": -0.177099
+            },
+            "front": {
+                "x": 0.738114,
+                "y": -0.640364,
+                "z": -0.212418
+            },
+            "position": {
+                "x": 189.149,
+                "y": 122.569,
+                "z": -72.6345
+            },
+            "id": "Team_2_basegeo/Container_02_Open_D"
+        },
+        {
+            "name": "SandBags_01_C90_A",
+            "type": "SandBags_01_C90_A",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 187.774,
+                "y": 122.668,
+                "z": -65.1574
+            },
+            "id": "Team_2_basegeo/SandBags_01_C90_A"
+        },
+        {
+            "name": "SandBags_01_C90_A2",
+            "type": "SandBags_01_C90_A",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 187.774,
+                "y": 123.727,
+                "z": -65.1574
+            },
+            "id": "Team_2_basegeo/SandBags_01_C90_A2"
+        },
+        {
+            "name": "SandBags_01_C90_A3",
+            "type": "SandBags_01_C90_A",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 187.774,
+                "y": 124.725,
+                "z": -65.1574
+            },
+            "id": "Team_2_basegeo/SandBags_01_C90_A3"
+        },
+        {
+            "name": "SandBags_01_256x180_DDPF",
+            "type": "SandBags_01_256x180_DDPF",
+            "right": {
+                "x": 0.828373,
+                "y": 0,
+                "z": -0.560176
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.560176,
+                "y": 0,
+                "z": 0.828373
+            },
+            "position": {
+                "x": 181.544,
+                "y": 122.694,
+                "z": -77.9004
+            },
+            "id": "Team_2_basegeo/SandBags_01_256x180_DDPF"
+        },
+        {
+            "name": "SandBags_01_C90_a_DDPF3",
+            "type": "SandBags_01_C90_a_DDPF",
+            "right": {
+                "x": -0.591028,
+                "y": 0,
+                "z": -0.806651
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.806651,
+                "y": 0,
+                "z": -0.591028
+            },
+            "position": {
+                "x": 185.235,
+                "y": 122.736,
+                "z": -79.5983
+            },
+            "id": "Team_2_basegeo/SandBags_01_C90_a_DDPF3"
+        },
+        {
+            "name": "SandBags_01_C90_a_DDPF4",
+            "type": "SandBags_01_C90_a_DDPF",
+            "right": {
+                "x": -0.591028,
+                "y": 0,
+                "z": -0.806651
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.806651,
+                "y": 0,
+                "z": -0.591028
+            },
+            "position": {
+                "x": 185.235,
+                "y": 123.762,
+                "z": -79.5983
+            },
+            "id": "Team_2_basegeo/SandBags_01_C90_a_DDPF4"
+        },
+        {
+            "name": "SandBags_01_C90_a_DDPF5",
+            "type": "SandBags_01_C90_a_DDPF",
+            "right": {
+                "x": -0.591028,
+                "y": 0,
+                "z": -0.806651
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.806651,
+                "y": 0,
+                "z": -0.591028
+            },
+            "position": {
+                "x": 185.235,
+                "y": 124.683,
+                "z": -79.5983
+            },
+            "id": "Team_2_basegeo/SandBags_01_C90_a_DDPF5"
+        },
+        {
+            "name": "SandBags_01_256x60_x2",
+            "type": "SandBags_01_256x60_x2",
+            "right": {
+                "x": 0.817708,
+                "y": 0,
+                "z": -0.575633
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.575633,
+                "y": 0,
+                "z": 0.817708
+            },
+            "position": {
+                "x": 186.471,
+                "y": 122.694,
+                "z": -77.3317
+            },
+            "id": "Team_2_basegeo/SandBags_01_256x60_x2"
+        },
+        {
+            "name": "SandBags_01_256x60_x5",
+            "type": "SandBags_01_256x60_x2",
+            "right": {
+                "x": -0.805225,
+                "y": 0,
+                "z": 0.592969
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.592969,
+                "y": 0,
+                "z": -0.805225
+            },
+            "position": {
+                "x": 186.269,
+                "y": 123.823,
+                "z": -77.183
+            },
+            "id": "Team_2_basegeo/SandBags_01_256x60_x5"
+        },
+        {
+            "name": "SandBags_01_256x60_x7",
+            "type": "SandBags_01_256x60_x2",
+            "right": {
+                "x": -0.805225,
+                "y": 0,
+                "z": 0.592969
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.592969,
+                "y": 0,
+                "z": -0.805225
+            },
+            "position": {
+                "x": 186.269,
+                "y": 124.805,
+                "z": -77.183
+            },
+            "id": "Team_2_basegeo/SandBags_01_256x60_x7"
+        },
+        {
+            "name": "SandBags_01_256x60_x3",
+            "type": "SandBags_01_256x60_x2",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0.000366479
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.000366479,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 188.967,
+                "y": 122.694,
+                "z": -69.0934
+            },
+            "id": "Team_2_basegeo/SandBags_01_256x60_x3"
+        },
+        {
+            "name": "SandBags_01_256x60_x4",
+            "type": "SandBags_01_256x60_x2",
+            "right": {
+                "x": -0.999962,
+                "y": 0,
+                "z": -0.00867422
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.00867422,
+                "y": 0,
+                "z": -0.999962
+            },
+            "position": {
+                "x": 188.696,
+                "y": 123.828,
+                "z": -69.0957
+            },
+            "id": "Team_2_basegeo/SandBags_01_256x60_x4"
+        },
+        {
+            "name": "SandBags_01_256x60_x6",
+            "type": "SandBags_01_256x60_x2",
+            "right": {
+                "x": -0.999962,
+                "y": 0,
+                "z": -0.00867422
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.00867422,
+                "y": 0,
+                "z": -0.999962
+            },
+            "position": {
+                "x": 188.696,
+                "y": 124.807,
+                "z": -69.0957
+            },
+            "id": "Team_2_basegeo/SandBags_01_256x60_x6"
+        },
+        {
+            "name": "WalkwayStair_128x192",
+            "type": "WalkwayStair_128x192",
+            "right": {
+                "x": -0.259325,
+                "y": 0,
+                "z": -0.96579
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.96579,
+                "y": 0,
+                "z": -0.259325
+            },
+            "position": {
+                "x": 191.633,
+                "y": 120.598,
+                "z": -73.9397
+            },
+            "id": "Team_2_basegeo/WalkwayStair_128x192"
+        },
+        {
+            "name": "WalkwayStair_128x193",
+            "type": "WalkwayStair_128x192",
+            "right": {
+                "x": -0.259325,
+                "y": 0,
+                "z": -0.96579
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.96579,
+                "y": 0,
+                "z": -0.259325
+            },
+            "position": {
+                "x": 194.127,
+                "y": 118.869,
+                "z": -74.6093
+            },
+            "id": "Team_2_basegeo/WalkwayStair_128x193"
+        },
+        {
+            "name": "DirtMoundLarge_01",
+            "type": "DirtMoundLarge_01",
+            "right": {
+                "x": 0.219253,
+                "y": -0.0850163,
+                "z": 0.971957
+            },
+            "up": {
+                "x": 0.141334,
+                "y": 0.988456,
+                "z": 0.0545775
+            },
+            "front": {
+                "x": -0.965377,
+                "y": 0.125404,
+                "z": 0.228738
+            },
+            "position": {
+                "x": 193.617,
+                "y": 116.874,
+                "z": -74.9359
+            },
+            "id": "Team_2_basegeo/DirtMoundLarge_01"
+        },
+        {
+            "name": "ContainerBox_05",
+            "type": "ContainerBox_02",
+            "right": {
+                "x": 0.96808,
+                "y": 0,
+                "z": -0.709099
+            },
+            "up": {
+                "x": 0,
+                "y": 1.2,
+                "z": 0
+            },
+            "front": {
+                "x": 0.709099,
+                "y": 0,
+                "z": 0.96808
+            },
+            "position": {
+                "x": 181.891,
+                "y": 122.704,
+                "z": -78.4896
+            },
+            "id": "Team_2_basegeo/ContainerBox_05"
+        },
+        {
+            "name": "Container_02_Open_A_Sand",
+            "type": "Container_02_Open_A_Sand",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 186.325,
+                "y": 125.635,
+                "z": -72.6474
+            },
+            "id": "Team_2_basegeo/Container_02_Open_A_Sand"
+        },
+        {
+            "name": "Container_02_Open_A_Sand2",
+            "type": "Container_02_Open_A_Sand",
+            "right": {
+                "x": -0.822948,
+                "y": 0,
+                "z": 0.568117
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.568117,
+                "y": 0,
+                "z": -0.822948
+            },
+            "position": {
+                "x": 188.161,
+                "y": 125.801,
+                "z": -74.8999
+            },
+            "id": "Team_2_basegeo/Container_02_Open_A_Sand2"
+        },
+        {
+            "name": "BarrierConcreteWall_01_192x320",
+            "type": "BarrierConcreteWall_01_192x320",
+            "right": {
+                "x": -0.0399574,
+                "y": 0,
+                "z": -0.999201
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.999201,
+                "y": 0,
+                "z": -0.0399574
+            },
+            "position": {
+                "x": 188.818,
+                "y": 122.594,
+                "z": -70.9027
+            },
+            "id": "Team_2_basegeo/BarrierConcreteWall_01_192x320"
+        },
+        {
+            "name": "BarrierConcreteWall_01_192x321",
+            "type": "BarrierConcreteWall_01_192x320",
+            "right": {
+                "x": -0.515935,
+                "y": 0,
+                "z": -0.856627
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.856627,
+                "y": 0,
+                "z": -0.515935
+            },
+            "position": {
+                "x": 188.396,
+                "y": 122.671,
+                "z": -74.1513
+            },
+            "id": "Team_2_basegeo/BarrierConcreteWall_01_192x321"
+        },
+        {
+            "name": "Container_02_Closed",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": 0.162895,
+                "y": 0,
+                "z": -0.986643
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.986643,
+                "y": 0,
+                "z": 0.162895
+            },
+            "position": {
+                "x": 178.939,
+                "y": 120.543,
+                "z": -64.1263
+            },
+            "id": "Team_2_basegeo/Container_02_Closed"
+        },
+        {
+            "name": "Container_02_Closed2",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": 0.162895,
+                "y": 0,
+                "z": -0.986643
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.986643,
+                "y": 0,
+                "z": 0.162895
+            },
+            "position": {
+                "x": 178.939,
+                "y": 123.105,
+                "z": -64.1263
+            },
+            "id": "Team_2_basegeo/Container_02_Closed2"
+        },
+        {
+            "name": "Container_02_Closed3",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": 0.162895,
+                "y": 0,
+                "z": -0.986643
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.986643,
+                "y": 0,
+                "z": 0.162895
+            },
+            "position": {
+                "x": 178.939,
+                "y": 125.668,
+                "z": -64.1263
+            },
+            "id": "Team_2_basegeo/Container_02_Closed3"
+        },
+        {
+            "name": "Container_02_Closed4",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": -0.699152,
+                "y": 0,
+                "z": -0.714973
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.714973,
+                "y": 0,
+                "z": -0.699152
+            },
+            "position": {
+                "x": 176.909,
+                "y": 120.543,
+                "z": -74.1065
+            },
+            "id": "Team_2_basegeo/Container_02_Closed4"
+        },
+        {
+            "name": "Container_02_Closed5",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": -0.699152,
+                "y": 0,
+                "z": -0.714973
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.714973,
+                "y": 0,
+                "z": -0.699152
+            },
+            "position": {
+                "x": 176.909,
+                "y": 123.105,
+                "z": -74.1065
+            },
+            "id": "Team_2_basegeo/Container_02_Closed5"
+        },
+        {
+            "name": "Container_02_Closed6",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": -0.699152,
+                "y": 0,
+                "z": -0.714973
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.714973,
+                "y": 0,
+                "z": -0.699152
+            },
+            "position": {
+                "x": 176.909,
+                "y": 125.668,
+                "z": -74.1065
+            },
+            "id": "Team_2_basegeo/Container_02_Closed6"
+        },
+        {
+            "name": "HescoBastion_03",
+            "type": "HescoBastion_03",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 178.12,
+                "y": 125.724,
+                "z": -71.1904
+            },
+            "id": "Team_2_basegeo/HescoBastion_03"
+        },
+        {
+            "name": "BarrierHesco_01_256x240",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 175.704,
+                "y": 123.57,
+                "z": -68.1591
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x240"
+        },
+        {
+            "name": "BarrierHesco_01_256x244",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 175.704,
+                "y": 123.57,
+                "z": -70.5063
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x244"
+        },
+        {
+            "name": "BarrierHesco_01_256x245",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 175.704,
+                "y": 123.57,
+                "z": -72.6483
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x245"
+        },
+        {
+            "name": "BarrierHesco_01_256x251",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 0.859326,
+                "y": 0,
+                "z": 0.511428
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.511428,
+                "y": 0,
+                "z": 0.859326
+            },
+            "position": {
+                "x": 175.675,
+                "y": 123.636,
+                "z": -75.0232
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x251"
+        },
+        {
+            "name": "BarrierHesco_01_256x252",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 0.859326,
+                "y": 0,
+                "z": 0.511428
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.511428,
+                "y": 0,
+                "z": 0.859326
+            },
+            "position": {
+                "x": 175.675,
+                "y": 126.014,
+                "z": -75.0232
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x252"
+        },
+        {
+            "name": "BarrierHesco_01_256x246",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 180.954,
+                "y": 123.57,
+                "z": -73.8533
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x246"
+        },
+        {
+            "name": "BarrierHesco_01_256x256",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 0.769065,
+                "y": 0,
+                "z": -0.639171
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.639171,
+                "y": 0,
+                "z": 0.769065
+            },
+            "position": {
+                "x": 179.921,
+                "y": 121.525,
+                "z": -75.5836
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x256"
+        },
+        {
+            "name": "BarrierHesco_01_256x257",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 178.746,
+                "y": 123.424,
+                "z": -74.4354
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x257"
+        },
+        {
+            "name": "BarrierHesco_01_256x247",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 180.954,
+                "y": 123.57,
+                "z": -71.4299
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x247"
+        },
+        {
+            "name": "BarrierHesco_01_256x255",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 180.954,
+                "y": 122.337,
+                "z": -71.4299
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x255"
+        },
+        {
+            "name": "BarrierHesco_01_256x248",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 180.954,
+                "y": 123.57,
+                "z": -69.068
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x248"
+        },
+        {
+            "name": "BarrierHesco_01_256x253",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 180.954,
+                "y": 121.222,
+                "z": -69.068
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x253"
+        },
+        {
+            "name": "BarrierHesco_01_256x249",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 180.954,
+                "y": 123.57,
+                "z": -67.349
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x249"
+        },
+        {
+            "name": "BarrierHesco_01_256x254",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 180.954,
+                "y": 121.642,
+                "z": -67.349
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x254"
+        },
+        {
+            "name": "BarrierHesco_01_256x250",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 180.954,
+                "y": 125.622,
+                "z": -67.349
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x250"
+        },
+        {
+            "name": "BarrierHesco_01_256x241",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 178.063,
+                "y": 123.57,
+                "z": -68.1591
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x241"
+        },
+        {
+            "name": "BarrierHesco_01_256x242",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 178.063,
+                "y": 123.681,
+                "z": -65.7185
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x242"
+        },
+        {
+            "name": "BarrierHesco_01_256x243",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 178.063,
+                "y": 121.358,
+                "z": -65.7185
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x243"
+        },
+        {
+            "name": "BarrierHesco_01_128x240_DDPF",
+            "type": "BarrierHesco_01_128x240_DDPF",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 167.979,
+                "y": 123.083,
+                "z": -67.0882
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x240_DDPF"
+        },
+        {
+            "name": "BarrierHesco_01_128x240_DDPF2",
+            "type": "BarrierHesco_01_128x240_DDPF",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 167.979,
+                "y": 123.083,
+                "z": -68.4093
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x240_DDPF2"
+        },
+        {
+            "name": "BarrierHesco_01_128x120_DDPF",
+            "type": "BarrierHesco_01_128x120_DDPF",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 159.546,
+                "y": 120.408,
+                "z": -66.8231
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x120_DDPF"
+        },
+        {
+            "name": "BarrierHesco_01_128x120_DDPF2",
+            "type": "BarrierHesco_01_128x120_DDPF",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 159.546,
+                "y": 120.408,
+                "z": -69.662
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x120_DDPF2"
+        },
+        {
+            "name": "DirtPile_01_A",
+            "type": "DirtPile_01_A",
+            "right": {
+                "x": 0.0139889,
+                "y": 0.00279805,
+                "z": -1.33992
+            },
+            "up": {
+                "x": -0.26282,
+                "y": 1.31397,
+                "z": 1.86265e-09
+            },
+            "front": {
+                "x": 1.3139,
+                "y": 0.262805,
+                "z": 0.014266
+            },
+            "position": {
+                "x": 160.033,
+                "y": 120.096,
+                "z": -68.1458
+            },
+            "id": "Team_2_basegeo/DirtPile_01_A"
+        },
+        {
+            "name": "Container_02_Closed7",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 184.057,
+                "y": 120.078,
+                "z": -72.2778
+            },
+            "id": "Team_2_basegeo/Container_02_Closed7"
+        },
+        {
+            "name": "Container_02_Closed8",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 181.706,
+                "y": 120.078,
+                "z": -72.2778
+            },
+            "id": "Team_2_basegeo/Container_02_Closed8"
+        },
+        {
+            "name": "Container_02_Closed9",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 186.653,
+                "y": 120.078,
+                "z": -72.2778
+            },
+            "id": "Team_2_basegeo/Container_02_Closed9"
+        },
+        {
+            "name": "Container_02_Closed_DD_ProxyRadiosity",
+            "type": "Container_02_Closed_DD_ProxyRadiosity",
+            "right": {
+                "x": 0.836391,
+                "y": 0,
+                "z": -0.548133
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.548133,
+                "y": 0,
+                "z": 0.836391
+            },
+            "position": {
+                "x": 180.189,
+                "y": 120.146,
+                "z": -77.9326
+            },
+            "id": "Team_2_basegeo/Container_02_Closed_DD_ProxyRadiosity"
+        },
+        {
+            "name": "Container_02_Closed_DD_ProxyRadiosity3",
+            "type": "Container_02_Closed_DD_ProxyRadiosity",
+            "right": {
+                "x": 0.836391,
+                "y": 0,
+                "z": -0.548133
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.548133,
+                "y": 0,
+                "z": 0.836391
+            },
+            "position": {
+                "x": 178.168,
+                "y": 120.146,
+                "z": -76.6078
+            },
+            "id": "Team_2_basegeo/Container_02_Closed_DD_ProxyRadiosity3"
+        },
+        {
+            "name": "Container_02_Closed_DD_ProxyRadiosity2",
+            "type": "Container_02_Closed_DD_ProxyRadiosity",
+            "right": {
+                "x": 0.836391,
+                "y": 0,
+                "z": -0.548133
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.548133,
+                "y": 0,
+                "z": 0.836391
+            },
+            "position": {
+                "x": 182.374,
+                "y": 120.146,
+                "z": -79.3645
+            },
+            "id": "Team_2_basegeo/Container_02_Closed_DD_ProxyRadiosity2"
+        },
+        {
+            "name": "StairsRefinery_02",
+            "type": "StairsRefinery_02",
+            "right": {
+                "x": -0.0198605,
+                "y": 0,
+                "z": 0.999803
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999803,
+                "y": 0,
+                "z": -0.0198605
+            },
+            "position": {
+                "x": 178.502,
+                "y": 117.477,
+                "z": -68.0178
+            },
+            "id": "Team_2_basegeo/StairsRefinery_02"
+        },
+        {
+            "name": "CliffLarge_04",
+            "type": "CliffLarge_04",
+            "right": {
+                "x": 1.10151,
+                "y": 0.293727,
+                "z": 0
+            },
+            "up": {
+                "x": -0.293727,
+                "y": 1.10151,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1.14
+            },
+            "position": {
+                "x": 211.637,
+                "y": 112.755,
+                "z": -81.5565
+            },
+            "id": "Team_2_basegeo/CliffLarge_04"
+        },
+        {
+            "name": "CliffHuge_08B",
+            "type": "CliffHuge_08B",
+            "right": {
+                "x": 0.629969,
+                "y": -0.281495,
+                "z": 2.05636e-08
+            },
+            "up": {
+                "x": 0.232404,
+                "y": 0.520106,
+                "z": -0.38933
+            },
+            "front": {
+                "x": 0.158833,
+                "y": 0.355458,
+                "z": 0.569668
+            },
+            "position": {
+                "x": 203.099,
+                "y": 116.461,
+                "z": -72.3479
+            },
+            "id": "Team_2_basegeo/CliffHuge_08B"
+        },
+        {
+            "name": "CliffHuge_08B_B",
+            "type": "CliffHuge_08B_B",
+            "right": {
+                "x": 0.915199,
+                "y": 3.39663e-09,
+                "z": 0.403002
+            },
+            "up": {
+                "x": 0.230841,
+                "y": 0.819692,
+                "z": -0.52423
+            },
+            "front": {
+                "x": -0.330338,
+                "y": 0.572804,
+                "z": 0.750181
+            },
+            "position": {
+                "x": 180.998,
+                "y": 116.196,
+                "z": -18.421
+            },
+            "id": "Team_2_basegeo/CliffHuge_08B_B"
+        },
+        {
+            "name": "BarrierHesco_01_256x258",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 187.257,
+                "y": 119.613,
+                "z": -64.1039
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x258"
+        },
+        {
+            "name": "BarrierHesco_01_256x259",
+            "type": "BarrierHesco_01_256x240",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 187.257,
+                "y": 121.35,
+                "z": -64.1039
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_256x259"
+        },
+        {
+            "name": "BarrierHesco_01_128x240_DDPF3",
+            "type": "BarrierHesco_01_128x240_DDPF",
+            "right": {
+                "x": 1.16,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1.16,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1.16
+            },
+            "position": {
+                "x": 189.795,
+                "y": 122.943,
+                "z": -72.4227
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x240_DDPF3"
+        },
+        {
+            "name": "BarrierHesco_01_128x240_DDPF4",
+            "type": "BarrierHesco_01_128x240_DDPF",
+            "right": {
+                "x": 1.04166,
+                "y": 0,
+                "z": -0.510439
+            },
+            "up": {
+                "x": 0,
+                "y": 1.16,
+                "z": 0
+            },
+            "front": {
+                "x": 0.510439,
+                "y": 0,
+                "z": 1.04166
+            },
+            "position": {
+                "x": 188.868,
+                "y": 122.717,
+                "z": -75.6344
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x240_DDPF4"
+        },
+        {
+            "name": "BarrierHesco_01_128x240_DDPF5",
+            "type": "BarrierHesco_01_128x240_DDPF",
+            "right": {
+                "x": 1.04166,
+                "y": 0,
+                "z": -0.510439
+            },
+            "up": {
+                "x": 0,
+                "y": 1.16,
+                "z": 0
+            },
+            "front": {
+                "x": 0.510439,
+                "y": 0,
+                "z": 1.04166
+            },
+            "position": {
+                "x": 188.868,
+                "y": 120.099,
+                "z": -75.6344
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x240_DDPF5"
+        },
+        {
+            "name": "BarrierHesco_01_128x240_DDPF6",
+            "type": "BarrierHesco_01_128x240_DDPF",
+            "right": {
+                "x": 1.04166,
+                "y": 0,
+                "z": -0.510439
+            },
+            "up": {
+                "x": 0,
+                "y": 1.16,
+                "z": 0
+            },
+            "front": {
+                "x": 0.510439,
+                "y": 0,
+                "z": 1.04166
+            },
+            "position": {
+                "x": 188.868,
+                "y": 117.522,
+                "z": -75.6344
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x240_DDPF6"
+        },
+        {
+            "name": "BarrierHesco_01_128x240_DDPF7",
+            "type": "BarrierHesco_01_128x240_DDPF",
+            "right": {
+                "x": 1.16,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1.16,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1.16
+            },
+            "position": {
+                "x": 189.795,
+                "y": 120.217,
+                "z": -72.4227
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x240_DDPF7"
+        },
+        {
+            "name": "BarrierHesco_01_128x240_DDPF8",
+            "type": "BarrierHesco_01_128x240_DDPF",
+            "right": {
+                "x": 1.16,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1.16,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1.16
+            },
+            "position": {
+                "x": 189.795,
+                "y": 117.491,
+                "z": -72.4227
+            },
+            "id": "Team_2_basegeo/BarrierHesco_01_128x240_DDPF8"
+        },
+        {
+            "name": "BarrierConcreteWall_01_192x320_A_DDPF",
+            "type": "BarrierConcreteWall_01_192x320_A_DDPF",
+            "right": {
+                "x": 0.238356,
+                "y": 0,
+                "z": 1.07899
+            },
+            "up": {
+                "x": 0,
+                "y": 1.105,
+                "z": 0
+            },
+            "front": {
+                "x": -1.07899,
+                "y": 0,
+                "z": 0.238356
+            },
+            "position": {
+                "x": 188.438,
+                "y": 125.469,
+                "z": -74.8857
+            },
+            "id": "Team_2_basegeo/BarrierConcreteWall_01_192x320_A_DDPF"
+        },
+        {
+            "name": "SemiTruckTrailer_01",
+            "type": "SemiTruckTrailer_01",
+            "right": {
+                "x": -0.830839,
+                "y": -3.72529e-09,
+                "z": -0.556513
+            },
+            "up": {
+                "x": -0.0399152,
+                "y": 0.997425,
+                "z": 0.0595909
+            },
+            "front": {
+                "x": 0.55508,
+                "y": 0.0717238,
+                "z": -0.828699
+            },
+            "position": {
+                "x": 128.255,
+                "y": 121.842,
+                "z": 8.21019
+            },
+            "id": "SemiTruckTrailer_01"
+        },
+        {
+            "name": "WalkwayStair_128x192",
+            "type": "WalkwayStair_128x192",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 0,
+                "z": 1
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -1,
+                "y": 0,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": -275.055,
+                "y": 137.023,
+                "z": -97.011
+            },
+            "id": "Team_1_basegeo/WalkwayStair_128x192"
+        },
+        {
+            "name": "WalkwayStair_128x193",
+            "type": "WalkwayStair_128x192",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 0,
+                "z": 1
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -1,
+                "y": 0,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": -277.745,
+                "y": 135.247,
+                "z": -97.011
+            },
+            "id": "Team_1_basegeo/WalkwayStair_128x193"
+        },
+        {
+            "name": "WalkwayStair_128x194",
+            "type": "WalkwayStair_128x192",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 0,
+                "z": 1
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -1,
+                "y": 0,
+                "z": -4.37114e-08
+            },
+            "position": {
+                "x": -279.95,
+                "y": 133.781,
+                "z": -97.0078
+            },
+            "id": "Team_1_basegeo/WalkwayStair_128x194"
+        },
+        {
+            "name": "Container_02_Open_A_Sand",
+            "type": "Container_02_Open_A_Sand",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -259.086,
+                "y": 134.072,
+                "z": -97.5508
+            },
+            "id": "Team_1_basegeo/Container_02_Open_A_Sand"
+        },
+        {
+            "name": "Container_02_Open_B",
+            "type": "Container_02_Open_B",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -258.946,
+                "y": 136.662,
+                "z": -97.397
+            },
+            "id": "Team_1_basegeo/Container_02_Open_B"
+        },
+        {
+            "name": "Container_02_Closed_DD_ProxyRadiosity",
+            "type": "Container_02_Closed_DD_ProxyRadiosity",
+            "right": {
+                "x": 0.998008,
+                "y": 0,
+                "z": 0.0630866
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.0630866,
+                "y": 0,
+                "z": 0.998008
+            },
+            "position": {
+                "x": -258.576,
+                "y": 139.256,
+                "z": -97.3062
+            },
+            "id": "Team_1_basegeo/Container_02_Closed_DD_ProxyRadiosity"
+        },
+        {
+            "name": "Container_02_Closed",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": 0.225682,
+                "y": 0,
+                "z": 0.974201
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.974201,
+                "y": 0,
+                "z": 0.225682
+            },
+            "position": {
+                "x": -257.942,
+                "y": 134.194,
+                "z": -89.7797
+            },
+            "id": "Team_1_basegeo/Container_02_Closed"
+        },
+        {
+            "name": "Container_02_Open_C",
+            "type": "Container_02_Open_C",
+            "right": {
+                "x": -0.0259501,
+                "y": 0,
+                "z": 0.999663
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999663,
+                "y": 0,
+                "z": -0.0259501
+            },
+            "position": {
+                "x": -257.632,
+                "y": 136.754,
+                "z": -89.459
+            },
+            "id": "Team_1_basegeo/Container_02_Open_C"
+        },
+        {
+            "name": "Container_02_Open_E",
+            "type": "Container_02_Open_E",
+            "right": {
+                "x": -0.00649254,
+                "y": 0,
+                "z": 0.999979
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999979,
+                "y": 0,
+                "z": -0.00649254
+            },
+            "position": {
+                "x": -257.298,
+                "y": 139.344,
+                "z": -89.7536
+            },
+            "id": "Team_1_basegeo/Container_02_Open_E"
+        },
+        {
+            "name": "Container_02_Closed2",
+            "type": "Container_02_Closed",
+            "right": {
+                "x": 0.0523534,
+                "y": 0,
+                "z": 0.998629
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.998629,
+                "y": 0,
+                "z": 0.0523534
+            },
+            "position": {
+                "x": -257.373,
+                "y": 141.935,
+                "z": -89.5949
+            },
+            "id": "Team_1_basegeo/Container_02_Closed2"
+        },
+        {
+            "name": "Container_02_Closed_DD_ProxyRadiosity2",
+            "type": "Container_02_Closed_DD_ProxyRadiosity",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -258.715,
+                "y": 141.819,
+                "z": -97.1162
+            },
+            "id": "Team_1_basegeo/Container_02_Closed_DD_ProxyRadiosity2"
+        },
+        {
+            "name": "Container_02_Closed_DD_ProxyRadiosity3",
+            "type": "Container_02_Closed_DD_ProxyRadiosity",
+            "right": {
+                "x": 0.998008,
+                "y": 0,
+                "z": 0.0630866
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.0630866,
+                "y": 0,
+                "z": 0.998008
+            },
+            "position": {
+                "x": -256.232,
+                "y": 133.948,
+                "z": -97.3062
+            },
+            "id": "Team_1_basegeo/Container_02_Closed_DD_ProxyRadiosity3"
+        },
+        {
+            "name": "Container_02_Closed_DD_ProxyRadiosity4",
+            "type": "Container_02_Closed_DD_ProxyRadiosity",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -256.37,
+                "y": 136.51,
+                "z": -97.1162
+            },
+            "id": "Team_1_basegeo/Container_02_Closed_DD_ProxyRadiosity4"
+        },
+        {
+            "name": "StairsRefinery_02_B",
+            "type": "StairsRefinery_02_B",
+            "right": {
+                "x": 0.999923,
+                "y": 0.000382354,
+                "z": 0.0124119
+            },
+            "up": {
+                "x": -0.00057133,
+                "y": 0.999884,
+                "z": 0.0152254
+            },
+            "front": {
+                "x": -0.0124046,
+                "y": -0.0152313,
+                "z": 0.999807
+            },
+            "position": {
+                "x": -256.5,
+                "y": 131.415,
+                "z": -120.287
+            },
+            "id": "Team_1_basegeo/StairsRefinery_02_B"
+        },
+        {
+            "name": "StairsRefinery_01_A_312x256x144",
+            "type": "StairsRefinery_01_A_312x256x144",
+            "right": {
+                "x": 0.0040142,
+                "y": 0,
+                "z": 0.999992
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": -0.999992,
+                "y": 0,
+                "z": 0.0040142
+            },
+            "position": {
+                "x": -255.869,
+                "y": 141.851,
+                "z": -119.236
+            },
+            "id": "Team_1_basegeo/StairsRefinery_01_A_312x256x144"
+        },
+        {
+            "name": "BeamRefinery_01_B_32x32x512",
+            "type": "BeamRefinery_01_B_32x32x512",
+            "right": {
+                "x": 1.88738e-15,
+                "y": 1,
+                "z": 4.37114e-08
+            },
+            "up": {
+                "x": 0.0320737,
+                "y": -4.36889e-08,
+                "z": 0.999485
+            },
+            "front": {
+                "x": 0.999485,
+                "y": 1.40198e-09,
+                "z": -0.0320737
+            },
+            "position": {
+                "x": -264.195,
+                "y": 138.932,
+                "z": -95.3153
+            },
+            "id": "Team_1_basegeo/BeamRefinery_01_B_32x32x512"
+        },
+        {
+            "name": "BeamRefinery_01_B_32x32x513",
+            "type": "BeamRefinery_01_B_32x32x512",
+            "right": {
+                "x": 1.88738e-15,
+                "y": 1,
+                "z": 4.37114e-08
+            },
+            "up": {
+                "x": 0.0320737,
+                "y": -4.36889e-08,
+                "z": 0.999485
+            },
+            "front": {
+                "x": 0.999485,
+                "y": 1.40198e-09,
+                "z": -0.0320737
+            },
+            "position": {
+                "x": -264.344,
+                "y": 138.932,
+                "z": -99.9534
+            },
+            "id": "Team_1_basegeo/BeamRefinery_01_B_32x32x513"
+        },
+        {
+            "name": "BeamRefinery_01_B_32x32x514",
+            "type": "BeamRefinery_01_B_32x32x512",
+            "right": {
+                "x": 3.55271e-15,
+                "y": 1,
+                "z": 4.37114e-08
+            },
+            "up": {
+                "x": 0.999485,
+                "y": 1.40198e-09,
+                "z": -0.0320737
+            },
+            "front": {
+                "x": -0.0320737,
+                "y": 4.36889e-08,
+                "z": -0.999485
+            },
+            "position": {
+                "x": -264.324,
+                "y": 138.932,
+                "z": -95.644
+            },
+            "id": "Team_1_basegeo/BeamRefinery_01_B_32x32x514"
+        },
+        {
+            "name": "BeamRefinery_01_B_32x32x515",
+            "type": "BeamRefinery_01_B_32x32x512",
+            "right": {
+                "x": 3.55271e-15,
+                "y": 1,
+                "z": 4.37114e-08
+            },
+            "up": {
+                "x": 0.999485,
+                "y": 1.40198e-09,
+                "z": -0.0320737
+            },
+            "front": {
+                "x": -0.0320737,
+                "y": 4.36889e-08,
+                "z": -0.999485
+            },
+            "position": {
+                "x": -269.164,
+                "y": 138.932,
+                "z": -95.4887
+            },
+            "id": "Team_1_basegeo/BeamRefinery_01_B_32x32x515"
+        },
+        {
+            "name": "WalkwayPlatform_128x128",
+            "type": "WalkwayPlatform_128x128",
+            "right": {
+                "x": 0.999472,
+                "y": 0,
+                "z": -0.0324923
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0.0324923,
+                "y": 0,
+                "z": 0.999472
+            },
+            "position": {
+                "x": -264.836,
+                "y": 138.97,
+                "z": -95.0188
+            },
+            "id": "Team_1_basegeo/WalkwayPlatform_128x128"
+        },
+        {
+            "name": "RefineryConstructionPlatform_01_576x1376",
+            "type": "RefineryConstructionPlatform_01_576x1376",
+            "right": {
+                "x": -4.37114e-08,
+                "y": 1,
+                "z": 0
+            },
+            "up": {
+                "x": -1,
+                "y": -4.37114e-08,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": -259.577,
+                "y": 136.533,
+                "z": -100.647
+            },
+            "id": "Team_1_basegeo/RefineryConstructionPlatform_01_576x1376"
+        }
+    ],
+    "Static": [
+        {
+            "name": "MP_FireStorm_Terrain",
+            "type": "MP_FireStorm_Terrain",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "id": "Static/MP_FireStorm_Terrain"
+        },
+        {
+            "name": "MP_FireStorm_Assets",
+            "type": "MP_FireStorm_Assets",
+            "right": {
+                "x": 1,
+                "y": 0,
+                "z": 0
+            },
+            "up": {
+                "x": 0,
+                "y": 1,
+                "z": 0
+            },
+            "front": {
+                "x": 0,
+                "y": 0,
+                "z": 1
+            },
+            "position": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "id": "Static/MP_FireStorm_Assets"
+        }
+    ]
+}

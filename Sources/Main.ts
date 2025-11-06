@@ -172,26 +172,31 @@ export async function OnGameModeStarted() {
     // Load game mode configuration
     // let config = FourTeamCTFConfig;
     // LoadGameModeConfig(config);
+    let gameModeID = -1;
     let activeConfig: GameModeConfig | undefined = undefined;
     for(let [configID, config] of DEFAULT_GAMEMODES){
         let gameModeConfigObj = mod.GetSpatialObject(configID);
         let gameModeExistsFallbackPos = mod.GetObjectPosition(gameModeConfigObj);
+        // Make sure the gameconfig object actually exists.
+        // If the game mode config object has a zero vector, it doesn't exist
         let isAtOrigin = AreVectorsEqual(gameModeExistsFallbackPos, ZERO_VEC, 0.1);
         if(DEBUG_MODE)
             console.log(`currentModeId: ${configID}, gameModeConfigObj: ${gameModeConfigObj}, is at origin: ${isAtOrigin}, position: ${VectorToString(gameModeExistsFallbackPos)}`);
         
-        // Make sure the gameconfig object actual exists.
-        // If the game mode config object has a zero vector, it doesn't exist
         if(gameModeConfigObj && !isAtOrigin){
             // Look up config from the map
+            gameModeID = configID;
             activeConfig = config
-            if(activeConfig){
+            if(gameModeID > -1){
                 console.log(`Found game mode with id ${configID}`);
+                mod.SendErrorReport(mod.Message(mod.stringkeys.found_gamemode_id, gameModeID));
             }
+            break;
         }
     }
     
     if(activeConfig){
+        mod.SendErrorReport(mod.Message(mod.stringkeys.loading_gamemode_id, gameModeID));
         LoadGameModeConfig(activeConfig);
     } else {
         LoadGameModeConfig(ClassicCTFConfig);
@@ -503,6 +508,7 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
             mod.ForcePlayerToSeat(player, vehicle, i);
             forcedToSeat = true;
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
             if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
             return;
         }
@@ -512,10 +518,11 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
         mod.ForcePlayerToSeat(player, vehicle, lastSeat);
         forcedToSeat = true;
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
         if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${lastSeat}`);
         return;
     }
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(forcedToSeat ? mod.stringkeys.forced_to_seat : mod.stringkeys.no_passenger_seats), player);
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
 
     // No passenger seats available, force exit
     mod.ForcePlayerExitVehicle(player, vehicle);

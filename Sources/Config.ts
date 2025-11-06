@@ -65,7 +65,7 @@
 // This file contains all configuration constants that need to be loaded before other modules
 //==============================================================================================
 
-const VERSION = [2, 2, 0];
+const VERSION = [2, 3, 0];
 
 const DEBUG_MODE = false;                                            // Print extra debug messages
 

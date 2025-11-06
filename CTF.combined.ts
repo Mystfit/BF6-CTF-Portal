@@ -1,6 +1,5 @@
 ﻿
 
-try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof Error) console.log(`Script line offset: ${error.stack}`);};
 /* 
  * Capture the Flag Game Mode
  * 
@@ -63,14 +62,12 @@ try{throw Error("Line offset check");} catch(error: unknown){if(error instanceof
  * Then call LoadGameModeConfig(config) to apply it.
  */
 
-//@ts-ignore
-import * as modlib from 'modlib';
-
-const VERSION = [2, 0, 0];
-
 //==============================================================================================
-// CONFIGURATION
+// CONFIGURATION CONSTANTS
+// This file contains all configuration constants that need to be loaded before other modules
 //==============================================================================================
+
+const VERSION = [2, 3, 0];
 
 const DEBUG_MODE = false;                                            // Print extra debug messages
 
@@ -84,7 +81,7 @@ const FLAG_AUTO_RETURN_TIME = 30;                                   // Seconds b
 // Flag carrier settings
 const CARRIER_FORCED_WEAPON = mod.Gadgets.Melee_Sledgehammer;       // Weapon to automatically give to a flag carrier when a flag is picked up
 const CARRIER_FORCED_WEAPON_SLOT = mod.InventorySlots.MeleeWeapon;  // Force flag carrier to swap to this slot on flag pickup, swapping will drop flag
-const CARRIER_CAN_HOLD_MULTIPLE_FLAGS = true;                       // Let the flag carrier pick up multiple flags at once
+const CARRIER_CAN_HOLD_MULTIPLE_FLAGS = false;                       // Let the flag carrier pick up multiple flags at once
 
 // Team balance
 const TEAM_AUTO_BALANCE: boolean = true;                            // Make sure teams are evenly balanced 
@@ -92,7 +89,7 @@ const TEAM_BALANCE_DELAY = 5.0;                                     // Seconds t
 const TEAM_BALANCE_CHECK_INTERVAL = 10;                             // Check balance every N seconds
 
 // Vehicles
-const VEHICLE_BLOCK_CARRIER_DRIVING: boolean = false;
+const VEHICLE_BLOCK_CARRIER_DRIVING: boolean = true;
 
 
 //==============================================================================================
@@ -135,6 +132,9 @@ const VEHICLE_FIRST_PASSENGER_SEAT = 1;                             // First pas
 const TICK_RATE = 0.032;                                            // ~30fps update rate for carrier position updates (portal server tickrate)
 
 
+//@ts-ignore
+import * as modlib from 'modlib';
+
 //==============================================================================================
 // CONSTANTS - Team and object IDs (you probably won't need to modify these)
 //==============================================================================================
@@ -170,7 +170,6 @@ const DEFAULT_TEAM_VO_FLAGS = new Map<number, mod.VoiceOverFlags | undefined>([
     [TeamID.TEAM_6, mod.VoiceOverFlags.Foxtrot],
     [TeamID.TEAM_7, mod.VoiceOverFlags.Golf]
 ]);
-
 
 const enum FlagIdOffsets{
     FLAG_INTERACT_ID_OFFSET = 1,
@@ -218,13 +217,82 @@ let captureZones: Map<number, CaptureZone> = new Map();
 
 
 //==============================================================================================
+// UI HIERARCHY INITIALIZATION
+//==============================================================================================
+
+/**
+ * Position a team HUD below the global HUD
+ * @param teamId The team ID to position the HUD for
+ */
+function PositionTeamHUD(teamId: number): void {
+    // Get global HUD position and size
+    let globalHUD = GlobalScoreboardHUD.getInstance().getHUD();
+    if (!globalHUD?.rootWidget) return;
+
+    let globalHUDPos = mod.GetUIWidgetPosition(globalHUD.rootWidget);
+    let globalHUDSize = mod.GetUIWidgetSize(globalHUD.rootWidget);
+
+    // Get team HUD instance
+    let teamHUD = TeamScoreboardHUD.getInstance(teamId);
+    if (!teamHUD?.rootWidget) return;
+
+    // Calculate offset position below global HUD
+    let teamHUDPos = mod.GetUIWidgetPosition(teamHUD.rootWidget);
+    let offsetBarY = mod.YComponentOf(globalHUDPos) + mod.YComponentOf(globalHUDSize) + 10;
+
+    // Apply position
+    mod.SetUIWidgetPosition(
+        teamHUD.rootWidget,
+        mod.CreateVector(mod.XComponentOf(teamHUDPos), offsetBarY, 0)
+    );
+
+    if (DEBUG_MODE) {
+        console.log(`Positioned team ${teamId} HUD at Y offset: ${offsetBarY}`);
+    }
+}
+
+/**
+ * Initialize the three-tier UI hierarchy:
+ * 1. Global HUD (visible to all players)
+ * 2. Team HUDs (visible to players on each team)
+ * 3. Player HUDs (visible only to specific player) - created in JSPlayer.initUI()
+ */
+function InitializeUIHierarchy(): void {
+    // 1. Create Global HUD (one instance for the entire game)
+    const globalHUD = GlobalScoreboardHUD.getInstance();   
+    if (currentHUDClass) {
+        globalHUD.createGlobalHUD(currentHUDClass);
+        if (DEBUG_MODE) {
+            console.log(`InitializeUIHierarchy: Created global HUD with ${currentHUDClass.name}`);
+        }
+    }
+
+    // 2. Create Team HUDs (one per team, not including neutral team)
+    for (const [teamId, team] of teams.entries()) {
+        if (teamId === 0) continue; // Skip neutral team
+
+        TeamScoreboardHUD.create(team);
+        PositionTeamHUD(teamId);
+
+        if (DEBUG_MODE) {
+            console.log(`InitializeUIHierarchy: Created team HUD for team ${teamId}`);
+        }
+    }
+
+    // 3. Player HUDs are created individually in JSPlayer.initUI() when players spawn
+    if (DEBUG_MODE) {
+        console.log(`InitializeUIHierarchy: UI hierarchy initialized (Global + ${teams.size - 1} team HUDs)`);
+    }
+}
+
+//==============================================================================================
 // MAIN GAME LOOP
 //==============================================================================================
 
-export function OnGameModeStarted() {
+export async function OnGameModeStarted() {
     console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
-    if(DEBUG_MODE)
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_author));
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
 
     // Initialize legacy team references (still needed for backwards compatibility)
     teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
@@ -233,37 +301,41 @@ export function OnGameModeStarted() {
     team3 = mod.GetTeam(TeamID.TEAM_3);
     team4 = mod.GetTeam(TeamID.TEAM_4);
 
-    //await mod.Wait(1);
+    await mod.Wait(1);
 
     // Load game mode configuration
     // let config = FourTeamCTFConfig;
     // LoadGameModeConfig(config);
-    let foundMode = false;
-    let currentModeId = 200;
-    while(!foundMode && currentModeId <= 201){
-        let config: GameModeConfig | undefined = undefined;
-        let gameModeConfigObj = mod.GetSpatialObject(currentModeId);
-        if(gameModeConfigObj){
-            let gameModeConfigId = mod.GetObjId(gameModeConfigObj);
-            console.log(`currentModeId: ${currentModeId}, gameModeConfigObj: ${gameModeConfigObj}, gameModeConfigId: ${gameModeConfigId}`);
-            if(gameModeConfigId == 200){
-                config = ClassicCTFConfig;
-                foundMode = true;
-                console.log(`Found 2team with id ${gameModeConfigId}`);
-
-            } else if(gameModeConfigId == 201){
-                config = FourTeamCTFConfig;
-                foundMode = true;
-                console.log(`Found 4team with id ${gameModeConfigId}`);
-            }
-        }
+    let gameModeID = -1;
+    let activeConfig: GameModeConfig | undefined = undefined;
+    for(let [configID, config] of DEFAULT_GAMEMODES){
+        let gameModeConfigObj = mod.GetSpatialObject(configID);
+        let gameModeExistsFallbackPos = mod.GetObjectPosition(gameModeConfigObj);
+        // Make sure the gameconfig object actually exists.
+        // If the game mode config object has a zero vector, it doesn't exist
+        let isAtOrigin = AreVectorsEqual(gameModeExistsFallbackPos, ZERO_VEC, 0.1);
+        if(DEBUG_MODE)
+            console.log(`currentModeId: ${configID}, gameModeConfigObj: ${gameModeConfigObj}, is at origin: ${isAtOrigin}, position: ${VectorToString(gameModeExistsFallbackPos)}`);
         
-        if(config){
-            LoadGameModeConfig(config);
+        if(gameModeConfigObj && !isAtOrigin){
+            // Look up config from the map
+            gameModeID = configID;
+            activeConfig = config
+            if(gameModeID > -1){
+                console.log(`Found game mode with id ${configID}`);
+                mod.SendErrorReport(mod.Message(mod.stringkeys.found_gamemode_id, gameModeID));
+            }
             break;
         }
-
-        currentModeId += 1;
+    }
+    
+    if(activeConfig){
+        mod.SendErrorReport(mod.Message(mod.stringkeys.loading_gamemode_id, gameModeID));
+        LoadGameModeConfig(activeConfig);
+    } else {
+        LoadGameModeConfig(ClassicCTFConfig);
+        console.log("Could not find a gamemode. Falling back to classic 2-team CTF");
+        return;
     }
 
     // Set up initial player scores using JSPlayer
@@ -278,13 +350,19 @@ export function OnGameModeStarted() {
 
     // Start game
     gameStarted = true;
-    
+
+    // Initialize UI hierarchy based on scope
+    InitializeUIHierarchy();
+
     // Start update loops
     TickUpdate();
     SecondUpdate();
-    
-    console.log("CTF: Game initialized and started");
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_initialized));
+
+    if(DEBUG_MODE){
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_initialized));
+        console.log("CTF: Game initialized and started");
+    }
+
 
     RefreshScoreboard();
 }
@@ -296,13 +374,19 @@ async function TickUpdate(): Promise<void> {
         let currentTime = GetCurrentTime();
         let timeDelta = currentTime - lastTickTime;
         // console.log(`Fast tick delta ${timeDelta}`);
-        
+
         // Update all flag carrier positions
         for (const [flagId, flag] of flags.entries()) {
             flag.FastUpdate(timeDelta);
         }
-        
-        // Update all players UI instances
+
+        // Refresh UI hierarchy:
+        // 1. Global HUD (scores, timer, flags)
+        GlobalScoreboardHUD.getInstance().refresh();
+
+        // 2. Team HUDs (team orders) - refresh on events, not in tick loop
+
+        // 3. Player HUDs (player-specific team orders)
         JSPlayer.getAllAsArray().forEach(jsPlayer => {
             jsPlayer.scoreboardUI?.refresh();
         });
@@ -345,11 +429,49 @@ async function SecondUpdate(): Promise<void> {
 // EVENT HANDLERS
 //==============================================================================================
 
+async function FixTeamScopedUIVisibility(player: mod.Player): Promise<void> {
+    // WORKAROUND: Fix for team-scoped UI visibility bug
+    // Tear down and rebuild the team UI for the player's team
+    // This ensures team-scoped UIs become visible to the newly joined player
+
+    const playerTeam = mod.GetTeam(player);
+    const playerTeamId = mod.GetObjId(playerTeam);
+
+    // Skip neutral team
+    if (playerTeamId === 0) return;
+
+    if (DEBUG_MODE) {
+        console.log(`Rebuilding team UI for team ${playerTeamId} (player ${mod.GetObjId(player)} joined)`);
+    }
+
+    // Step 1: Destroy the existing team UI
+    const existingHUD = TeamScoreboardHUD.getInstance(playerTeamId);
+    if (existingHUD) {
+        existingHUD.close();
+    }
+
+    // Step 2: Wait a frame for cleanup to complete
+    //await mod.Wait(0);
+
+    // Step 3: Recreate the team UI
+    TeamScoreboardHUD.create(playerTeam);
+
+    // Step 4: Reposition using shared function
+    PositionTeamHUD(playerTeamId);
+
+    if (DEBUG_MODE) {
+        console.log(`Team UI rebuilt successfully for team ${playerTeamId}`);
+    }
+}
+
 export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
     if (DEBUG_MODE) {
         console.log(`Player joined: ${mod.GetObjId(eventPlayer)}`);
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
     }
+
+    // Apply UI visibility fix
+    FixTeamScopedUIVisibility(eventPlayer);
 
     // Refresh scoreboard to update new player team entry and score
     RefreshScoreboard();
@@ -398,7 +520,8 @@ export function OnPlayerDied(
     eventWeaponUnlock: mod.WeaponUnlock
 ): void {
     // If player was carrying a flag, drop it
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
     
     // Increment flag carrier kill score
     let killer = JSPlayer.get(eventOtherPlayer);
@@ -472,15 +595,14 @@ export function OnPlayerEnterVehicle(
     eventPlayer: mod.Player,
     eventVehicle: mod.Vehicle
 ): void {
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_player_enter_vehicle));
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_player_enter_vehicle));
 
     // Check if player is carrying a flag
     if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {
         if (DEBUG_MODE) {
             console.log("Flag carrier entered vehicle");
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.carrier_enter_vehicle));
         }
-
         ForceToPassengerSeat(eventPlayer, eventVehicle);
     }
 }
@@ -494,7 +616,6 @@ export function OnPlayerEnterVehicleSeat(
     if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {      
         if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
             if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat))
             ForceToPassengerSeat(eventPlayer, eventVehicle);
         }
     }
@@ -512,13 +633,16 @@ export function OnGameModeEnding(): void {
 //==============================================================================================
 
 function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
-    const seatCount = mod.GetVehicleSeatCount(vehicle);
-    
+
     // Try to find an empty passenger seat
+    const seatCount = mod.GetVehicleSeatCount(vehicle);
+    let forcedToSeat = false;
     let lastSeat = seatCount - 1;
     for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
             mod.ForcePlayerToSeat(player, vehicle, i);
+            forcedToSeat = true;
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
             if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
             return;
         }
@@ -527,10 +651,13 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     // Try last seat as fallback
     if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
         mod.ForcePlayerToSeat(player, vehicle, lastSeat);
+        forcedToSeat = true;
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
         if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${lastSeat}`);
         return;
     }
-    
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
+
     // No passenger seats available, force exit
     mod.ForcePlayerExitVehicle(player, vehicle);
     if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
@@ -872,6 +999,13 @@ function VectorClampToRange(vector: mod.Vector, min:number, max:number): mod.Vec
 function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean
 {
     return Math.abs(a - b) < (epsilon ?? 1e-9);
+}
+
+function AreVectorsEqual(a: mod.Vector, b: mod.Vector, epsilon?: number): boolean
+{
+    return AreFloatsEqual(mod.XComponentOf(a), mod.XComponentOf(b), epsilon) &&
+        AreFloatsEqual(mod.YComponentOf(a), mod.YComponentOf(b), epsilon) &&
+        AreFloatsEqual(mod.ZComponentOf(a), mod.ZComponentOf(b), epsilon);
 }
 
 
@@ -2613,12 +2747,12 @@ class JSPlayer {
     }
 
     initUI(): void {
-        // Create scoreboard UI for human players
+        // Create PLAYER-SCOPED scoreboard UI for human players
+        // Global and team-scoped UIs are created in InitializeUIHierarchy()
         if(!this.scoreboardUI){
             if (!mod.GetSoldierState(this.player, mod.SoldierStateBool.IsAISoldier)) {
-                if (currentHUDClass) {
-                    this.scoreboardUI = new currentHUDClass(this.player);
-                }
+                // Create player-specific HUD (TeamOrdersBar)
+                this.scoreboardUI = new PlayerScoreboardHUD(this.player);
             }
         }
     }
@@ -2785,13 +2919,15 @@ function EndGameByScore(winningTeamId: number): void {
     const teamName = winningTeamId === 1 ? "Blue" : "Red";
     
     console.log(`Game ended - Team ${winningTeamId} wins by score`);
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_score, winningTeamId))
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_score, winningTeamId))
     mod.EndGameMode(winningTeam);    
 }
 
 function EndGameByTime(): void {
     gameStarted = false;
-    // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_time));
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.game_ended_time));
     console.log(`Game ended by time limit`);
     
     // Determine winner by score
@@ -3049,9 +3185,10 @@ class Flag {
             }
             return;
         }
-
+        
         if(!CARRIER_CAN_HOLD_MULTIPLE_FLAGS && IsCarryingAnyFlag(player)){
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_already_holding_flag));
+            if(DEBUG_MODE)
+                mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_already_holding_flag));
             return;
         }
 
@@ -3122,7 +3259,8 @@ class Flag {
         
         // Notify all players
         const message = mod.Message(mod.stringkeys.team_flag_taken, GetTeamName(this.team));
-        mod.DisplayHighlightedWorldLogMessage(message);
+        if(DEBUG_MODE)
+            mod.DisplayHighlightedWorldLogMessage(message);
 
         // Remove roaming flag interaction point
         if(this.flagInteractionPoint){
@@ -3331,9 +3469,6 @@ class Flag {
             mod.EnableVFX(this.flagImpactVFX, true);
         }
 
-        // Update the position of the flag interaction point
-        this.UpdateFlagInteractionPoint();
-
         // Update capture icons for all opposing teams
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2,0));
         for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
@@ -3365,7 +3500,9 @@ class Flag {
                 mod.MoveVFX(this.flagSparksVFX, this.currentPosition, ZERO_VEC);
                 mod.EnableVFX(this.flagSparksVFX, true);
             }
-                
+
+            // Update the position of the flag interaction point
+            this.UpdateFlagInteractionPoint();   
             
             console.log("Flag pickup delay complete");
         });
@@ -3388,9 +3525,9 @@ class Flag {
         if (DEBUG_MODE) {
             console.log(`Flag dropped`);
             mod.DisplayHighlightedWorldLogMessage(
-                mod.Message(mod.stringkeys.flag_dropped, GetTeamName(this.team))
-            );
+            mod.Message(mod.stringkeys.flag_dropped, GetTeamName(this.team)));
         }
+
     }
 
     UpdateFlagInteractionPoint(){
@@ -3463,7 +3600,8 @@ class Flag {
     }
 
     ReturnFlag(): void {
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
+        if(DEBUG_MODE)
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
         this.PlayFlagReturnedSFX();
         
         // Emit flag returned event (before reset)
@@ -3834,10 +3972,15 @@ function HandleFlagInteraction(
         }
     }
     // Own team trying to return dropped flag
-    else if (playerTeamId === flag.teamId && flag.isDropped) {
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
-        flag.PlayFlagReturnedSFX();
-        flag.ReturnFlag();
+    else if (playerTeamId === flag.teamId){
+        if(flag.isDropped){
+            if(DEBUG_MODE)
+                mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned, GetTeamName(flag.team)));
+            flag.PlayFlagReturnedSFX();
+            flag.ReturnFlag();
+        } else if(flag.isAtHome) {
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.flag_friendly_at_home), player);
+        }
     }
 }
 
@@ -4024,10 +4167,12 @@ class CaptureZone {
             // Check if own flag is at home (get player's team flag)
             const ownFlag = flags.get(playerTeamId);
             if (ownFlag && !ownFlag.isAtHome) {
-                mod.DisplayHighlightedWorldLogMessage(
-                    mod.Message(mod.stringkeys.waiting_for_flag_return),
-                    player
-                );
+                if(DEBUG_MODE){
+                    mod.DisplayHighlightedWorldLogMessage(
+                        mod.Message(mod.stringkeys.waiting_for_flag_return),
+                        player
+                    );
+                }
                 return;
             }
         
@@ -4365,7 +4510,31 @@ abstract class TickerWidget {
     StopThrob(): void {
         this.isPulsing = false;
     }
-    
+
+    /**
+     * Destroy all UI widgets created by this ticker
+     * Should be called before discarding the ticker instance
+     */
+    public destroy(): void {
+        // Delete all bracket widgets
+        if (this.leftBracketTop) mod.DeleteUIWidget(this.leftBracketTop);
+        if (this.leftBracketSide) mod.DeleteUIWidget(this.leftBracketSide);
+        if (this.leftBracketBottom) mod.DeleteUIWidget(this.leftBracketBottom);
+        if (this.rightBracketTop) mod.DeleteUIWidget(this.rightBracketTop);
+        if (this.rightBracketSide) mod.DeleteUIWidget(this.rightBracketSide);
+        if (this.rightBracketBottom) mod.DeleteUIWidget(this.rightBracketBottom);
+
+        // Delete progress bar
+        if (this.progressBarContainer) mod.DeleteUIWidget(this.progressBarContainer);
+
+        // Delete text widget
+        if (this.textWidget) mod.DeleteUIWidget(this.textWidget);
+
+        // Delete outline and main container
+        if (this.columnWidgetOutline) mod.DeleteUIWidget(this.columnWidgetOutline);
+        if (this.columnWidget) mod.DeleteUIWidget(this.columnWidget);
+    }
+
     /**
      * Refresh the widget - should be implemented by subclasses
      */
@@ -4475,6 +4644,13 @@ class ScoreTicker extends TickerWidget {
      */
     public refresh(): void {
         this.updateScore();
+    }
+
+    /**
+     * Destroy all UI widgets created by this score ticker
+     */
+    public destroy(): void {
+        super.destroy();
     }
 }
 
@@ -4590,6 +4766,19 @@ class RoundTimer extends TickerWidget {
      */
     public refresh(): void {
         this.updateTime();
+    }
+
+    /**
+     * Destroy all UI widgets created by this timer
+     */
+    public destroy(): void {
+        // Delete timer-specific widgets
+        if (this.secondsText) mod.DeleteUIWidget(this.secondsText);
+        if (this.minutesText) mod.DeleteUIWidget(this.minutesText);
+        if (this.seperatorText) mod.DeleteUIWidget(this.seperatorText);
+
+        // Call parent destroy for base ticker widgets
+        super.destroy();
     }
 }
 
@@ -4976,428 +5165,6 @@ class FlagBar {
         this.team1FlagIcon.Destroy();
         this.team2FlagIcon.Destroy();
         mod.DeleteUIWidget(this.rootContainer);
-    }
-}
-
-
-//==============================================================================================
-// MULTI 2+ TEAM CTF HUD
-//==============================================================================================
-
-/**
- * Get the text representation of a flag's current status
- * @param flag The flag to get status for
- * @returns Status message: "(  )" for home, "<  >" for carried, "[  ]" for dropped
- */
-function BuildFlagStatus(flag: Flag): mod.Message {
-    if (flag.isAtHome) return mod.Message(mod.stringkeys.scoreUI_flag_status_home);
-    if (flag.isBeingCarried) return mod.Message(mod.stringkeys.scoreUI_flag_status_carried);
-    if (flag.isDropped) return mod.Message(mod.stringkeys.scoreUI_flag_status_dropped);
-    return mod.Message(mod.stringkeys.scoreUI_flag_status_home); // Default to home
-}
-
-/**
- * TeamColumnWidget - Displays a single team's score and flag status
- * Encapsulates the score ticker and flag icon
- */
-class TeamColumnWidget {
-    readonly teamId: number;
-    readonly team: mod.Team;
-    readonly isPlayerTeam: boolean;
-    readonly scoreTicker: ScoreTicker;
-    readonly flagIcon: FlagIcon;
-    readonly verticalPadding:number = 8;
-    
-    constructor(team: mod.Team, position: number[], size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
-        this.team = team;
-        this.teamId = mod.GetObjId(team);
-        this.isPlayerTeam = isPlayerTeam;
-        
-        // Create score ticker with bracket indicators
-        this.scoreTicker = new ScoreTicker({
-            team: team,
-            position: position,
-            size: size,
-            parent: parent,
-            textSize: 28,
-            bracketTopBottomLength: 10,
-            bracketThickness: 3
-        });
-
-        // Create flag icon below the score ticker
-        let flagIconConfig: FlagIconParams = {
-            name: `FlagHomeIcon_Team${this.teamId}`,
-            parent: parent,
-            position: mod.CreateVector(position[0], position[1] + size[1] + this.verticalPadding, 0),
-            size: mod.CreateVector(35, 35, 0),
-            anchor: mod.UIAnchor.TopCenter,
-            fillColor:  GetTeamColorById(this.teamId),
-            fillAlpha: 1,
-            outlineColor: GetTeamColorById(this.teamId),
-            outlineAlpha: 1,
-            showFill: true,
-            showOutline: true,
-            bgFill: mod.UIBgFill.Solid,
-            outlineThickness: 0
-        };
-        this.flagIcon = new FlagIcon(flagIconConfig);
-    }
-    
-    /**
-     * Update the team's score and flag status display
-     */
-    update(): void {
-        // Update score ticker
-        this.scoreTicker.updateScore();
-
-        // Get flag status for this team
-        const flag = flags.get(this.teamId);
-        if(flag){
-            const flagStatus = BuildFlagStatus(flag);
-            
-            // TODO: Ugly hack. This needs to be event triggered, not changed in update
-            if(flag.isAtHome){
-                this.flagIcon.SetVisible(true);
-                this.flagIcon.SetFillAlpha(1);
-                this.flagIcon.SetOutlineAlpha(1);
-            } else if(flag.isBeingCarried){
-                this.flagIcon.SetVisible(false);
-            } else if(flag.isDropped){
-                this.flagIcon.SetVisible(true);
-                this.flagIcon.SetFillAlpha(0.15);
-                this.flagIcon.SetOutlineAlpha(0.75);
-            }
-        }
-    }
-    
-    /**
-     * Set whether this team is currently in the lead
-     */
-    setLeading(isLeading: boolean): void {
-        this.scoreTicker.setLeading(isLeading);
-    }
-}
-
-/**
- * ScoreboardUI - Main scoring interface for CTF
- * Shows player's team and all team scores with flag statuses
- */
-class MultiTeamScoreHUD implements BaseScoreboardHUD {
-    readonly player: mod.Player;
-    readonly playerId: number;
-    
-    rootWidget: mod.UIWidget | undefined;
-    private teamIndicatorContainer: mod.UIWidget | undefined;
-    private teamIndicatorText: mod.UIWidget | undefined;
-    private teamRow: mod.UIWidget | undefined;
-    private teamColumns: Map<number, TeamColumnWidget> = new Map();
-    
-    private readonly ROOT_WIDTH = 700;
-    private readonly ROOT_HEIGHT = 100;
-    private readonly TOP_PADDING = 67;
-    private readonly TEAM_INDICATOR_HEIGHT = 25;
-    private readonly COLUMN_SPACING = 40;
-    
-    constructor(player: mod.Player) {
-        this.player = player;
-        this.playerId = mod.GetObjId(player);
-        this.create();
-    }
-    
-    create(): void {
-        if (this.rootWidget) return;
-        
-        // Calculate total width needed based on team count
-        const teamCount = teams.size;
-        const columnWidth = 60; // Must match TeamColumnWidget.COLUMN_WIDTH
-        const totalColumnsWidth = (teamCount * columnWidth) + ((teamCount - 1) * this.COLUMN_SPACING);
-        const actualRootWidth = totalColumnsWidth;//Math.max(this.ROOT_WIDTH, totalColumnsWidth + 40); // 40px padding
-        
-        // Create root container
-        this.rootWidget = modlib.ParseUI({
-            type: "Container",
-            size: [actualRootWidth, this.ROOT_HEIGHT],
-            position: [0, this.TOP_PADDING],
-            anchor: mod.UIAnchor.TopCenter,
-            bgFill: mod.UIBgFill.Blur,
-            bgColor: [0, 0, 0],
-            bgAlpha: 0.0,
-            playerId: this.player
-        })!;
-
-        // Create team indicator (Row 1)
-        this.teamIndicatorContainer = modlib.ParseUI({
-            type: "Container",
-            parent: this.rootWidget,
-            position: [0, 0],
-            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
-            anchor: mod.UIAnchor.TopCenter,
-            //bgFill: mod.UIBgFill.Blur,
-            bgColor: GetTeamColor(mod.GetTeam(this.player)),
-            bgAlpha: 0.5
-        })!;
-        
-        // Create team indicator (Row 1)
-        this.teamIndicatorText = modlib.ParseUI({
-            type: "Text",
-            parent: this.teamIndicatorContainer,
-            position: [0, 2],
-            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
-            anchor: mod.UIAnchor.TopCenter,
-            textAnchor: mod.UIAnchor.Center,
-            textSize: 20,
-            textLabel: mod.Message(mod.stringkeys.scoreUI_team_label, GetTeamName(mod.GetTeam(this.player))),
-            textColor: [1, 1, 1],
-            bgAlpha: 0
-        })!;
-        
-        this.teamRow = modlib.ParseUI({
-            type: "Container",
-            parent: this.rootWidget,
-            size: [actualRootWidth, this.TEAM_INDICATOR_HEIGHT],
-            position: [0, this.TEAM_INDICATOR_HEIGHT + 8],
-            anchor: mod.UIAnchor.TopCenter,
-            bgFill: mod.UIBgFill.None,
-            bgColor: [0, 0, 0],
-            bgAlpha: 0.0,
-            playerId: this.player
-        })!;
-        
-        // Create team columns (Row 2)
-        const columnsStartY = 0;
-        
-        // Calculate starting X position for the first widget's CENTER point
-        // Start at left edge of group (-totalColumnsWidth/2) then offset by half a column width
-        let currentX = -(totalColumnsWidth / 2) + (columnWidth / 2);
-        
-        for (const [teamId, team] of teams.entries()) {
-            let isPlayerTeam: boolean = mod.Equals(team, mod.GetTeam(this.player));
-            const columnPos = [currentX, 0];
-            const column = new TeamColumnWidget(team, columnPos, [50, 30], this.teamRow, isPlayerTeam);
-            this.teamColumns.set(teamId, column);
-            currentX += columnWidth + this.COLUMN_SPACING;
-        }
-
-        // Update root widget width now that we have the total column width
-        mod.SetUIWidgetSize(this.rootWidget, mod.CreateVector(totalColumnsWidth, this.ROOT_HEIGHT, 0));
-        this.rootWidget
-        
-        // Initial refresh
-        this.refresh();
-    }
-    
-    /**
-     * Update all UI elements with current game state
-     */
-    refresh(): void {
-        if (!this.rootWidget || !this.teamIndicatorContainer || !this.teamIndicatorText) return;
-        
-        // Update team indicator text with player's current team
-        const playerTeam = mod.GetTeam(this.player);
-        const playerTeamId = mod.GetObjId(playerTeam);
-        const teamName = GetTeamName(playerTeam);
-        const teamColor = GetTeamColor(playerTeam);
-        
-        mod.SetUITextLabel(this.teamIndicatorText, mod.Message(mod.stringkeys.scoreUI_team_label, teamName));
-        mod.SetUITextColor(this.teamIndicatorText, mod.CreateVector(1,1,1));
-        mod.SetUIWidgetBgColor(this.teamIndicatorContainer, teamColor);
-        
-        // Determine which team is leading (if any)
-        let maxScore = -1;
-        let leadingTeams: number[] = [];
-        
-        for (const [teamId, score] of teamScores.entries()) {
-            if (score > maxScore) {
-                maxScore = score;
-                leadingTeams = [teamId];
-            } else if (score === maxScore && score > 0) {
-                leadingTeams.push(teamId);
-            }
-        }
-        
-        // Update each team column
-        for (const [teamId, column] of this.teamColumns.entries()) {
-            column.update();
-            
-            // Show brackets only if this team is the sole leader (no ties)
-            const isLeading = leadingTeams.length === 1 && leadingTeams[0] === teamId;
-            column.setLeading(isLeading);
-        }
-    }
-    
-    /**
-     * Close and cleanup the scoreboard UI
-     */
-    close(): void {
-        if (this.rootWidget) {
-            mod.SetUIWidgetVisible(this.rootWidget, false);
-        }
-    }
-    
-    /**
-     * Check if the scoreboard is currently visible
-     */
-    isOpen(): boolean {
-        return this.rootWidget !== undefined;
-    }
-}
-
-
-//==============================================================================================
-// CLASSIC 2-TEAM CTF HUD
-//==============================================================================================
-
-/**
- * ScoreboardUI - Main scoring interface for CTF
- * Shows player's team and all team scores with flag statuses
- */
-class ClassicCTFScoreHUD implements BaseScoreboardHUD{
-    readonly player: mod.Player;
-    readonly playerId: number;
-    
-    rootWidget: mod.UIWidget | undefined;
-
-    // Team scores
-    teamScoreTickers: Map<number, ScoreTicker> = new Map<number, ScoreTicker>();
-    teamScoreSpacing: number = 490;
-    teamScorePaddingTop: number = 68;
-    teamWidgetSize: number[] = [76, 30];
-
-    // Round timer
-    timerTicker: RoundTimer | undefined;
-    timerWidgetSize: number[] = [74, 22];
-    timerScorePaddingTop: number = 48;
-    teamOrdersPaddingTop: number = 100;
-
-    // Flag bar
-    flagBar: FlagBar | undefined;
-    flagBarPadding = 20;
-    flagBarHeight = 12;
-
-    // Team order bar
-    teamOrderBar: TeamOrdersBar | undefined;
-
-    constructor(player: mod.Player) {
-        this.player = player;
-        this.playerId = mod.GetObjId(player);
-        this.create();
-    }
-    
-    create(): void {
-        if (this.rootWidget) return;
-        
-        // Create root container
-        this.rootWidget = modlib.ParseUI({
-            type: "Container",
-            size: [700, 100],
-            position: [0, 0],
-            anchor: mod.UIAnchor.TopCenter,
-            bgFill: mod.UIBgFill.Blur,
-            bgColor: [0, 0, 0],
-            bgAlpha: 0.0,
-            playerId: this.player
-        })!;
-
-        // Create team score tickers
-        for (const [teamId, team] of teams.entries()) {
-            let tickerParams: ScoreTickerParams = {
-                parent: this.rootWidget,
-                position: [((teamId - 1) * this.teamScoreSpacing) - this.teamScoreSpacing*0.5, this.teamScorePaddingTop],
-                size: this.teamWidgetSize,
-                team: team
-            };
-            this.teamScoreTickers.set(teamId, new ScoreTicker(tickerParams));
-        }
-
-        // Center flag bar positions
-        const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarPadding;
-        const barPosX = 0;  // Center horizontally
-        const barPosY = this.teamScorePaddingTop + (this.teamWidgetSize[1] / 2) - (this.flagBarHeight * 0.5);
-
-        // Create flag bar (positioned between the two score tickers)
-        const team1Ticker = this.teamScoreTickers.get(1);
-        const team2Ticker = this.teamScoreTickers.get(2);
-
-        if (team1Ticker && team2Ticker && team1 && team2) {
-            // Calculate FlagBar dimensions and position
-            
-            // Get capture zone positions
-            const team1CaptureZone = captureZones.get(1);
-            const team2CaptureZone = captureZones.get(2);
-            
-            if (team1CaptureZone && team2CaptureZone) {
-                this.flagBar = new FlagBar({
-                    position: [barPosX, barPosY],
-                    size: [barWidth, 16],
-                    parent: this.rootWidget,
-                    team1: team1,
-                    team2: team2,
-                    team1CaptureZonePosition: team1CaptureZone.position,
-                    team2CaptureZonePosition: team2CaptureZone.position,
-                    barHeight: this.flagBarHeight,
-                    barSeperatorPadding: 4,
-                    flagIconSize: [24, 24]
-                });
-            }
-        }
-
-        // Create round timer
-        this.timerTicker = new RoundTimer({
-            position: [0, this.timerScorePaddingTop],
-            parent: this.rootWidget,
-            textSize: 26,
-            size: this.timerWidgetSize,
-            bgAlpha: 0.5,
-            textColor: mod.CreateVector(0.9, 0.9, 0.9)
-        })!;
-
-        // Create team order bar
-        this.teamOrderBar = new TeamOrdersBar(
-            mod.GetTeam(this.player),
-            {
-                parent: this.rootWidget,
-                position: [0, this.teamOrdersPaddingTop],
-                size: [barWidth, 30],
-                bgColor: GetTeamColor(mod.GetTeam(this.player)),
-                textColor: GetTeamColorLight(mod.GetTeam(this.player)),
-                textSize: 20,
-            }
-        )!;
-
-        // Initial refresh
-        this.refresh();
-    }
-    
-    /**
-     * Update all UI elements with current game state
-     */
-    refresh(): void {
-        if (!this.rootWidget) return;
-        
-        for(let [teamId, widget] of this.teamScoreTickers.entries()){
-            widget.refresh();
-        }
-
-        this.timerTicker?.refresh();
-        
-        // Update flag bar (deltaTime = 1.0 since refresh is called at 1Hz)
-        this.flagBar?.update(flags, 1.0);
-    }
-    
-    /**
-     * Close and cleanup the scoreboard UI
-     */
-    close(): void {
-        if (this.rootWidget) {
-            mod.SetUIWidgetVisible(this.rootWidget, false);
-        }
-    }
-    
-    /**
-     * Check if the scoreboard is currently visible
-     */
-    isOpen(): boolean {
-        return this.rootWidget !== undefined;
     }
 }
 
@@ -5919,6 +5686,9 @@ class TeamOrdersBar extends TickerWidget {
             unsubscribe();
         }
         this.eventUnsubscribers = [];
+
+        // Call parent destroy to clean up UI widgets
+        super.destroy();
     }
 
     SetTeamOrder(teamOrder: TeamOrders): void {
@@ -5947,6 +5717,706 @@ class TeamOrdersBar extends TickerWidget {
                 return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
         }
         return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
+    }
+}
+
+
+//==============================================================================================
+// MULTI 2+ TEAM CTF HUD
+//==============================================================================================
+
+/**
+ * Get the text representation of a flag's current status
+ * @param flag The flag to get status for
+ * @returns Status message: "(  )" for home, "<  >" for carried, "[  ]" for dropped
+ */
+function BuildFlagStatus(flag: Flag): mod.Message {
+    if (flag.isAtHome) return mod.Message(mod.stringkeys.scoreUI_flag_status_home);
+    if (flag.isBeingCarried) return mod.Message(mod.stringkeys.scoreUI_flag_status_carried);
+    if (flag.isDropped) return mod.Message(mod.stringkeys.scoreUI_flag_status_dropped);
+    return mod.Message(mod.stringkeys.scoreUI_flag_status_home); // Default to home
+}
+
+/**
+ * TeamColumnWidget - Displays a single team's score and flag status
+ * Encapsulates the score ticker and flag icon
+ */
+class TeamColumnWidget {
+    readonly teamId: number;
+    readonly team: mod.Team;
+    readonly isPlayerTeam: boolean;
+    readonly scoreTicker: ScoreTicker;
+    readonly flagIcon: FlagIcon;
+    readonly verticalPadding:number = 8;
+    
+    constructor(team: mod.Team, position: number[], size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
+        this.team = team;
+        this.teamId = mod.GetObjId(team);
+        this.isPlayerTeam = isPlayerTeam;
+        
+        // Create score ticker with bracket indicators
+        this.scoreTicker = new ScoreTicker({
+            team: team,
+            position: position,
+            size: size,
+            parent: parent,
+            textSize: 28,
+            bracketTopBottomLength: 10,
+            bracketThickness: 3
+        });
+
+        // Create flag icon below the score ticker
+        let flagIconConfig: FlagIconParams = {
+            name: `FlagHomeIcon_Team${this.teamId}`,
+            parent: parent,
+            position: mod.CreateVector(position[0], position[1] + size[1] + this.verticalPadding, 0),
+            size: mod.CreateVector(28, 28, 0),
+            anchor: mod.UIAnchor.TopCenter,
+            fillColor:  GetTeamColorById(this.teamId),
+            fillAlpha: 1,
+            outlineColor: GetTeamColorById(this.teamId),
+            outlineAlpha: 1,
+            showFill: true,
+            showOutline: true,
+            bgFill: mod.UIBgFill.Solid,
+            outlineThickness: 0
+        };
+        this.flagIcon = new FlagIcon(flagIconConfig);
+    }
+    
+    /**
+     * Update the team's score and flag status display
+     */
+    update(): void {
+        // Update score ticker
+        this.scoreTicker.updateScore();
+
+        // Get flag status for this team
+        const flag = flags.get(this.teamId);
+        if(flag){
+            const flagStatus = BuildFlagStatus(flag);
+            
+            // TODO: Ugly hack. This needs to be event triggered, not changed in update
+            if(flag.isAtHome){
+                this.flagIcon.SetVisible(true);
+                this.flagIcon.SetFillAlpha(1);
+                this.flagIcon.SetOutlineAlpha(1);
+            } else if(flag.isBeingCarried){
+                this.flagIcon.SetVisible(false);
+            } else if(flag.isDropped){
+                this.flagIcon.SetVisible(true);
+                this.flagIcon.SetFillAlpha(0.15);
+                this.flagIcon.SetOutlineAlpha(0.75);
+            }
+        }
+    }
+    
+    /**
+     * Set whether this team is currently in the lead
+     */
+    setLeading(isLeading: boolean): void {
+        this.scoreTicker.setLeading(isLeading);
+    }
+}
+
+/**
+ * ScoreboardUI - Main scoring interface for CTF
+ * Shows all team scores with flag statuses
+ *
+ * GLOBAL SCOPE: Created once per game, visible to all players
+ */
+class MultiTeamScoreHUD implements BaseScoreboardHUD {
+    readonly player: mod.Player;
+    readonly playerId: number;
+
+    rootWidget: mod.UIWidget | undefined;
+    private teamRow: mod.UIWidget | undefined;
+    private teamColumns: Map<number, TeamColumnWidget> = new Map();
+
+    private readonly ROOT_WIDTH = 700;
+    private readonly ROOT_HEIGHT = 110;
+    private readonly TOP_PADDING = 47;
+    private readonly COLUMN_SPACING = 40;
+
+    constructor(player?: mod.Player) {
+        // Player is optional - only used to satisfy BaseScoreboardHUD interface
+        // This HUD is actually globally scoped
+        this.player = (null as any);
+        this.playerId = -1;
+        this.create();
+    }
+
+    create(): void {
+        if (this.rootWidget) return;
+
+        // Calculate total width needed based on team count
+        const teamCount = teams.size;
+        const columnWidth = 60;
+        const totalColumnsWidth = (teamCount * columnWidth) + ((teamCount - 1) * this.COLUMN_SPACING);
+
+        // Create GLOBAL root container (NO playerId, NO teamId)
+        this.rootWidget = modlib.ParseUI({
+            type: "Container",
+            size: [totalColumnsWidth, this.ROOT_HEIGHT],
+            position: [0, 0],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill: mod.UIBgFill.Blur,
+            bgColor: [0, 0, 0],
+            bgAlpha: 0.0
+            // NO playerId or teamId = GLOBAL SCOPE
+        })!;
+
+        // Create team row container
+        this.teamRow = modlib.ParseUI({
+            type: "Container",
+            parent: this.rootWidget,
+            size: [totalColumnsWidth, 50],
+            position: [0, this.TOP_PADDING],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill: mod.UIBgFill.None,
+            bgColor: [0, 0, 0],
+            bgAlpha: 0.0
+        })!;
+
+        // Create team columns
+        let currentX = -(totalColumnsWidth / 2) + (columnWidth / 2);
+
+        for (const [teamId, team] of teams.entries()) {
+            const columnPos = [currentX, 0];
+            const column = new TeamColumnWidget(team, columnPos, [50, 30], this.teamRow, false);
+            this.teamColumns.set(teamId, column);
+            currentX += columnWidth + this.COLUMN_SPACING;
+        }
+
+        // Initial refresh
+        this.refresh();
+    }
+    
+    /**
+     * Update all UI elements with current game state
+     */
+    refresh(): void {
+        if (!this.rootWidget) return;
+
+        // Determine which team is leading (if any)
+        let maxScore = -1;
+        let leadingTeams: number[] = [];
+
+        for (const [teamId, score] of teamScores.entries()) {
+            if (score > maxScore) {
+                maxScore = score;
+                leadingTeams = [teamId];
+            } else if (score === maxScore && score > 0) {
+                leadingTeams.push(teamId);
+            }
+        }
+
+        // Update each team column
+        for (const [teamId, column] of this.teamColumns.entries()) {
+            column.update();
+
+            // Show brackets only if this team is the sole leader (no ties)
+            const isLeading = leadingTeams.length === 1 && leadingTeams[0] === teamId;
+            column.setLeading(isLeading);
+        }
+    }
+    
+    /**
+     * Close and cleanup the scoreboard UI
+     */
+    close(): void {
+        // Destroy all child widgets first (bottom-up)
+
+        // 1. Destroy all team column widgets
+        for (const [teamId, column] of this.teamColumns.entries()) {
+            column.scoreTicker.destroy();
+            column.flagIcon.Destroy();
+        }
+        this.teamColumns.clear();
+
+        // 2. Delete team row container
+        if (this.teamRow) {
+            mod.DeleteUIWidget(this.teamRow);
+            this.teamRow = undefined;
+        }
+
+        // 3. Finally, hide and delete the root widget
+        if (this.rootWidget) {
+            mod.SetUIWidgetVisible(this.rootWidget, false);
+            mod.DeleteUIWidget(this.rootWidget);
+            this.rootWidget = undefined;
+        }
+    }
+    
+    /**
+     * Check if the scoreboard is currently visible
+     */
+    isOpen(): boolean {
+        return this.rootWidget !== undefined;
+    }
+}
+
+
+//==============================================================================================
+// CLASSIC 2-TEAM CTF HUD
+//==============================================================================================
+
+/**
+ * ScoreboardUI - Main scoring interface for CTF
+ * Shows all team scores with flag statuses
+ *
+ * GLOBAL SCOPE: Created once per game, visible to all players
+ */
+class ClassicCTFScoreHUD implements BaseScoreboardHUD{
+    readonly player: mod.Player;
+    readonly playerId: number;
+
+    rootWidget: mod.UIWidget | undefined;
+    
+    // Root padding
+    paddingTop: number = 48;
+
+    // Team scores
+    teamScoreTickers: Map<number, ScoreTicker> = new Map<number, ScoreTicker>();
+    teamScoreSpacing: number = 490;
+    teamScorePaddingTop: number = 28;
+    teamWidgetSize: number[] = [76, 30];
+
+    // Round timer
+    timerTicker: RoundTimer | undefined;
+    timerWidgetSize: number[] = [74, 22];
+
+    // Flag bar
+    flagBar: FlagBar | undefined;
+    flagBarWidthPadding = 20;
+    flagBarHeight = 12;
+
+    constructor(player?: mod.Player) {
+        // Player is optional - only used to satisfy BaseScoreboardHUD interface
+        // This HUD is actually globally scoped
+        this.player = (null as any);
+        this.playerId = -1;
+        this.create();
+    }
+    
+    create(): void {
+        if (this.rootWidget) return;
+
+        // Create GLOBAL root container (NO playerId, NO teamId)
+        this.rootWidget = modlib.ParseUI({
+            type: "Container",
+            size: [700, 50],
+            position: [0, this.paddingTop],
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill: mod.UIBgFill.Blur,
+            bgColor: [0, 0, 0],
+            bgAlpha: 0.0
+            // NO playerId or teamId = GLOBAL SCOPE
+        })!;
+
+        // Create team score tickers
+        for (const [teamId, team] of teams.entries()) {
+            if (teamId === 0) continue; // Skip neutral team
+
+            let tickerParams: ScoreTickerParams = {
+                parent: this.rootWidget,
+                position: [((teamId - 1) * this.teamScoreSpacing) - this.teamScoreSpacing * 0.5, this.teamScorePaddingTop],
+                size: this.teamWidgetSize,
+                team: team
+            };
+            this.teamScoreTickers.set(teamId, new ScoreTicker(tickerParams));
+        }
+
+        // Center flag bar positions
+        const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarWidthPadding;
+        const barPosX = 0;  // Center horizontally
+        const barPosY = this.teamScorePaddingTop + (this.teamWidgetSize[1] / 2) - (this.flagBarHeight * 0.5);
+
+        // Create flag bar (positioned between the two score tickers)
+        const team1 = teams.get(1);
+        const team2 = teams.get(2);
+
+        if (team1 && team2) {
+            // Get capture zone positions
+            const team1CaptureZone = captureZones.get(1);
+            const team2CaptureZone = captureZones.get(2);
+
+            if (team1CaptureZone && team2CaptureZone) {
+                this.flagBar = new FlagBar({
+                    position: [barPosX, barPosY],
+                    size: [barWidth, 16],
+                    parent: this.rootWidget,
+                    team1: team1,
+                    team2: team2,
+                    team1CaptureZonePosition: team1CaptureZone.position,
+                    team2CaptureZonePosition: team2CaptureZone.position,
+                    barHeight: this.flagBarHeight,
+                    barSeperatorPadding: 4,
+                    flagIconSize: [24, 24]
+                });
+            }
+        }
+
+        // Create round timer
+        this.timerTicker = new RoundTimer({
+            position: [0, 0],
+            parent: this.rootWidget,
+            textSize: 26,
+            size: this.timerWidgetSize,
+            bgAlpha: 0.5,
+            textColor: mod.CreateVector(0.9, 0.9, 0.9)
+        });
+
+        // Initial refresh
+        this.refresh();
+    }
+    
+    /**
+     * Update all UI elements with current game state
+     */
+    refresh(): void {
+        if (!this.rootWidget) return;
+        
+        for(let [teamId, widget] of this.teamScoreTickers.entries()){
+            widget.refresh();
+        }
+
+        this.timerTicker?.refresh();
+        
+        // Update flag bar (deltaTime = 1.0 since refresh is called at 1Hz)
+        this.flagBar?.update(flags, 1.0);
+    }
+    
+    /**
+     * Close and cleanup the scoreboard UI
+     */
+    close(): void {
+        // Destroy all child widgets first (bottom-up)
+
+        // 1. Destroy team score tickers
+        for (const [teamId, ticker] of this.teamScoreTickers.entries()) {
+            ticker.destroy();
+        }
+        this.teamScoreTickers.clear();
+
+        // 2. Destroy flag bar (which also destroys its children)
+        if (this.flagBar) {
+            this.flagBar.destroy();
+            this.flagBar = undefined;
+        }
+
+        // 3. Destroy timer ticker
+        if (this.timerTicker) {
+            this.timerTicker.destroy();
+            this.timerTicker = undefined;
+        }
+
+        // 4. Finally, hide and delete the root widget
+        if (this.rootWidget) {
+            mod.SetUIWidgetVisible(this.rootWidget, false);
+            mod.DeleteUIWidget(this.rootWidget);
+            this.rootWidget = undefined;
+        }
+    }
+    
+    /**
+     * Check if the scoreboard is currently visible
+     */
+    isOpen(): boolean {
+        return this.rootWidget !== undefined;
+    }
+}
+
+
+//==============================================================================================
+// GLOBAL SCOREBOARD HUD - Manager for globally-scoped HUD instances
+//==============================================================================================
+
+/**
+ * GlobalScoreboardHUD - Singleton manager that creates and manages global HUD instances
+ *
+ * This manager creates ONE instance of the appropriate HUD class (MultiTeamScoreHUD or ClassicCTFScoreHUD)
+ * that is visible to ALL players (global scope).
+ */
+class GlobalScoreboardHUD {
+    private static instance: GlobalScoreboardHUD | null = null;
+    private globalHUD: BaseScoreboardHUD | null = null;
+
+    private constructor() {
+        // Private constructor for singleton
+    }
+
+    /**
+     * Get or create the singleton instance
+     */
+    static getInstance(): GlobalScoreboardHUD {
+        if (!GlobalScoreboardHUD.instance) {
+            GlobalScoreboardHUD.instance = new GlobalScoreboardHUD();
+        }
+        return GlobalScoreboardHUD.instance;
+    }
+
+    /**
+     * Initialize the global HUD based on the current game mode configuration
+     * @param hudClass The HUD class to instantiate (must implement BaseScoreboardHUD)
+     */
+    createGlobalHUD(hudClass: new (player?: mod.Player) => BaseScoreboardHUD): void {
+        if (this.globalHUD) {
+            console.log("GlobalScoreboardHUD: Global HUD already exists, skipping creation");
+            return;
+        }
+
+        // Create single global instance (no player parameter)
+        this.globalHUD = new hudClass();
+
+        if (DEBUG_MODE) {
+            console.log(`GlobalScoreboardHUD: Created global ${hudClass.name} instance`);
+        }
+    }
+
+    /**
+     * Refresh the global HUD
+     */
+    refresh(): void {
+        if (this.globalHUD) {
+            this.globalHUD.refresh();
+        }
+    }
+
+    /**
+     * Close the global HUD
+     */
+    close(): void {
+        if (this.globalHUD) {
+            this.globalHUD.close();
+            this.globalHUD = null;
+        }
+    }
+
+    /**
+     * Reset singleton instance (for game restart)
+     */
+    static reset(): void {
+        if (GlobalScoreboardHUD.instance) {
+            GlobalScoreboardHUD.instance.close();
+            GlobalScoreboardHUD.instance = null;
+        }
+    }
+
+    /**
+     * Get the current global HUD instance
+     */
+    getHUD(): BaseScoreboardHUD | null {
+        return this.globalHUD;
+    }
+}
+
+
+//==============================================================================================
+// TEAM SCOREBOARD HUD - Team-scoped widgets visible to all players on a team
+//==============================================================================================
+
+/**
+ * TeamScoreboardHUD - Manages UI widgets that display team-specific information
+ * Created once per team, visible to all players on that team.
+ *
+ * Contains:
+ * - TeamOrdersBar (shows team-specific orders and flag events)
+ */
+class TeamScoreboardHUD {
+    private static instances: Map<number, TeamScoreboardHUD> = new Map();
+
+    readonly team: mod.Team;
+    readonly teamId: number;
+    readonly rootWidget: mod.UIWidget | undefined;
+    private teamOrdersBar!: TeamOrdersBar;
+    position: number[] = [0, 100];
+
+    private constructor(team: mod.Team, position?: number[]) {
+        this.team = team;
+        this.teamId = mod.GetObjId(team);
+        this.position = position ?? this.position;
+        
+        console.log(`Creating TeamScoreboardHUD for team ${this.teamId}`);
+
+        // Create TEAM-SCOPED root container
+        this.rootWidget = modlib.ParseUI({
+            type: "Container",
+            size: [400, 30],
+            position:  this.position,
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill: mod.UIBgFill.Blur,
+            bgColor: [0, 0, 0],
+            bgAlpha: 0.0,
+            teamId: team  // TEAM-SCOPED: visible to all players on this team
+        })!;
+
+        // Create TeamOrdersBar
+        this.teamOrdersBar = new TeamOrdersBar(team, {
+            position: [0, 0],
+            size: [400, 30],
+            parent: this.rootWidget,
+            textSize: 22,
+            bgAlpha: 0.5
+        });
+
+        if (DEBUG_MODE) {
+            console.log(`TeamScoreboardHUD: Created team-scoped HUD for team ${this.teamId}`);
+        }
+    }
+
+    /**
+     * Create or get team HUD instance for a specific team
+     */
+    static create(team: mod.Team): TeamScoreboardHUD {
+        const teamId = mod.GetObjId(team);
+
+        let instance = TeamScoreboardHUD.instances.get(teamId);
+        if (!instance) {
+            instance = new TeamScoreboardHUD(team);
+            TeamScoreboardHUD.instances.set(teamId, instance);
+        }
+
+        return instance;
+    }
+
+    /**
+     * Get existing team HUD instance
+     */
+    static getInstance(teamId: number): TeamScoreboardHUD | undefined {
+        return TeamScoreboardHUD.instances.get(teamId);
+    }
+
+    /**
+     * Get all team HUD instances
+     */
+    static getAllInstances(): TeamScoreboardHUD[] {
+        return Array.from(TeamScoreboardHUD.instances.values());
+    }
+
+    /**
+     * Refresh the team-specific widgets
+     */
+    refresh(): void {
+        this.teamOrdersBar.refresh();
+    }
+
+    /**
+     * Close and cleanup team widgets
+     */
+    close(): void {
+        // Destroy child widgets first
+        if (this.teamOrdersBar) {
+            this.teamOrdersBar.destroy();
+        }
+
+        // Delete root widget
+        if (this.rootWidget) {
+            mod.SetUIWidgetVisible(this.rootWidget, false);
+            mod.DeleteUIWidget(this.rootWidget);
+        }
+    }
+
+    /**
+     * Check if this team HUD is open
+     */
+    isOpen(): boolean {
+        return this.rootWidget !== undefined && mod.GetUIWidgetVisible(this.rootWidget);
+    }
+
+    /**
+     * Destroy all team HUD instances and clear the registry
+     */
+    static destroyAll(): void {
+        for (const [teamId, instance] of TeamScoreboardHUD.instances.entries()) {
+            instance.close();
+        }
+        TeamScoreboardHUD.instances.clear();
+
+        if (DEBUG_MODE) {
+            console.log('All team scoreboards destroyed');
+        }
+    }
+
+    /**
+     * Reset all team HUD instances (for game restart)
+     */
+    static reset(): void {
+        TeamScoreboardHUD.destroyAll();
+    }
+}
+
+
+//==============================================================================================
+// PLAYER SCOREBOARD HUD - Player-scoped widgets visible only to specific player
+//==============================================================================================
+
+/**
+ * PlayerScoreboardHUD - Manages UI widgets that display player-specific information
+ * Created once per player, visible only to that player.
+ *
+ * Currently empty - reserved for future player-specific widgets.
+ * TeamOrdersBar is in TeamScoreboardHUD (team-scoped) to avoid duplication.
+ */
+class PlayerScoreboardHUD implements BaseScoreboardHUD {
+    readonly player: mod.Player;
+    readonly playerId: number;
+    rootWidget: mod.UIWidget | undefined;
+
+    constructor(player: mod.Player) {
+        this.player = player;
+        this.playerId = mod.GetObjId(player);
+        this.create();
+    }
+
+    create(): void {
+        if (this.rootWidget) return;
+
+        // Create PLAYER-SCOPED root container (empty for now, ready for future widgets)
+        const root = modlib.ParseUI({
+            type: "Container",
+            size: [400, 30],
+            position: [0, 150],  // Position below team-scoped widgets
+            anchor: mod.UIAnchor.TopCenter,
+            bgFill: mod.UIBgFill.None,
+            bgColor: [0, 0, 0],
+            bgAlpha: 0.0,
+            playerId: this.player  // PLAYER-SCOPED: visible only to this player
+        })!;
+
+        this.rootWidget = root;
+
+        if (DEBUG_MODE) {
+            console.log(`PlayerScoreboardHUD: Created player-scoped HUD container for player ${this.playerId}`);
+        }
+
+        // Initial refresh
+        this.refresh();
+    }
+
+    /**
+     * Refresh the player-specific widgets
+     */
+    refresh(): void {
+        if (!this.rootWidget) return;
+        // No widgets to refresh yet
+    }
+
+    /**
+     * Close and cleanup player widgets
+     */
+    close(): void {
+        if (this.rootWidget) {
+            mod.SetUIWidgetVisible(this.rootWidget, false);
+        }
+        // No widgets to destroy yet
+    }
+
+    /**
+     * Check if this player HUD is open
+     */
+    isOpen(): boolean {
+        return this.rootWidget !== undefined && mod.GetUIWidgetVisible(this.rootWidget);
     }
 }
 
@@ -5985,11 +6455,11 @@ class CaptureZoneConfig {
 interface GameModeConfig {
     teams: TeamConfig[];
     flags: FlagConfig[];
-    HUDClass?: new (player: mod.Player) => BaseScoreboardHUD;
+    HUDClass?: new (player?: mod.Player) => BaseScoreboardHUD;
 }
 
-// Store the HUD class to use for player scoreboards
-let currentHUDClass: (new (player: mod.Player) => BaseScoreboardHUD) | undefined;
+// Store the HUD class to use for global HUD (player parameter is optional)
+let currentHUDClass: (new (player?: mod.Player) => BaseScoreboardHUD) | undefined;
 
 function LoadGameModeConfig(config: GameModeConfig): void {
     // Store HUD class for use in JSPlayer constructor
@@ -6218,6 +6688,12 @@ const FourTeamCTFConfig: GameModeConfig = {
 }
 
 
+const DEFAULT_GAMEMODES = new Map<number, GameModeConfig>([
+    [40000, ClassicCTFConfig],
+    [40001, FourTeamCTFConfig]
+]);
+
+
 //==============================================================================================
 // TEAM BALANCE FUNCTIONS
 //==============================================================================================
@@ -6247,10 +6723,10 @@ async function CheckAndBalanceTeams(): Promise<void> {
     if (Math.abs(largestTeam.count - smallestTeam.count) <= 1) return;
     
     balanceInProgress = true;
-    
-    // Notify players
-    mod.DisplayHighlightedWorldLogMessage(
-        mod.Message("Teams will automatically balance in 5 seconds")
+
+    // Notify players a balance is about to occur
+    mod.DisplayNotificationMessage(
+        mod.Message(mod.stringkeys.team_balance_notif)
     );
     
     await mod.Wait(TEAM_BALANCE_DELAY);
