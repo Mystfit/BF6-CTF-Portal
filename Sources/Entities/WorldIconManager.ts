@@ -269,49 +269,51 @@ class WorldIconManager {
     }
 
     /**
-     * Refresh a specific icon (delete and recreate with saved state)
+     * Refresh a specific icon (disable and re-enable with saved state)
      * Called automatically on player join
+     * Uses enable/disable approach similar to VFX system instead of unspawn/respawn
      */
     private refreshIcon(id: string): void {
         const state = this.iconStates.get(id);
-        if (!state) return;
+        const icon = this.icons.get(id);
 
-        // Delete old icon
-        const oldIcon = this.icons.get(id);
-        if (oldIcon) {
-            mod.UnspawnObject(oldIcon);
-        }
+        if (!state || !icon) return;
 
-        // Recreate with saved state using the correct API
-        const newIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, state.position, ZERO_VEC) as mod.WorldIcon;
+        // Step 1: Disable both icon and text
+        mod.EnableWorldIconImage(icon, false);
+        mod.EnableWorldIconText(icon, false);
 
-        // Reapply owner (team/player scope) first
+        // Step 2: Reapply owner (team/player scope) if set
         if (state.teamOwner !== undefined) {
-            mod.SetWorldIconOwner(newIcon, state.teamOwner);
+            mod.SetWorldIconOwner(icon, state.teamOwner);
         } else if (state.playerOwner !== undefined) {
-            mod.SetWorldIconOwner(newIcon, state.playerOwner);
+            mod.SetWorldIconOwner(icon, state.playerOwner);
         }
 
-        // Reapply all saved properties
+        // Step 3: Reapply position
+        mod.SetWorldIconPosition(icon, state.position);
+
+        // Step 4: Reapply text properties
         if (state.text !== undefined) {
-            mod.SetWorldIconText(newIcon, state.text);
+            mod.SetWorldIconText(icon, state.text);
         }
-        mod.EnableWorldIconText(newIcon, state.textEnabled);
 
+        // Step 5: Reapply icon properties
         if (state.icon !== undefined) {
-            mod.SetWorldIconImage(newIcon, state.icon);
+            mod.SetWorldIconImage(icon, state.icon);
         }
-        mod.EnableWorldIconImage(newIcon, state.iconEnabled);
 
+        // Step 6: Reapply color
         if (state.color !== undefined) {
-            mod.SetWorldIconColor(newIcon, state.color);
+            mod.SetWorldIconColor(icon, state.color);
         }
 
-        // Update reference
-        this.icons.set(id, newIcon);
+        // Step 7: Re-enable with saved state
+        mod.EnableWorldIconText(icon, state.textEnabled);
+        mod.EnableWorldIconImage(icon, state.iconEnabled);
 
         if (DEBUG_MODE) {
-            console.log(`WorldIconManager: Refreshed icon '${id}'`);
+            console.log(`WorldIconManager: Refreshed icon '${id}' (disable/enable approach)`);
         }
     }
 
