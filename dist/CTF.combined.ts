@@ -132,610 +132,6 @@ const VEHICLE_FIRST_PASSENGER_SEAT = 1;                             // First pas
 const TICK_RATE = 0.032;                                            // ~30fps update rate for carrier position updates (portal server tickrate)
 
 
-//@ts-ignore
-import * as modlib from 'modlib';
-
-//==============================================================================================
-// CONSTANTS - Team and object IDs (you probably won't need to modify these)
-//==============================================================================================
-
-const enum TeamID {
-    TEAM_NEUTRAL = 0,
-    TEAM_1,
-    TEAM_2,
-    TEAM_3,
-    TEAM_4,
-    TEAM_5,
-    TEAM_6,
-    TEAM_7
-}
-const DEFAULT_TEAM_NAMES = new Map<number, string>([
-    [TeamID.TEAM_NEUTRAL, mod.stringkeys.neutral_team_name],
-    [TeamID.TEAM_1, mod.stringkeys.purple_team_name],
-    [TeamID.TEAM_2, mod.stringkeys.orange_team_name],
-    [TeamID.TEAM_3, mod.stringkeys.green_team_name],
-    [TeamID.TEAM_4, mod.stringkeys.blue_team_name],
-    [TeamID.TEAM_5, mod.stringkeys.red_team_name],
-    [TeamID.TEAM_6, mod.stringkeys.cyan_team_name],
-    [TeamID.TEAM_7, mod.stringkeys.silver_team_name]
-]);
-
-const DEFAULT_TEAM_VO_FLAGS = new Map<number, mod.VoiceOverFlags | undefined>([
-    [TeamID.TEAM_NEUTRAL, undefined],
-    [TeamID.TEAM_1, mod.VoiceOverFlags.Alpha],
-    [TeamID.TEAM_2, mod.VoiceOverFlags.Bravo],
-    [TeamID.TEAM_3, mod.VoiceOverFlags.Charlie],
-    [TeamID.TEAM_4, mod.VoiceOverFlags.Delta],
-    [TeamID.TEAM_5, mod.VoiceOverFlags.Echo],
-    [TeamID.TEAM_6, mod.VoiceOverFlags.Foxtrot],
-    [TeamID.TEAM_7, mod.VoiceOverFlags.Golf]
-]);
-
-const enum FlagIdOffsets{
-    FLAG_INTERACT_ID_OFFSET = 1,
-    FLAG_CAPTURE_ZONE_ID_OFFSET = 2,
-    FLAG_CAPTURE_ZONE_ICON_ID_OFFSET = 3,
-    FLAG_SPAWN_ID_OFFSET = 4
-}
-
-// Object IDs offsets for flag spawners and capture zones added in Godot
-const TEAM_ID_START_OFFSET = 100;
-const TEAM_ID_STRIDE_OFFSET = 10;
-
-
-//==============================================================================================
-// GLOBAL STATE
-//==============================================================================================
-
-let gameStarted = false;
-
-// Team balance state
-let lastBalanceCheckTime = 0;
-let balanceInProgress = false;
-
-// Team references
-let teamNeutral: mod.Team;
-let team1: mod.Team;
-let team2: mod.Team;
-let team3: mod.Team;
-let team4: mod.Team;
-
-// Time
-let lastTickTime: number = 0;
-let lastSecondUpdateTime: number = 0;
-
-// Utility
-const ZERO_VEC = mod.CreateVector(0, 0, 0);
-const ONE_VEC = mod.CreateVector(1, 1, 1);
-
-// Dynamic state management
-let teams: Map<number, mod.Team> = new Map();
-let teamConfigs: Map<number, TeamConfig> = new Map();
-let teamScores: Map<number, number> = new Map();
-let flags: Map<number, Flag> = new Map();
-let captureZones: Map<number, CaptureZone> = new Map();
-
-
-//==============================================================================================
-// UI HIERARCHY INITIALIZATION
-//==============================================================================================
-
-/**
- * Position a team HUD below the global HUD
- * @param teamId The team ID to position the HUD for
- */
-function PositionTeamHUD(teamId: number): void {
-    // Get global HUD position and size
-    let globalHUD = GlobalScoreboardHUD.getInstance().getHUD();
-    if (!globalHUD?.rootWidget) return;
-
-    let globalHUDPos = mod.GetUIWidgetPosition(globalHUD.rootWidget);
-    let globalHUDSize = mod.GetUIWidgetSize(globalHUD.rootWidget);
-
-    // Get team HUD instance
-    let teamHUD = TeamScoreboardHUD.getInstance(teamId);
-    if (!teamHUD?.rootWidget) return;
-
-    // Calculate offset position below global HUD
-    let teamHUDPos = mod.GetUIWidgetPosition(teamHUD.rootWidget);
-    let offsetBarY = mod.YComponentOf(globalHUDPos) + mod.YComponentOf(globalHUDSize) + 10;
-
-    // Apply position
-    mod.SetUIWidgetPosition(
-        teamHUD.rootWidget,
-        mod.CreateVector(mod.XComponentOf(teamHUDPos), offsetBarY, 0)
-    );
-
-    if (DEBUG_MODE) {
-        console.log(`Positioned team ${teamId} HUD at Y offset: ${offsetBarY}`);
-    }
-}
-
-/**
- * Initialize the three-tier UI hierarchy:
- * 1. Global HUD (visible to all players)
- * 2. Team HUDs (visible to players on each team)
- * 3. Player HUDs (visible only to specific player) - created in JSPlayer.initUI()
- */
-function InitializeUIHierarchy(): void {
-    // 1. Create Global HUD (one instance for the entire game)
-    const globalHUD = GlobalScoreboardHUD.getInstance();   
-    if (currentHUDClass) {
-        globalHUD.createGlobalHUD(currentHUDClass);
-        if (DEBUG_MODE) {
-            console.log(`InitializeUIHierarchy: Created global HUD with ${currentHUDClass.name}`);
-        }
-    }
-
-    // 2. Create Team HUDs (one per team, not including neutral team)
-    for (const [teamId, team] of teams.entries()) {
-        if (teamId === 0) continue; // Skip neutral team
-
-        TeamScoreboardHUD.create(team);
-        PositionTeamHUD(teamId);
-
-        if (DEBUG_MODE) {
-            console.log(`InitializeUIHierarchy: Created team HUD for team ${teamId}`);
-        }
-    }
-
-    // 3. Player HUDs are created individually in JSPlayer.initUI() when players spawn
-    if (DEBUG_MODE) {
-        console.log(`InitializeUIHierarchy: UI hierarchy initialized (Global + ${teams.size - 1} team HUDs)`);
-    }
-}
-
-//==============================================================================================
-// MAIN GAME LOOP
-//==============================================================================================
-
-export async function OnGameModeStarted() {
-    console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_author));
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
-
-    // Initialize legacy team references (still needed for backwards compatibility)
-    teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
-    team1 = mod.GetTeam(TeamID.TEAM_1);
-    team2 = mod.GetTeam(TeamID.TEAM_2);
-    team3 = mod.GetTeam(TeamID.TEAM_3);
-    team4 = mod.GetTeam(TeamID.TEAM_4);
-
-    await mod.Wait(1);
-
-    // Load game mode configuration
-    // let config = FourTeamCTFConfig;
-    // LoadGameModeConfig(config);
-    let gameModeID = -1;
-    let activeConfig: GameModeConfig | undefined = undefined;
-    for(let [configID, config] of DEFAULT_GAMEMODES){
-        let gameModeConfigObj = mod.GetSpatialObject(configID);
-        let gameModeExistsFallbackPos = mod.GetObjectPosition(gameModeConfigObj);
-        // Make sure the gameconfig object actually exists.
-        // If the game mode config object has a zero vector, it doesn't exist
-        let isAtOrigin = AreVectorsEqual(gameModeExistsFallbackPos, ZERO_VEC, 0.1);
-        if(DEBUG_MODE)
-            console.log(`currentModeId: ${configID}, gameModeConfigObj: ${gameModeConfigObj}, is at origin: ${isAtOrigin}, position: ${VectorToString(gameModeExistsFallbackPos)}`);
-        
-        if(gameModeConfigObj && !isAtOrigin){
-            // Look up config from the map
-            gameModeID = configID;
-            activeConfig = config
-            if(gameModeID > -1){
-                console.log(`Found game mode with id ${configID}`);
-                mod.SendErrorReport(mod.Message(mod.stringkeys.found_gamemode_id, gameModeID));
-            }
-            break;
-        }
-    }
-    
-    if(activeConfig){
-        mod.SendErrorReport(mod.Message(mod.stringkeys.loading_gamemode_id, gameModeID));
-        LoadGameModeConfig(activeConfig);
-    } else {
-        LoadGameModeConfig(ClassicCTFConfig);
-        console.log("Could not find a gamemode. Falling back to classic 2-team CTF");
-        return;
-    }
-
-    // Set up initial player scores using JSPlayer
-    let players = mod.AllPlayers();
-    let numPlayers = mod.CountOf(players);
-    for (let i = 0; i < numPlayers; i++) {
-        let loopPlayer = mod.ValueInArray(players, i);
-        if(mod.IsPlayerValid(loopPlayer)){
-            JSPlayer.get(loopPlayer); // Create JSPlayer instance
-        }
-    }
-
-    // Start game
-    gameStarted = true;
-
-    // Initialize UI hierarchy based on scope
-    InitializeUIHierarchy();
-
-    // Start update loops
-    TickUpdate();
-    SecondUpdate();
-
-    if(DEBUG_MODE){
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_initialized));
-        console.log("CTF: Game initialized and started");
-    }
-
-
-    RefreshScoreboard();
-}
-
-async function TickUpdate(): Promise<void> {
-    while (gameStarted) {
-        await mod.Wait(TICK_RATE);
-
-        let currentTime = GetCurrentTime();
-        let timeDelta = currentTime - lastTickTime;
-        // console.log(`Fast tick delta ${timeDelta}`);
-
-        // Update all flag carrier positions
-        for (const [flagId, flag] of flags.entries()) {
-            flag.FastUpdate(timeDelta);
-        }
-
-        // Refresh UI hierarchy:
-        // 1. Global HUD (scores, timer, flags)
-        GlobalScoreboardHUD.getInstance().refresh();
-
-        // 2. Team HUDs (team orders) - refresh on events, not in tick loop
-
-        // 3. Player HUDs (player-specific team orders)
-        JSPlayer.getAllAsArray().forEach(jsPlayer => {
-            jsPlayer.scoreboardUI?.refresh();
-        });
-
-        lastTickTime = currentTime;
-    }
-}
-
-async function SecondUpdate(): Promise<void> {
-    while (gameStarted) {
-        await mod.Wait(1);
-
-        let currentTime = GetCurrentTime();
-        let timeDelta = currentTime - lastTickTime;        
-        
-        // Periodic team balance check
-        if (TEAM_AUTO_BALANCE) {
-            CheckAndBalanceTeams();
-        }
-
-        // Periodically update scoreboard for players
-        RefreshScoreboard();
-
-        // Check time limit
-        if (mod.GetMatchTimeRemaining() <= 0) {
-            EndGameByTime();
-        }
-
-        // Slow update for flags
-        for(let [flagID, flag] of flags){
-            flag.SlowUpdate(timeDelta);
-        }
-
-        lastSecondUpdateTime = currentTime;
-    }
-}
-
-
-//==============================================================================================
-// EVENT HANDLERS
-//==============================================================================================
-
-async function FixTeamScopedUIVisibility(player: mod.Player): Promise<void> {
-    // WORKAROUND: Fix for team-scoped UI visibility bug
-    // Tear down and rebuild the team UI for the player's team
-    // This ensures team-scoped UIs become visible to the newly joined player
-
-    const playerTeam = mod.GetTeam(player);
-    const playerTeamId = mod.GetObjId(playerTeam);
-
-    // Skip neutral team
-    if (playerTeamId === 0) return;
-
-    if (DEBUG_MODE) {
-        console.log(`Rebuilding team UI for team ${playerTeamId} (player ${mod.GetObjId(player)} joined)`);
-    }
-
-    // Step 1: Destroy the existing team UI
-    const existingHUD = TeamScoreboardHUD.getInstance(playerTeamId);
-    if (existingHUD) {
-        existingHUD.close();
-    }
-
-    // Step 2: Wait a frame for cleanup to complete
-    //await mod.Wait(0);
-
-    // Step 3: Recreate the team UI
-    TeamScoreboardHUD.create(playerTeam);
-
-    // Step 4: Reposition using shared function
-    PositionTeamHUD(playerTeamId);
-
-    if (DEBUG_MODE) {
-        console.log(`Team UI rebuilt successfully for team ${playerTeamId}`);
-    }
-}
-
-export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
-    if (DEBUG_MODE) {
-        console.log(`Player joined: ${mod.GetObjId(eventPlayer)}`);
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
-    }
-
-    // Apply UI visibility fix
-    FixTeamScopedUIVisibility(eventPlayer);
-
-    // Refresh scoreboard to update new player team entry and score
-    RefreshScoreboard();
-}
-
-export function OnPlayerLeaveGame(playerId: number): void {
-    // Check if leaving player was carrying any flag
-    for (const [flagId, flagData] of flags.entries()) {
-        if (flagData.carrierPlayer && mod.GetObjId(flagData.carrierPlayer) === playerId) {
-            // Drop each flag at its current position
-            flagData.DropFlag(flagData.currentPosition);
-        }
-    }
-    
-    if (DEBUG_MODE) {
-        console.log(`Player left: ${playerId}`);
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_left, playerId));
-    }
-
-    // Remove JSPlayer instance
-    JSPlayer.removeInvalidJSPlayers(playerId);
-}
-
-export function OnPlayerDeployed(eventPlayer: mod.Player): void {
-    // Players spawn at their team's HQ
-    if (DEBUG_MODE) {
-        const teamId = mod.GetObjId(mod.GetTeam(eventPlayer));
-        // console.log(`Player ${mod.GetObjId(eventPlayer)} deployed on team ${teamId}`);
-    }
-
-    // If we don't have a JSPlayer by now, we really should create one
-    let jsPlayer = JSPlayer.get(eventPlayer);
-
-    // Set up the player UI on spawn
-    jsPlayer?.initUI();
-
-    for(let [captureZoneId, captureZone] of captureZones){
-        captureZone.UpdateIcons();
-    }
-}
-
-export function OnPlayerDied(
-    eventPlayer: mod.Player,
-    eventOtherPlayer: mod.Player,
-    eventDeathType: mod.DeathType,
-    eventWeaponUnlock: mod.WeaponUnlock
-): void {
-    // If player was carrying a flag, drop it
-    if(DEBUG_MODE)
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
-    
-    // Increment flag carrier kill score
-    let killer = JSPlayer.get(eventOtherPlayer);
-    if(killer){
-        if(IsCarryingAnyFlag(eventPlayer) || WasCarryingAnyFlag(eventPlayer))
-            killer.score.flag_carrier_kills += 1;
-        else
-            killer.score.kills += 1; 
-    }
-
-    // Drop all flags on death
-    DropAllFlags(eventPlayer);
-}
-
-export function OnPlayerInteract(
-    eventPlayer: mod.Player, 
-    eventInteractPoint: mod.InteractPoint
-): void {
-    const interactId = mod.GetObjId(eventInteractPoint);
-    const playerTeamId = mod.GetObjId(mod.GetTeam(eventPlayer));
-
-    // Check all flags dynamically for interactions
-    for(let flag of flags){
-        let flagData = flag[1];
-        // Check if we're interacting with this flag
-        if(flagData.flagInteractionPoint){
-            if(interactId == mod.GetObjId(flagData.flagInteractionPoint)){
-                HandleFlagInteraction(eventPlayer, playerTeamId, flagData);
-                return;
-            }
-        }
-    }
-}
-
-export function OnPlayerEnterAreaTrigger(
-    eventPlayer: mod.Player, 
-    eventAreaTrigger: mod.AreaTrigger
-): void {
-    const triggerId = mod.GetObjId(eventAreaTrigger);
-    const playerTeamId = mod.GetObjId(mod.GetTeam(eventPlayer));
-    
-    if (DEBUG_MODE) {
-        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.on_capture_zone_entered, eventPlayer, playerTeamId, triggerId))
-        console.log(`Player ${mod.GetObjId(eventPlayer)} entered area trigger ${triggerId}`);
-    }
-    
-    for(const [teamId, captureZone] of captureZones.entries()){
-        console.log(`Checking if we entered capture zone ${captureZone.captureZoneID} area trigger for team ${teamId}`);
-        if(captureZone.areaTrigger){
-            if(triggerId === mod.GetObjId(captureZone.areaTrigger)){
-                console.log(`Entered capture zone ${captureZone.captureZoneID} area trigger for team ${teamId}`);
-                captureZone.HandleCaptureZoneEntry(eventPlayer);
-            }
-        }
-    }
-}
-
-export function OnPlayerExitAreaTrigger(
-    eventPlayer: mod.Player, 
-    eventAreaTrigger: mod.AreaTrigger
-): void {
-    const triggerId = mod.GetObjId(eventAreaTrigger);
-    
-    if (DEBUG_MODE) {
-        console.log(`Player ${mod.GetObjId(eventPlayer)} exited area trigger ${triggerId}`);
-        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_exit_trigger, eventPlayer, mod.GetObjId(eventAreaTrigger)))
-    }
-}
-
-export function OnPlayerEnterVehicle(
-    eventPlayer: mod.Player,
-    eventVehicle: mod.Vehicle
-): void {
-    if(DEBUG_MODE)
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_player_enter_vehicle));
-
-    // Check if player is carrying a flag
-    if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {
-        if (DEBUG_MODE) {
-            console.log("Flag carrier entered vehicle");
-        }
-        ForceToPassengerSeat(eventPlayer, eventVehicle);
-    }
-}
-
-export function OnPlayerEnterVehicleSeat(
-    eventPlayer: mod.Player,
-    eventVehicle: mod.Vehicle,
-    eventSeat: mod.Object
-): void {
-    // If player is carrying flag and in driver seat, force to passenger
-    if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {      
-        if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
-            if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
-            ForceToPassengerSeat(eventPlayer, eventVehicle);
-        }
-    }
-}
-
-export function OnGameModeEnding(): void {
-    gameStarted = false;
-    console.log("CTF: Game ending");
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_ending))
-}
-
-
-//==============================================================================================
-// GAME LOGIC FUNCTIONS
-//==============================================================================================
-
-function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
-
-    // Try to find an empty passenger seat
-    const seatCount = mod.GetVehicleSeatCount(vehicle);
-    let forcedToSeat = false;
-    let lastSeat = seatCount - 1;
-    for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
-        if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
-            mod.ForcePlayerToSeat(player, vehicle, i);
-            forcedToSeat = true;
-            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
-            if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
-            return;
-        }
-    }
-    
-    // Try last seat as fallback
-    if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
-        mod.ForcePlayerToSeat(player, vehicle, lastSeat);
-        forcedToSeat = true;
-        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
-        if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${lastSeat}`);
-        return;
-    }
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
-
-    // No passenger seats available, force exit
-    mod.ForcePlayerExitVehicle(player, vehicle);
-    if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
-}
-
-
-
-//==============================================================================================
-// UTILITY FUNCTIONS
-//==============================================================================================
-
-function GetCurrentTime(): number {
-    //return mod.GetMatchTimeElapsed();
-    return Date.now() / 1000;
-}
-
-function GetRandomInt(max: number): number {
-    return Math.floor(Math.random() * max);
-}
-
-function GetTeamName(team: mod.Team): string {
-    let teamName = teamConfigs.get(mod.GetObjId(team))?.name;
-    if(teamName){
-        return teamName;
-    }
-
-    let teamId = mod.GetObjId(team);
-    return DEFAULT_TEAM_NAMES.get(teamId) ?? mod.stringkeys.neutral_team_name;
-}
-
-// New multi-team helper functions
-function GetOpposingTeams(teamId: number): number[] {
-    const opposing: number[] = [];
-    for (const [id, team] of teams.entries()) {
-        if (id !== teamId && id !== 0) { // Exclude self and neutral
-            opposing.push(id);
-        }
-    }
-    return opposing;
-}
-
-function GetTeamColorById(teamId: number): mod.Vector {
-    // Check if we have a config for this team
-    const config = teamConfigs.get(teamId);
-    if (config?.color) {
-        return config.color;
-    }
-
-    return DEFAULT_TEAM_COLOURS.get(teamId) ?? NEUTRAL_COLOR;
-}
-
-function GetTeamColor(team: mod.Team): mod.Vector {
-    return GetTeamColorById(mod.GetObjId(team));
-}
-
-function GetTeamDroppedColor(team: mod.Team): mod.Vector {
-    return GetTeamColorById(mod.GetObjId(team) );
-}
-
-function GetTeamColorLight(team: mod.Team): mod.Vector {
-    return mod.Add(GetTeamColor(team), mod.CreateVector(0.5, 0.5, 0.5));
-}
-
-export function GetPlayersInTeam(team: mod.Team) {
-    const allPlayers = mod.AllPlayers();
-    const n = mod.CountOf(allPlayers);
-    let teamMembers = [];
-
-    for (let i = 0; i < n; i++) {
-        let player = mod.ValueInArray(allPlayers, i) as mod.Player;
-        if (mod.GetObjId(mod.GetTeam(player)) == mod.GetObjId(team)) {
-            teamMembers.push(player);
-        }
-    }
-    return teamMembers;
-}
-
-
 //==============================================================================================
 // COLOR & UTILITY CLASSES
 //==============================================================================================
@@ -2697,6 +2093,646 @@ class EventDispatcher<TEventMap = Record<string, any>> {
 }
 
 
+//@ts-ignore
+import * as modlib from 'modlib';
+
+//==============================================================================================
+// CONSTANTS - Team and object IDs (you probably won't need to modify these)
+//==============================================================================================
+
+const enum TeamID {
+    TEAM_NEUTRAL = 0,
+    TEAM_1,
+    TEAM_2,
+    TEAM_3,
+    TEAM_4,
+    TEAM_5,
+    TEAM_6,
+    TEAM_7
+}
+const DEFAULT_TEAM_NAMES = new Map<number, string>([
+    [TeamID.TEAM_NEUTRAL, mod.stringkeys.neutral_team_name],
+    [TeamID.TEAM_1, mod.stringkeys.purple_team_name],
+    [TeamID.TEAM_2, mod.stringkeys.orange_team_name],
+    [TeamID.TEAM_3, mod.stringkeys.green_team_name],
+    [TeamID.TEAM_4, mod.stringkeys.blue_team_name],
+    [TeamID.TEAM_5, mod.stringkeys.red_team_name],
+    [TeamID.TEAM_6, mod.stringkeys.cyan_team_name],
+    [TeamID.TEAM_7, mod.stringkeys.silver_team_name]
+]);
+
+const DEFAULT_TEAM_VO_FLAGS = new Map<number, mod.VoiceOverFlags | undefined>([
+    [TeamID.TEAM_NEUTRAL, undefined],
+    [TeamID.TEAM_1, mod.VoiceOverFlags.Alpha],
+    [TeamID.TEAM_2, mod.VoiceOverFlags.Bravo],
+    [TeamID.TEAM_3, mod.VoiceOverFlags.Charlie],
+    [TeamID.TEAM_4, mod.VoiceOverFlags.Delta],
+    [TeamID.TEAM_5, mod.VoiceOverFlags.Echo],
+    [TeamID.TEAM_6, mod.VoiceOverFlags.Foxtrot],
+    [TeamID.TEAM_7, mod.VoiceOverFlags.Golf]
+]);
+
+const enum FlagIdOffsets{
+    FLAG_INTERACT_ID_OFFSET = 1,
+    FLAG_CAPTURE_ZONE_ID_OFFSET = 2,
+    FLAG_CAPTURE_ZONE_ICON_ID_OFFSET = 3,
+    FLAG_SPAWN_ID_OFFSET = 4
+}
+
+// Object IDs offsets for flag spawners and capture zones added in Godot
+const TEAM_ID_START_OFFSET = 100;
+const TEAM_ID_STRIDE_OFFSET = 10;
+
+
+//==============================================================================================
+// GLOBAL STATE
+//==============================================================================================
+
+let gameStarted = false;
+
+// Global event dispatcher for player join/leave events
+interface PlayerEventMap {
+    'playerJoined': { player: mod.Player };
+    'playerLeft': { playerId: number };
+}
+const globalPlayerEvents = new EventDispatcher<PlayerEventMap>();
+
+// Team balance state
+let lastBalanceCheckTime = 0;
+let balanceInProgress = false;
+
+// Team references
+let teamNeutral: mod.Team;
+let team1: mod.Team;
+let team2: mod.Team;
+let team3: mod.Team;
+let team4: mod.Team;
+
+// Time
+let lastTickTime: number = 0;
+let lastSecondUpdateTime: number = 0;
+
+// Utility
+const ZERO_VEC = mod.CreateVector(0, 0, 0);
+const ONE_VEC = mod.CreateVector(1, 1, 1);
+
+// Dynamic state management
+let teams: Map<number, mod.Team> = new Map();
+let teamConfigs: Map<number, TeamConfig> = new Map();
+let teamScores: Map<number, number> = new Map();
+let flags: Map<number, Flag> = new Map();
+let captureZones: Map<number, CaptureZone> = new Map();
+
+// Global managers
+let worldIconManager: WorldIconManager;
+let vfxManager: VFXManager;
+
+
+//==============================================================================================
+// UI HIERARCHY INITIALIZATION
+//==============================================================================================
+
+/**
+ * Position a team HUD below the global HUD
+ * @param teamId The team ID to position the HUD for
+ */
+function PositionTeamHUD(teamId: number): void {
+    // Get global HUD position and size
+    let globalHUD = GlobalScoreboardHUD.getInstance().getHUD();
+    if (!globalHUD?.rootWidget) return;
+
+    let globalHUDPos = mod.GetUIWidgetPosition(globalHUD.rootWidget);
+    let globalHUDSize = mod.GetUIWidgetSize(globalHUD.rootWidget);
+
+    // Get team HUD instance
+    let teamHUD = TeamScoreboardHUD.getInstance(teamId);
+    if (!teamHUD?.rootWidget) return;
+
+    // Calculate offset position below global HUD
+    let teamHUDPos = mod.GetUIWidgetPosition(teamHUD.rootWidget);
+    let offsetBarY = mod.YComponentOf(globalHUDPos) + mod.YComponentOf(globalHUDSize) + 10;
+
+    // Apply position
+    mod.SetUIWidgetPosition(
+        teamHUD.rootWidget,
+        mod.CreateVector(mod.XComponentOf(teamHUDPos), offsetBarY, 0)
+    );
+
+    if (DEBUG_MODE) {
+        console.log(`Positioned team ${teamId} HUD at Y offset: ${offsetBarY}`);
+    }
+}
+
+/**
+ * Initialize the three-tier UI hierarchy:
+ * 1. Global HUD (visible to all players)
+ * 2. Team HUDs (visible to players on each team)
+ * 3. Player HUDs (visible only to specific player) - created in JSPlayer.initUI()
+ */
+function InitializeUIHierarchy(): void {
+    // 1. Create Global HUD (one instance for the entire game)
+    const globalHUD = GlobalScoreboardHUD.getInstance();   
+    if (currentHUDClass) {
+        globalHUD.createGlobalHUD(currentHUDClass);
+        if (DEBUG_MODE) {
+            console.log(`InitializeUIHierarchy: Created global HUD with ${currentHUDClass.name}`);
+        }
+    }
+
+    // 2. Create Team HUDs (one per team, not including neutral team)
+    for (const [teamId, team] of teams.entries()) {
+        if (teamId === 0) continue; // Skip neutral team
+
+        TeamScoreboardHUD.create(team);
+        PositionTeamHUD(teamId);
+
+        if (DEBUG_MODE) {
+            console.log(`InitializeUIHierarchy: Created team HUD for team ${teamId}`);
+        }
+    }
+
+    // 3. Player HUDs are created individually in JSPlayer.initUI() when players spawn
+    if (DEBUG_MODE) {
+        console.log(`InitializeUIHierarchy: UI hierarchy initialized (Global + ${teams.size - 1} team HUDs)`);
+    }
+}
+
+//==============================================================================================
+// MAIN GAME LOOP
+//==============================================================================================
+
+export async function OnGameModeStarted() {
+    console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_author));
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
+
+    // Initialize global managers
+    worldIconManager = WorldIconManager.getInstance();
+    vfxManager = VFXManager.getInstance();
+
+    // Initialize legacy team references (still needed for backwards compatibility)
+    teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
+    team1 = mod.GetTeam(TeamID.TEAM_1);
+    team2 = mod.GetTeam(TeamID.TEAM_2);
+    team3 = mod.GetTeam(TeamID.TEAM_3);
+    team4 = mod.GetTeam(TeamID.TEAM_4);
+
+    await mod.Wait(1);
+
+    // Load game mode configuration
+    // let config = FourTeamCTFConfig;
+    // LoadGameModeConfig(config);
+    let gameModeID = -1;
+    let activeConfig: GameModeConfig | undefined = undefined;
+    for(let [configID, config] of DEFAULT_GAMEMODES){
+        let gameModeConfigObj = mod.GetSpatialObject(configID);
+        let gameModeExistsFallbackPos = mod.GetObjectPosition(gameModeConfigObj);
+        // Make sure the gameconfig object actually exists.
+        // If the game mode config object has a zero vector, it doesn't exist
+        let isAtOrigin = AreVectorsEqual(gameModeExistsFallbackPos, ZERO_VEC, 0.1);
+        if(DEBUG_MODE)
+            console.log(`currentModeId: ${configID}, gameModeConfigObj: ${gameModeConfigObj}, is at origin: ${isAtOrigin}, position: ${VectorToString(gameModeExistsFallbackPos)}`);
+        
+        if(gameModeConfigObj && !isAtOrigin){
+            // Look up config from the map
+            gameModeID = configID;
+            activeConfig = config
+            if(gameModeID > -1){
+                console.log(`Found game mode with id ${configID}`);
+                mod.SendErrorReport(mod.Message(mod.stringkeys.found_gamemode_id, gameModeID));
+            }
+            break;
+        }
+    }
+    
+    if(activeConfig){
+        mod.SendErrorReport(mod.Message(mod.stringkeys.loading_gamemode_id, gameModeID));
+        LoadGameModeConfig(activeConfig);
+    } else {
+        LoadGameModeConfig(ClassicCTFConfig);
+        console.log("Could not find a gamemode. Falling back to classic 2-team CTF");
+        return;
+    }
+
+    // Set up initial player scores using JSPlayer
+    let players = mod.AllPlayers();
+    let numPlayers = mod.CountOf(players);
+    for (let i = 0; i < numPlayers; i++) {
+        let loopPlayer = mod.ValueInArray(players, i);
+        if(mod.IsPlayerValid(loopPlayer)){
+            JSPlayer.get(loopPlayer); // Create JSPlayer instance
+        }
+    }
+
+    // Start game
+    gameStarted = true;
+
+    // Initialize UI hierarchy based on scope
+    InitializeUIHierarchy();
+
+    // Start update loops
+    TickUpdate();
+    SecondUpdate();
+
+    if(DEBUG_MODE){
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_initialized));
+        console.log("CTF: Game initialized and started");
+    }
+
+
+    RefreshScoreboard();
+}
+
+async function TickUpdate(): Promise<void> {
+    while (gameStarted) {
+        await mod.Wait(TICK_RATE);
+
+        let currentTime = GetCurrentTime();
+        let timeDelta = currentTime - lastTickTime;
+        // console.log(`Fast tick delta ${timeDelta}`);
+
+        // Update all flag carrier positions
+        for (const [flagId, flag] of flags.entries()) {
+            flag.FastUpdate(timeDelta);
+        }
+
+        // Refresh UI hierarchy:
+        // 1. Global HUD (scores, timer, flags)
+        GlobalScoreboardHUD.getInstance().refresh();
+
+        // 2. Team HUDs (team orders) - refresh on events, not in tick loop
+
+        // 3. Player HUDs (player-specific team orders)
+        JSPlayer.getAllAsArray().forEach(jsPlayer => {
+            jsPlayer.scoreboardUI?.refresh();
+        });
+
+        lastTickTime = currentTime;
+    }
+}
+
+async function SecondUpdate(): Promise<void> {
+    while (gameStarted) {
+        await mod.Wait(1);
+
+        let currentTime = GetCurrentTime();
+        let timeDelta = currentTime - lastTickTime;        
+        
+        // Periodic team balance check
+        if (TEAM_AUTO_BALANCE) {
+            CheckAndBalanceTeams();
+        }
+
+        // Periodically update scoreboard for players
+        RefreshScoreboard();
+
+        // Check time limit
+        if (mod.GetMatchTimeRemaining() <= 0) {
+            EndGameByTime();
+        }
+
+        // Slow update for flags
+        for(let [flagID, flag] of flags){
+            flag.SlowUpdate(timeDelta);
+        }
+
+        lastSecondUpdateTime = currentTime;
+    }
+}
+
+
+//==============================================================================================
+// EVENT HANDLERS
+//==============================================================================================
+
+async function FixTeamScopedUIVisibility(player: mod.Player): Promise<void> {
+    // WORKAROUND: Fix for team-scoped UI visibility bug
+    // Tear down and rebuild the team UI for the player's team
+    // This ensures team-scoped UIs become visible to the newly joined player
+
+    const playerTeam = mod.GetTeam(player);
+    const playerTeamId = mod.GetObjId(playerTeam);
+
+    // Skip neutral team
+    if (playerTeamId === 0) return;
+
+    if (DEBUG_MODE) {
+        console.log(`Rebuilding team UI for team ${playerTeamId} (player ${mod.GetObjId(player)} joined)`);
+    }
+
+    // Step 1: Destroy the existing team UI
+    const existingHUD = TeamScoreboardHUD.getInstance(playerTeamId);
+    if (existingHUD) {
+        existingHUD.close();
+    }
+
+    // Step 2: Wait a frame for cleanup to complete
+    //await mod.Wait(0);
+
+    // Step 3: Recreate the team UI
+    TeamScoreboardHUD.create(playerTeam);
+
+    // Step 4: Reposition using shared function
+    PositionTeamHUD(playerTeamId);
+
+    if (DEBUG_MODE) {
+        console.log(`Team UI rebuilt successfully for team ${playerTeamId}`);
+    }
+}
+
+export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
+    if (DEBUG_MODE) {
+        console.log(`Player joined: ${mod.GetObjId(eventPlayer)}`);
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
+    }
+
+    // Emit player joined event (for any other handlers that need it)
+    globalPlayerEvents.emit('playerJoined', { player: eventPlayer });
+
+    // Note: WorldIcon refresh and UI visibility fix now happens on first deploy, not on join
+    // This prevents icons from disappearing when refreshed before player deploys
+
+    // Refresh scoreboard to update new player team entry and score
+    RefreshScoreboard();
+}
+
+export function OnPlayerLeaveGame(playerId: number): void {
+    // Check if leaving player was carrying any flag
+    for (const [flagId, flagData] of flags.entries()) {
+        if (flagData.carrierPlayer && mod.GetObjId(flagData.carrierPlayer) === playerId) {
+            // Drop each flag at its current position
+            flagData.DropFlag(flagData.currentPosition);
+        }
+    }
+    
+    if (DEBUG_MODE) {
+        console.log(`Player left: ${playerId}`);
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_left, playerId));
+    }
+
+    // Remove JSPlayer instance
+    JSPlayer.removeInvalidJSPlayers(playerId);
+}
+
+export function OnPlayerDeployed(eventPlayer: mod.Player): void {
+    // Players spawn at their team's HQ
+    if (DEBUG_MODE) {
+        const teamId = mod.GetObjId(mod.GetTeam(eventPlayer));
+        // console.log(`Player ${mod.GetObjId(eventPlayer)} deployed on team ${teamId}`);
+    }
+
+    // If we don't have a JSPlayer by now, we really should create one
+    let jsPlayer = JSPlayer.get(eventPlayer);
+
+    // Check if this is the player's first deployment
+    if (jsPlayer && !jsPlayer.hasEverDeployed) {
+        jsPlayer.hasEverDeployed = true;
+
+        if (DEBUG_MODE) {
+            console.log(`Player ${mod.GetObjId(eventPlayer)} deployed for the first time - refreshing WorldIcons, VFX, and UI`);
+        }
+
+        // Refresh WorldIcons to fix visibility for this player
+        worldIconManager.refreshAllIcons();
+
+        // Refresh all VFX to fix visibility for this player
+        vfxManager.refreshAllVFX();
+
+        // Fix team-scoped UI visibility
+        FixTeamScopedUIVisibility(eventPlayer);
+    }
+
+    // Set up the player UI on spawn
+    jsPlayer?.initUI();
+
+    for(let [captureZoneId, captureZone] of captureZones){
+        captureZone.UpdateIcons();
+    }
+}
+
+export function OnPlayerDied(
+    eventPlayer: mod.Player,
+    eventOtherPlayer: mod.Player,
+    eventDeathType: mod.DeathType,
+    eventWeaponUnlock: mod.WeaponUnlock
+): void {
+    // If player was carrying a flag, drop it
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_died, eventPlayer));
+    
+    // Increment flag carrier kill score
+    let killer = JSPlayer.get(eventOtherPlayer);
+    if(killer){
+        if(IsCarryingAnyFlag(eventPlayer) || WasCarryingAnyFlag(eventPlayer))
+            killer.score.flag_carrier_kills += 1;
+        else
+            killer.score.kills += 1; 
+    }
+
+    // Drop all flags on death
+    DropAllFlags(eventPlayer);
+}
+
+export function OnPlayerInteract(
+    eventPlayer: mod.Player, 
+    eventInteractPoint: mod.InteractPoint
+): void {
+    const interactId = mod.GetObjId(eventInteractPoint);
+    const playerTeamId = mod.GetObjId(mod.GetTeam(eventPlayer));
+
+    // Check all flags dynamically for interactions
+    for(let flag of flags){
+        let flagData = flag[1];
+        // Check if we're interacting with this flag
+        if(flagData.flagInteractionPoint){
+            if(interactId == mod.GetObjId(flagData.flagInteractionPoint)){
+                HandleFlagInteraction(eventPlayer, playerTeamId, flagData);
+                return;
+            }
+        }
+    }
+}
+
+export function OnPlayerEnterAreaTrigger(
+    eventPlayer: mod.Player, 
+    eventAreaTrigger: mod.AreaTrigger
+): void {
+    const triggerId = mod.GetObjId(eventAreaTrigger);
+    const playerTeamId = mod.GetObjId(mod.GetTeam(eventPlayer));
+    
+    if (DEBUG_MODE) {
+        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.on_capture_zone_entered, eventPlayer, playerTeamId, triggerId))
+        console.log(`Player ${mod.GetObjId(eventPlayer)} entered area trigger ${triggerId}`);
+    }
+    
+    for(const [teamId, captureZone] of captureZones.entries()){
+        console.log(`Checking if we entered capture zone ${captureZone.captureZoneID} area trigger for team ${teamId}`);
+        if(captureZone.areaTrigger){
+            if(triggerId === mod.GetObjId(captureZone.areaTrigger)){
+                console.log(`Entered capture zone ${captureZone.captureZoneID} area trigger for team ${teamId}`);
+                captureZone.HandleCaptureZoneEntry(eventPlayer);
+            }
+        }
+    }
+}
+
+export function OnPlayerExitAreaTrigger(
+    eventPlayer: mod.Player, 
+    eventAreaTrigger: mod.AreaTrigger
+): void {
+    const triggerId = mod.GetObjId(eventAreaTrigger);
+    
+    if (DEBUG_MODE) {
+        console.log(`Player ${mod.GetObjId(eventPlayer)} exited area trigger ${triggerId}`);
+        // mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_exit_trigger, eventPlayer, mod.GetObjId(eventAreaTrigger)))
+    }
+}
+
+export function OnPlayerEnterVehicle(
+    eventPlayer: mod.Player,
+    eventVehicle: mod.Vehicle
+): void {
+    if(DEBUG_MODE)
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.debug_player_enter_vehicle));
+
+    // Check if player is carrying a flag
+    if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {
+        if (DEBUG_MODE) {
+            console.log("Flag carrier entered vehicle");
+        }
+        ForceToPassengerSeat(eventPlayer, eventVehicle);
+    }
+}
+
+export function OnPlayerEnterVehicleSeat(
+    eventPlayer: mod.Player,
+    eventVehicle: mod.Vehicle,
+    eventSeat: mod.Object
+): void {
+    // If player is carrying flag and in driver seat, force to passenger
+    if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {      
+        if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
+            if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
+            ForceToPassengerSeat(eventPlayer, eventVehicle);
+        }
+    }
+}
+
+export function OnGameModeEnding(): void {
+    gameStarted = false;
+    console.log("CTF: Game ending");
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_ending))
+}
+
+
+//==============================================================================================
+// GAME LOGIC FUNCTIONS
+//==============================================================================================
+
+function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
+
+    // Try to find an empty passenger seat
+    const seatCount = mod.GetVehicleSeatCount(vehicle);
+    let forcedToSeat = false;
+    let lastSeat = seatCount - 1;
+    for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
+        if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
+            mod.ForcePlayerToSeat(player, vehicle, i);
+            forcedToSeat = true;
+            mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
+            if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${i}`);
+            return;
+        }
+    }
+    
+    // Try last seat as fallback
+    if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
+        mod.ForcePlayerToSeat(player, vehicle, lastSeat);
+        forcedToSeat = true;
+        mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
+        if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${lastSeat}`);
+        return;
+    }
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
+
+    // No passenger seats available, force exit
+    mod.ForcePlayerExitVehicle(player, vehicle);
+    if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
+}
+
+
+
+//==============================================================================================
+// UTILITY FUNCTIONS
+//==============================================================================================
+
+function GetCurrentTime(): number {
+    //return mod.GetMatchTimeElapsed();
+    return Date.now() / 1000;
+}
+
+function GetRandomInt(max: number): number {
+    return Math.floor(Math.random() * max);
+}
+
+function GetTeamName(team: mod.Team): string {
+    let teamName = teamConfigs.get(mod.GetObjId(team))?.name;
+    if(teamName){
+        return teamName;
+    }
+
+    let teamId = mod.GetObjId(team);
+    return DEFAULT_TEAM_NAMES.get(teamId) ?? mod.stringkeys.neutral_team_name;
+}
+
+// New multi-team helper functions
+function GetOpposingTeams(teamId: number): number[] {
+    const opposing: number[] = [];
+    for (const [id, team] of teams.entries()) {
+        if (id !== teamId && id !== 0) { // Exclude self and neutral
+            opposing.push(id);
+        }
+    }
+    return opposing;
+}
+
+function GetTeamColorById(teamId: number): mod.Vector {
+    // Check if we have a config for this team
+    const config = teamConfigs.get(teamId);
+    if (config?.color) {
+        return config.color;
+    }
+
+    return DEFAULT_TEAM_COLOURS.get(teamId) ?? NEUTRAL_COLOR;
+}
+
+function GetTeamColor(team: mod.Team): mod.Vector {
+    return GetTeamColorById(mod.GetObjId(team));
+}
+
+function GetTeamDroppedColor(team: mod.Team): mod.Vector {
+    return GetTeamColorById(mod.GetObjId(team) );
+}
+
+function GetTeamColorLight(team: mod.Team): mod.Vector {
+    return mod.Add(GetTeamColor(team), mod.CreateVector(0.5, 0.5, 0.5));
+}
+
+export function GetPlayersInTeam(team: mod.Team) {
+    const allPlayers = mod.AllPlayers();
+    const n = mod.CountOf(allPlayers);
+    let teamMembers = [];
+
+    for (let i = 0; i < n; i++) {
+        let player = mod.ValueInArray(allPlayers, i) as mod.Player;
+        if (mod.GetObjId(mod.GetTeam(player)) == mod.GetObjId(team)) {
+            teamMembers.push(player);
+        }
+    }
+    return teamMembers;
+}
+
+
 //==============================================================================================
 // JSPLAYER CLASS
 //==============================================================================================
@@ -2722,11 +2758,12 @@ class JSPlayer {
     score: PlayerScore;
     readonly joinOrder: number; // Track join order for team balancing
     heldFlags: Flag[] = [];
+    hasEverDeployed: boolean = false; // Track if player has deployed at least once
 
     // Player world attributes
     lastPosition: mod.Vector = ZERO_VEC;
     velocity: mod.Vector = ZERO_VEC;
-    
+
     // UI
     scoreboardUI?: BaseScoreboardHUD;
 
@@ -3041,7 +3078,11 @@ class Flag {
     flagCarriedIcons: Map<number, mod.WorldIcon> = new Map(); // One icon per opposing team
     flagInteractionPoint: mod.InteractPoint | null = null;
     flagProp: mod.Object | null = null;
-    
+
+    // WorldIcon manager IDs for tracking
+    recoverIconId: string = '';
+    carriedIconIds: Map<number, string> = new Map();
+
     // VFX
     flagSmokeVFX: mod.VFX;
     tetherFlagVFX: mod.VFX | null = null;
@@ -3051,6 +3092,11 @@ class Flag {
     pickupAvailableVFX: mod.VFX | null = null;
     flagImpactVFX: mod.VFX | null = null;
     flagSparksVFX: mod.VFX | null = null;
+
+    // VFX manager IDs for tracking
+    smokeVFXId: string = '';
+    sparksVFXId: string = '';
+    impactVFXId: string = '';
 
     // SFX
     alarmSFX : mod.SFX | null = null;
@@ -3082,15 +3128,15 @@ class Flag {
         this.followPoints = [];
         this.followDelay = 10;
         this.flagInteractionPoint = null;
-        this.flagRecoverIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, ZERO_VEC, ZERO_VEC);
+        this.flagRecoverIcon = null as any; // Will be created in Initialize()
         this.flagProp = null;
-        this.flagSmokeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
+        this.flagSmokeVFX = null as any; // Will be created in Initialize()
         this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
         this.hoverVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Missile_Javelin, this.homePosition, ZERO_VEC);
         this.pickupChargingVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Gadget_InterativeSpectator_Camera_Light_Red, this.homePosition, ZERO_VEC);
         this.pickupAvailableVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Gadget_InterativeSpectator_Camera_Light_Green, this.homePosition, ZERO_VEC);
-        this.flagImpactVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Impact_LootCrate_Generic, this.homePosition, ZERO_VEC);
-        this.flagSparksVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, this.homePosition, ZERO_VEC);
+        this.flagImpactVFX = null as any; // Will be created in Initialize()
+        this.flagSparksVFX = null as any; // Will be created in Initialize()
 
         this.pickupTimerStartSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheStart_OneShot2D, this.homePosition, ZERO_VEC);
         this.pickupTimerRiseSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheTimer_OneShot2D, this.homePosition, ZERO_VEC);
@@ -3098,33 +3144,101 @@ class Flag {
         
         // Initialize event system
         this.events = new EventDispatcher<FlagEventMap>();
-        
+
         this.Initialize();
     }
-    
+
     Initialize(): void {
-        // Set up initial properties for capture icons
-        mod.SetWorldIconOwner(this.flagRecoverIcon, this.team);
+        // Register WorldIcons with WorldIconManager
+        const iconMgr = worldIconManager;
+
+        // Create recover icon (shown to flag's team)
+        this.recoverIconId = `flag_${this.flagId}_recover`;
+        this.flagRecoverIcon = iconMgr.createIcon(
+            this.recoverIconId,
+            ZERO_VEC,
+            {
+                icon: mod.WorldIconImages.Flag,
+                iconEnabled: false,
+                textEnabled: false,
+                color: this.GetFlagColor(),
+                teamOwner: this.team
+            }
+        );
 
         // Create one carried icon per opposing team
         const opposingTeams = GetOpposingTeamsForFlag(this);
         for (const opposingTeamId of opposingTeams) {
             const opposingTeam = teams.get(opposingTeamId);
             if (opposingTeam) {
-                const carriedIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, ZERO_VEC, ZERO_VEC);
-                mod.SetWorldIconOwner(carriedIcon, opposingTeam);
+                const carriedIconId = `flag_${this.flagId}_carried_team${opposingTeamId}`;
+                const carriedIcon = iconMgr.createIcon(
+                    carriedIconId,
+                    ZERO_VEC,
+                    {
+                        icon: mod.WorldIconImages.Flag,
+                        iconEnabled: false,
+                        textEnabled: false,
+                        color: this.GetFlagColor(),
+                        teamOwner: opposingTeam
+                    }
+                );
                 this.flagCarriedIcons.set(opposingTeamId, carriedIcon);
+                this.carriedIconIds.set(opposingTeamId, carriedIconId);
             }
         }
 
+        // Register VFX with VFXManager
+        const vfxMgr = vfxManager;
+
+        // Create flag smoke VFX (main visual indicator)
+        this.smokeVFXId = `flag_${this.flagId}_smoke`;
+        this.flagSmokeVFX = vfxMgr.createVFX(
+            this.smokeVFXId,
+            mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom,
+            this.homePosition,
+            ZERO_VEC,
+            {
+                color: this.GetFlagColor(),
+                enabled: true
+            }
+        );
+
+        // Create flag sparks VFX (pickup ready indicator)
+        this.sparksVFXId = `flag_${this.flagId}_sparks`;
+        this.flagSparksVFX = vfxMgr.createVFX(
+            this.sparksVFXId,
+            mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L,
+            this.homePosition,
+            ZERO_VEC,
+            {
+                enabled: false // Disabled until flag is ready to pickup
+            }
+        );
+
+        // Create flag impact VFX (drop impact effect)
+        this.impactVFXId = `flag_${this.flagId}_impact`;
+        this.flagImpactVFX = vfxMgr.createVFX(
+            this.impactVFXId,
+            mod.RuntimeSpawn_Common.FX_Impact_LootCrate_Generic,
+            this.homePosition,
+            ZERO_VEC,
+            {
+                enabled: false // Only enabled briefly on drop
+            }
+        );
+
+        // Note: VFX are now refreshed on first player deploy using VFXManager
+        // This is handled by vfxManager.refreshAllVFX() in OnPlayerDeployed
+
         // Set up flag at home position
         this.SpawnFlagAtHome();
-        
+
         if (DEBUG_MODE) {
             console.log(`Flag initialized for team ${this.teamId} at position: ${VectorToString(this.homePosition)}`);
         }
     }
-    
+
     SpawnFlagAtHome(): void {
         this.isAtHome = true;
         this.isBeingCarried = false;
@@ -3141,10 +3255,11 @@ class Flag {
             mod.UnspawnObject(this.flagProp);
         }
         
-        // Enable flag VFX
-        mod.SetVFXColor(this.flagSmokeVFX, GetTeamColor(this.team));
-        mod.EnableVFX(this.flagSmokeVFX, true);
-        mod.MoveVFX(this.flagSmokeVFX, this.currentPosition, ZERO_VEC);
+        // Enable flag VFX using VFXManager
+        const vfxMgr = vfxManager;
+        vfxMgr.setColor(this.smokeVFXId, GetTeamColor(this.team));
+        vfxMgr.setEnabled(this.smokeVFXId, true);
+        vfxMgr.setPosition(this.smokeVFXId, this.currentPosition, ZERO_VEC);
 
         this.flagProp = mod.SpawnObject(
             FLAG_PROP, 
@@ -3157,21 +3272,20 @@ class Flag {
         if(mcom)
             mod.EnableGameModeObjective(mcom, false);
         
-        // Update defend icons for all opposing teams
-        for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
-            mod.SetWorldIconColor(carriedIcon, GetTeamColor(this.team));
-            mod.EnableWorldIconImage(carriedIcon, false);
-            mod.SetWorldIconImage(carriedIcon, mod.WorldIconImages.Flag);
-            mod.EnableWorldIconText(carriedIcon, false);
-            mod.SetWorldIconText(carriedIcon, mod.Message(mod.stringkeys.pickup_flag_label));
+        // Update defend icons for all opposing teams using WorldIconManager
+        const iconMgr = worldIconManager;
+        for (const [teamId, iconId] of this.carriedIconIds.entries()) {
+            iconMgr.setColor(iconId, GetTeamColor(this.team));
+            iconMgr.setIcon(iconId, mod.WorldIconImages.Flag);
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.pickup_flag_label));
+            iconMgr.setEnabled(iconId, false, false); // Hide both icon and text
         }
 
-        // Update recover icon
-        mod.SetWorldIconColor(this.flagRecoverIcon, GetTeamColor(this.team));
-        mod.EnableWorldIconImage(this.flagRecoverIcon, false);
-        mod.EnableWorldIconText(this.flagRecoverIcon, false);
-        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Flag);
-        mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.recover_flag_label));
+        // Update recover icon using WorldIconManager
+        iconMgr.setColor(this.recoverIconId, GetTeamColor(this.team));
+        iconMgr.setIcon(this.recoverIconId, mod.WorldIconImages.Flag);
+        iconMgr.setText(this.recoverIconId, mod.Message(mod.stringkeys.recover_flag_label));
+        iconMgr.setEnabled(this.recoverIconId, false, false); // Hide both icon and text
 
         // Update interaction point
         this.UpdateFlagInteractionPoint();
@@ -3246,17 +3360,16 @@ class Flag {
         // Spot the target on the minimap indefinitely
         mod.SpotTarget(this.carrierPlayer, mod.SpotStatus.SpotInMinimap);
         
-        // Show all carried icons for opposing teams
-        for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
-            mod.EnableWorldIconImage(carriedIcon, true);
-            mod.EnableWorldIconText(carriedIcon, true);
+        // Show all carried icons for opposing teams using WorldIconManager
+        const iconMgr = worldIconManager;
+        for (const [teamId, iconId] of this.carriedIconIds.entries()) {
+            iconMgr.setEnabled(iconId, true, true); // Show both icon and text
         }
-        mod.EnableWorldIconImage(this.flagRecoverIcon, true);
-        mod.EnableWorldIconText(this.flagRecoverIcon, true);
+        iconMgr.setEnabled(this.recoverIconId, true, true); // Show both icon and text
 
-        // Set VFX properties
-        mod.SetVFXColor(this.flagSmokeVFX, GetTeamColor(this.team));
-        
+        // Set VFX properties using VFXManager
+        vfxManager.setColor(this.smokeVFXId, GetTeamColor(this.team));
+
         // Notify all players
         const message = mod.Message(mod.stringkeys.team_flag_taken, GetTeamName(this.team));
         if(DEBUG_MODE)
@@ -3431,7 +3544,7 @@ class Flag {
                     speed: 800,
                     onSpawnAtStart: ():mod.Object | null  => {
                         // Disable smoke whilst flag is thrown to avoid flare leaking out
-                        mod.EnableVFX(this.flagSmokeVFX, false);
+                        vfxManager.setEnabled(this.smokeVFXId, false);
 
                         // Spawn prop
                         this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
@@ -3463,27 +3576,24 @@ class Flag {
             }
         }
 
-        // Play impact VFX
-        if(this.flagImpactVFX){
-            mod.MoveVFX(this.flagImpactVFX, this.currentPosition, ZERO_VEC);
-            mod.EnableVFX(this.flagImpactVFX, true);
-        }
+        // Play impact VFX using VFXManager
+        vfxManager.setPosition(this.impactVFXId, this.currentPosition, ZERO_VEC);
+        vfxManager.setEnabled(this.impactVFXId, true);
 
-        // Update capture icons for all opposing teams
+        // Update capture icons for all opposing teams using WorldIconManager
+        const iconMgr = worldIconManager;
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2,0));
-        for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
-            mod.EnableWorldIconImage(carriedIcon, true);
-            mod.EnableWorldIconText(carriedIcon, true);
-            mod.SetWorldIconText(carriedIcon, mod.Message(mod.stringkeys.pickup_flag_label));
-            mod.SetWorldIconPosition(carriedIcon, flagIconOffset);
+        for (const [teamId, iconId] of this.carriedIconIds.entries()) {
+            iconMgr.setEnabled(iconId, true, true); // Show both icon and text
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.pickup_flag_label));
+            iconMgr.setPosition(iconId, flagIconOffset);
         }
-        mod.EnableWorldIconImage(this.flagRecoverIcon, true);
-        mod.EnableWorldIconText(this.flagRecoverIcon, true);
-        mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
-        
-        // Update VFX
-        mod.MoveVFX(this.flagSmokeVFX, this.currentPosition, ZERO_VEC);
-        mod.SetVFXColor(this.flagSmokeVFX, GetTeamDroppedColor(this.team));
+        iconMgr.setEnabled(this.recoverIconId, true, true); // Show both icon and text
+        iconMgr.setPosition(this.recoverIconId, flagIconOffset);
+
+        // Update VFX using VFXManager
+        vfxManager.setPosition(this.smokeVFXId, this.currentPosition, ZERO_VEC);
+        vfxManager.setColor(this.smokeVFXId, GetTeamDroppedColor(this.team));
 
         // Play drop VO
         let friendlyVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
@@ -3494,12 +3604,10 @@ class Flag {
         // Start timers
         this.StartAutoReturn(FLAG_AUTO_RETURN_TIME, this.numFlagTimesPickedUp).then( () => {console.log(`Flag ${this.teamId} auto-returning to base`)});
         this.StartPickupDelay().then(() => {
-            // Activate FX
-            mod.EnableVFX(this.flagSmokeVFX, true);
-            if(this.flagSparksVFX){
-                mod.MoveVFX(this.flagSparksVFX, this.currentPosition, ZERO_VEC);
-                mod.EnableVFX(this.flagSparksVFX, true);
-            }
+            // Activate FX using VFXManager
+            vfxManager.setEnabled(this.smokeVFXId, true);
+            vfxManager.setPosition(this.sparksVFXId, this.currentPosition, ZERO_VEC);
+            vfxManager.setEnabled(this.sparksVFXId, true);
 
             // Update the position of the flag interaction point
             this.UpdateFlagInteractionPoint();   
@@ -3550,12 +3658,13 @@ class Flag {
     async StartPickupDelay(): Promise<void> {
         let vfxHeightOffset = mod.CreateVector(0, 1.7, 0);
 
-        // Lock the flag icons
-        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Alert);
-        mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.locked_flag_label))
-        for(let [teamId, icon] of this.flagCarriedIcons){
-            mod.SetWorldIconImage(icon, mod.WorldIconImages.Alert);
-            mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.locked_flag_label));
+        // Lock the flag icons using WorldIconManager
+        const iconMgr = worldIconManager;
+        iconMgr.setIcon(this.recoverIconId, mod.WorldIconImages.Alert);
+        iconMgr.setText(this.recoverIconId, mod.Message(mod.stringkeys.locked_flag_label));
+        for(let [teamId, iconId] of this.carriedIconIds){
+            iconMgr.setIcon(iconId, mod.WorldIconImages.Alert);
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.locked_flag_label));
         }
 
         // Charging VFX
@@ -3585,12 +3694,12 @@ class Flag {
             mod.EnableVFX(this.pickupAvailableVFX, true); 
         }
 
-        // Reset flag icons
-        mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.recover_flag_label));
-        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Flag);
-        for(let [teamId, icon] of this.flagCarriedIcons){
-            mod.SetWorldIconImage(icon, mod.WorldIconImages.Flag);
-            mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.pickup_flag_label));
+        // Reset flag icons using WorldIconManager
+        iconMgr.setText(this.recoverIconId, mod.Message(mod.stringkeys.recover_flag_label));
+        iconMgr.setIcon(this.recoverIconId, mod.WorldIconImages.Flag);
+        for(let [teamId, iconId] of this.carriedIconIds){
+            iconMgr.setIcon(iconId, mod.WorldIconImages.Flag);
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.pickup_flag_label));
         }
 
         if (this.isDropped) {
@@ -3715,8 +3824,8 @@ class Flag {
             this.currentPosition = currentSoldierPosition;
         }
         
-        // Make smoke effect follow carrier
-        mod.MoveVFX(this.flagSmokeVFX, this.currentPosition, currentRotation);
+        // Make smoke effect follow carrier using VFXManager
+        vfxManager.setPosition(this.smokeVFXId, this.currentPosition, currentRotation);
 
         if(this.hoverVFX){
             if(soldierParachuting){
@@ -3813,14 +3922,17 @@ class Flag {
     }
 
     UpdateCarrierIcon(){
-        // Move flag icons for all opposing teams
+        // Move flag icons for all opposing teams using WorldIconManager
+        const iconMgr = worldIconManager;
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2.5,0));
-        for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
-            mod.SetWorldIconPosition(carriedIcon, flagIconOffset);
-            mod.EnableWorldIconImage(carriedIcon, this.isBeingCarried || this.isDropped);
+        const shouldShowIcon = this.isBeingCarried || this.isDropped;
+
+        for (const [teamId, iconId] of this.carriedIconIds.entries()) {
+            iconMgr.setPosition(iconId, flagIconOffset);
+            iconMgr.setIconEnabled(iconId, shouldShowIcon);
         }
-        mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
-        mod.EnableWorldIconImage(this.flagRecoverIcon, this.isBeingCarried || this.isDropped);
+        iconMgr.setPosition(this.recoverIconId, flagIconOffset);
+        iconMgr.setIconEnabled(this.recoverIconId, shouldShowIcon);
     }
     
     RestrictCarrierWeapons(player: mod.Player): void {
@@ -4069,6 +4181,9 @@ class CaptureZone {
     readonly iconPosition: mod.Vector;
     readonly baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
 
+    // WorldIcon manager IDs for tracking
+    private baseIconIds: Map<number, string> = new Map();
+
     constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
         this.team = team;
         this.teamId = mod.GetObjId(team);
@@ -4090,19 +4205,45 @@ class CaptureZone {
                 // Get our world icon position for this capture zone
                 this.iconPosition = mod.Add(this.position, mod.CreateVector(0.0, FLAG_ICON_HEIGHT_OFFSET, 0.0));
 
-                // Create world icons for our team         
+                // Register WorldIcons with WorldIconManager
+                const iconMgr = worldIconManager;
                 this.baseIcons = new Map();
-                let teamIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
-                mod.SetWorldIconOwner(teamIcon, team);
+
+                // Create world icon for our team
+                const teamIconId = `capturezone_${this.teamId}_team${this.teamId}`;
+                let teamIcon = iconMgr.createIcon(
+                    teamIconId,
+                    this.iconPosition,
+                    {
+                        icon: mod.WorldIconImages.Triangle,
+                        iconEnabled: true,
+                        textEnabled: true,
+                        text: mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)),
+                        color: GetTeamColorById(this.teamId),
+                        teamOwner: team
+                    }
+                );
                 this.baseIcons.set(mod.GetObjId(team), teamIcon);
-                
-                // Create world icons for opposing teams        
+                this.baseIconIds.set(mod.GetObjId(team), teamIconId);
+
+                // Create world icons for opposing teams
                 let opposingTeams = GetOpposingTeams(mod.GetObjId(team));
                 if(opposingTeams.length && team){
                     for(let opposingTeam of opposingTeams){
-                        let opposingIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
-                        mod.SetWorldIconOwner(opposingIcon, mod.GetTeam(opposingTeam));
+                        const opposingIconId = `capturezone_${this.teamId}_team${opposingTeam}`;
+                        let opposingIcon = iconMgr.createIcon(
+                            opposingIconId,
+                            this.iconPosition,
+                            {
+                                icon: mod.WorldIconImages.Triangle,
+                                iconEnabled: true,
+                                textEnabled: true,
+                                color: GetTeamColorById(this.teamId),
+                                teamOwner: mod.GetTeam(opposingTeam)
+                            }
+                        );
                         this.baseIcons.set(opposingTeam, opposingIcon);
+                        this.baseIconIds.set(opposingTeam, opposingIconId);
                     }
                 }
 
@@ -4116,20 +4257,21 @@ class CaptureZone {
     }
 
     UpdateIcons(){
-        if(this.baseIcons){
-            for(let [targetTeamId, icon] of this.baseIcons.entries()){
-                if(targetTeamId == this.teamId){
-                    // Icon is for capture zone owner
-                } else {
-                    // Icon is for opposing team
-                }
-                mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)));
-                mod.SetWorldIconImage(icon, mod.WorldIconImages.Triangle);
-                mod.SetWorldIconColor(icon, GetTeamColorById(this.teamId));
-                mod.SetWorldIconPosition(icon, this.iconPosition);
-                mod.EnableWorldIconText(icon, true);
-                mod.EnableWorldIconImage(icon, true);
+        // Use WorldIconManager methods instead of direct mod calls
+        // This ensures we're updating the current icon even after refresh
+        const iconMgr = worldIconManager;
+
+        for(let [targetTeamId, iconId] of this.baseIconIds.entries()){
+            if(targetTeamId == this.teamId){
+                // Icon is for capture zone owner
+            } else {
+                // Icon is for opposing team
             }
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)));
+            iconMgr.setIcon(iconId, mod.WorldIconImages.Triangle);
+            iconMgr.setColor(iconId, GetTeamColorById(this.teamId));
+            iconMgr.setPosition(iconId, this.iconPosition);
+            iconMgr.setEnabled(iconId, true, true); // icon enabled, text enabled
         }
     } 
 
@@ -4191,6 +4333,634 @@ function GetDefaultFlagCaptureZoneAreaTriggerIdForTeam(team: mod.Team): number {
 function GetDefaultFlagCaptureZoneSpatialIdForTeam(team: mod.Team): number {
     return GetFlagTeamIdOffset(team) + FlagIdOffsets.FLAG_CAPTURE_ZONE_ICON_ID_OFFSET;
 }
+
+//==============================================================================================
+// WORLD ICON MANAGER - Centralized management of WorldIcons with refresh support
+//==============================================================================================
+
+/**
+ * Saved state for a WorldIcon to enable respawning with same properties
+ */
+interface WorldIconState {
+    id: string;
+    position: mod.Vector;
+    text?: mod.Message;
+    textEnabled: boolean;
+    icon?: mod.WorldIconImages;
+    iconEnabled: boolean;
+    color?: mod.Vector;
+    teamOwner?: mod.Team; // Team object for team scoping
+    playerOwner?: mod.Player; // Player object for player scoping
+}
+
+/**
+ * WorldIconManager - Manages all WorldIcons in the game
+ * Handles refresh on player join by respawning icons with saved state
+ *
+ * Features:
+ * - Automatic state tracking
+ * - Respawn on player join (fixes visibility bug)
+ * - Team/Player scoped icon support
+ * - Centralized cleanup
+ */
+class WorldIconManager {
+    private static instance: WorldIconManager;
+    private icons: Map<string, mod.WorldIcon> = new Map();
+    private iconStates: Map<string, WorldIconState> = new Map();
+
+    private constructor() {
+        if (DEBUG_MODE) {
+            console.log('WorldIconManager: Initialized');
+        }
+    }
+
+    /**
+     * Get the singleton instance
+     */
+    static getInstance(): WorldIconManager {
+        if (!WorldIconManager.instance) {
+            WorldIconManager.instance = new WorldIconManager();
+        }
+        return WorldIconManager.instance;
+    }
+
+    /**
+     * Create and register a WorldIcon
+     * @param id Unique identifier for this icon
+     * @param position World position
+     * @param options Optional configuration
+     */
+    createIcon(
+        id: string,
+        position: mod.Vector,
+        options?: {
+            text?: mod.Message;
+            textEnabled?: boolean;
+            icon?: mod.WorldIconImages;
+            iconEnabled?: boolean;
+            color?: mod.Vector;
+            teamOwner?: mod.Team; // Team object for team scoping
+            playerOwner?: mod.Player; // Player object for player scoping
+        }
+    ): mod.WorldIcon {
+        // Delete existing icon if it exists
+        if (this.icons.has(id)) {
+            this.deleteIcon(id);
+        }
+
+        // Create the icon using the correct API
+        const icon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, position, ZERO_VEC) as mod.WorldIcon;
+
+        // Apply owner (team/player scope) if specified
+        if (options?.teamOwner !== undefined) {
+            mod.SetWorldIconOwner(icon, options.teamOwner);
+        } else if (options?.playerOwner !== undefined) {
+            mod.SetWorldIconOwner(icon, options.playerOwner);
+        }
+
+        // Apply text properties
+        if (options?.text !== undefined) {
+            mod.SetWorldIconText(icon, options.text);
+        }
+        const textEnabled = options?.textEnabled ?? false;
+        mod.EnableWorldIconText(icon, textEnabled);
+
+        // Apply icon properties
+        if (options?.icon !== undefined) {
+            mod.SetWorldIconImage(icon, options.icon);
+        }
+        const iconEnabled = options?.iconEnabled ?? false;
+        mod.EnableWorldIconImage(icon, iconEnabled);
+
+        // Apply color
+        if (options?.color !== undefined) {
+            mod.SetWorldIconColor(icon, options.color);
+        }
+
+        // Save state
+        const state: WorldIconState = {
+            id: id,
+            position: position,
+            text: options?.text,
+            textEnabled: textEnabled,
+            icon: options?.icon,
+            iconEnabled: iconEnabled,
+            color: options?.color,
+            teamOwner: options?.teamOwner,
+            playerOwner: options?.playerOwner
+        };
+
+        this.icons.set(id, icon);
+        this.iconStates.set(id, state);
+
+        if (DEBUG_MODE) {
+            console.log(`WorldIconManager: Created icon '${id}'`);
+        }
+
+        return icon;
+    }
+
+    /**
+     * Get a managed icon by ID
+     */
+    getIcon(id: string): mod.WorldIcon | undefined {
+        return this.icons.get(id);
+    }
+
+    /**
+     * Update icon position and save state
+     */
+    setPosition(id: string, position: mod.Vector): void {
+        const icon = this.icons.get(id);
+        const state = this.iconStates.get(id);
+
+        if (icon && state) {
+            mod.SetWorldIconPosition(icon, position);
+            state.position = position;
+        }
+    }
+
+    /**
+     * Update icon text and save state
+     */
+    setText(id: string, text: mod.Message): void {
+        const icon = this.icons.get(id);
+        const state = this.iconStates.get(id);
+
+        if (icon && state) {
+            mod.SetWorldIconText(icon, text);
+            state.text = text;
+        }
+    }
+
+    /**
+     * Update icon image and save state
+     */
+    setIcon(id: string, iconImage: mod.WorldIconImages): void {
+        const icon = this.icons.get(id);
+        const state = this.iconStates.get(id);
+
+        if (icon && state) {
+            mod.SetWorldIconImage(icon, iconImage);
+            state.icon = iconImage;
+        }
+    }
+
+    /**
+     * Update icon color and save state
+     */
+    setColor(id: string, color: mod.Vector): void {
+        const icon = this.icons.get(id);
+        const state = this.iconStates.get(id);
+
+        if (icon && state) {
+            mod.SetWorldIconColor(icon, color);
+            state.color = color;
+        }
+    }
+
+    /**
+     * Update icon text visibility and save state
+     */
+    setTextEnabled(id: string, enabled: boolean): void {
+        const icon = this.icons.get(id);
+        const state = this.iconStates.get(id);
+
+        if (icon && state) {
+            mod.EnableWorldIconText(icon, enabled);
+            state.textEnabled = enabled;
+        }
+    }
+
+    /**
+     * Update icon image visibility and save state
+     */
+    setIconEnabled(id: string, enabled: boolean): void {
+        const icon = this.icons.get(id);
+        const state = this.iconStates.get(id);
+
+        if (icon && state) {
+            mod.EnableWorldIconImage(icon, enabled);
+            state.iconEnabled = enabled;
+        }
+    }
+
+    /**
+     * Update both icon and text visibility together
+     */
+    setEnabled(id: string, iconEnabled: boolean, textEnabled: boolean): void {
+        const icon = this.icons.get(id);
+        const state = this.iconStates.get(id);
+
+        if (icon && state) {
+            mod.EnableWorldIconImage(icon, iconEnabled);
+            mod.EnableWorldIconText(icon, textEnabled);
+            state.iconEnabled = iconEnabled;
+            state.textEnabled = textEnabled;
+        }
+    }
+
+    /**
+     * Update icon team owner and save state
+     */
+    setTeamOwner(id: string, team: mod.Team): void {
+        const icon = this.icons.get(id);
+        const state = this.iconStates.get(id);
+
+        if (icon && state) {
+            mod.SetWorldIconOwner(icon, team);
+            state.teamOwner = team;
+            state.playerOwner = undefined; // Clear player owner
+        }
+    }
+
+    /**
+     * Update icon player owner and save state
+     */
+    setPlayerOwner(id: string, player: mod.Player): void {
+        const icon = this.icons.get(id);
+        const state = this.iconStates.get(id);
+
+        if (icon && state) {
+            mod.SetWorldIconOwner(icon, player);
+            state.playerOwner = player;
+            state.teamOwner = undefined; // Clear team owner
+        }
+    }
+
+    /**
+     * Delete a specific icon
+     */
+    deleteIcon(id: string): void {
+        const icon = this.icons.get(id);
+        if (icon) {
+            mod.UnspawnObject(icon);
+            this.icons.delete(id);
+            this.iconStates.delete(id);
+
+            if (DEBUG_MODE) {
+                console.log(`WorldIconManager: Deleted icon '${id}'`);
+            }
+        }
+    }
+
+    /**
+     * Refresh a specific icon (delete and recreate with saved state)
+     * Called automatically on player join
+     */
+    private refreshIcon(id: string): void {
+        const state = this.iconStates.get(id);
+        if (!state) return;
+
+        // Delete old icon
+        const oldIcon = this.icons.get(id);
+        if (oldIcon) {
+            mod.UnspawnObject(oldIcon);
+        }
+
+        // Recreate with saved state using the correct API
+        const newIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, state.position, ZERO_VEC) as mod.WorldIcon;
+
+        // Reapply owner (team/player scope) first
+        if (state.teamOwner !== undefined) {
+            mod.SetWorldIconOwner(newIcon, state.teamOwner);
+        } else if (state.playerOwner !== undefined) {
+            mod.SetWorldIconOwner(newIcon, state.playerOwner);
+        }
+
+        // Reapply all saved properties
+        if (state.text !== undefined) {
+            mod.SetWorldIconText(newIcon, state.text);
+        }
+        mod.EnableWorldIconText(newIcon, state.textEnabled);
+
+        if (state.icon !== undefined) {
+            mod.SetWorldIconImage(newIcon, state.icon);
+        }
+        mod.EnableWorldIconImage(newIcon, state.iconEnabled);
+
+        if (state.color !== undefined) {
+            mod.SetWorldIconColor(newIcon, state.color);
+        }
+
+        // Update reference
+        this.icons.set(id, newIcon);
+
+        if (DEBUG_MODE) {
+            console.log(`WorldIconManager: Refreshed icon '${id}'`);
+        }
+    }
+
+    /**
+     * Refresh all managed icons
+     * Called when a player joins to fix visibility bugs
+     */
+    refreshAllIcons(): void {
+        if (DEBUG_MODE) {
+            console.log(`WorldIconManager: Refreshing ${this.iconStates.size} icons`);
+        }
+
+        for (const id of this.iconStates.keys()) {
+            this.refreshIcon(id);
+        }
+    }
+
+    /**
+     * Delete all managed icons
+     */
+    deleteAllIcons(): void {
+        for (const icon of this.icons.values()) {
+            mod.UnspawnObject(icon);
+        }
+        this.icons.clear();
+        this.iconStates.clear();
+
+        if (DEBUG_MODE) {
+            console.log('WorldIconManager: Deleted all icons');
+        }
+    }
+
+    /**
+     * Get count of managed icons
+     */
+    getIconCount(): number {
+        return this.icons.size;
+    }
+
+    /**
+     * Check if an icon exists
+     */
+    hasIcon(id: string): boolean {
+        return this.icons.has(id);
+    }
+}
+
+
+//==============================================================================================
+// VFX MANAGER - Centralized management of ongoing VFX with refresh support
+//==============================================================================================
+
+/**
+ * Type for runtime spawnable objects (VFX, SFX, etc.)
+ */
+type RuntimeSpawnType =
+    | mod.RuntimeSpawn_Common
+    | mod.RuntimeSpawn_Abbasid
+    | mod.RuntimeSpawn_Aftermath
+    | mod.RuntimeSpawn_Battery
+    | mod.RuntimeSpawn_Capstone
+    | mod.RuntimeSpawn_Dumbo
+    | mod.RuntimeSpawn_FireStorm
+    | mod.RuntimeSpawn_Limestone
+    | mod.RuntimeSpawn_Outskirts
+    | mod.RuntimeSpawn_Tungsten;
+
+/**
+ * Saved state for a VFX to enable refresh with same properties
+ */
+interface VFXState {
+    id: string;
+    vfxType: RuntimeSpawnType; // RuntimeSpawn VFX type for respawning if needed
+    position: mod.Vector;
+    rotation: mod.Vector;
+    color?: mod.Vector;
+    enabled: boolean;
+    scale?: number;
+}
+
+/**
+ * VFXManager - Manages all ongoing VFX effects in the game
+ * Handles refresh on player first deploy by toggling VFX visibility
+ *
+ * Features:
+ * - Automatic state tracking
+ * - Toggle-based refresh (preserves particles)
+ * - Centralized VFX lifecycle management
+ * - Position, rotation, color, and scale tracking
+ */
+class VFXManager {
+    private static instance: VFXManager;
+    private vfxObjects: Map<string, mod.VFX> = new Map();
+    private vfxStates: Map<string, VFXState> = new Map();
+
+    private constructor() {
+        if (DEBUG_MODE) {
+            console.log('VFXManager: Initialized');
+        }
+    }
+
+    /**
+     * Get the singleton instance
+     */
+    static getInstance(): VFXManager {
+        if (!VFXManager.instance) {
+            VFXManager.instance = new VFXManager();
+        }
+        return VFXManager.instance;
+    }
+
+    /**
+     * Create and register a VFX effect
+     * @param id Unique identifier for this VFX
+     * @param vfxType RuntimeSpawn VFX type (e.g., mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom)
+     * @param position World position
+     * @param rotation World rotation (Euler angles as Vector)
+     * @param options Optional configuration
+     */
+    createVFX(
+        id: string,
+        vfxType: RuntimeSpawnType,
+        position: mod.Vector,
+        rotation: mod.Vector,
+        options?: {
+            color?: mod.Vector;
+            enabled?: boolean;
+            scale?: number;
+        }
+    ): mod.VFX {
+        // Delete existing VFX if it exists
+        if (this.vfxObjects.has(id)) {
+            this.deleteVFX(id);
+        }
+
+        // Spawn the VFX
+        const vfx = mod.SpawnObject(vfxType, position, rotation) as mod.VFX;
+
+        // Apply color if specified
+        if (options?.color !== undefined) {
+            mod.SetVFXColor(vfx, options.color);
+        }
+
+        // Apply scale if specified
+        if (options?.scale !== undefined) {
+            mod.SetVFXScale(vfx, options.scale);
+        }
+
+        // Apply enabled state (default to true)
+        const enabled = options?.enabled ?? true;
+        mod.EnableVFX(vfx, enabled);
+
+        // Save state
+        const state: VFXState = {
+            id: id,
+            vfxType: vfxType,
+            position: position,
+            rotation: rotation,
+            color: options?.color,
+            enabled: enabled,
+            scale: options?.scale
+        };
+
+        this.vfxObjects.set(id, vfx);
+        this.vfxStates.set(id, state);
+
+        if (DEBUG_MODE) {
+            console.log(`VFXManager: Created VFX '${id}'`);
+        }
+
+        return vfx;
+    }
+
+    /**
+     * Get a managed VFX by ID
+     */
+    getVFX(id: string): mod.VFX | undefined {
+        return this.vfxObjects.get(id);
+    }
+
+    /**
+     * Update VFX position and rotation, and save state
+     */
+    setPosition(id: string, position: mod.Vector, rotation: mod.Vector): void {
+        const vfx = this.vfxObjects.get(id);
+        const state = this.vfxStates.get(id);
+
+        if (vfx && state) {
+            mod.MoveVFX(vfx, position, rotation);
+            state.position = position;
+            state.rotation = rotation;
+        }
+    }
+
+    /**
+     * Update VFX color and save state
+     */
+    setColor(id: string, color: mod.Vector): void {
+        const vfx = this.vfxObjects.get(id);
+        const state = this.vfxStates.get(id);
+
+        if (vfx && state) {
+            mod.SetVFXColor(vfx, color);
+            state.color = color;
+        }
+    }
+
+    /**
+     * Update VFX enabled state and save state
+     */
+    setEnabled(id: string, enabled: boolean): void {
+        const vfx = this.vfxObjects.get(id);
+        const state = this.vfxStates.get(id);
+
+        if (vfx && state) {
+            mod.EnableVFX(vfx, enabled);
+            state.enabled = enabled;
+        }
+    }
+
+    /**
+     * Update VFX scale and save state
+     */
+    setScale(id: string, scale: number): void {
+        const vfx = this.vfxObjects.get(id);
+        const state = this.vfxStates.get(id);
+
+        if (vfx && state) {
+            mod.SetVFXScale(vfx, scale);
+            state.scale = scale;
+        }
+    }
+
+    /**
+     * Delete a specific VFX
+     */
+    deleteVFX(id: string): void {
+        const vfx = this.vfxObjects.get(id);
+        if (vfx) {
+            mod.UnspawnObject(vfx);
+            this.vfxObjects.delete(id);
+            this.vfxStates.delete(id);
+
+            if (DEBUG_MODE) {
+                console.log(`VFXManager: Deleted VFX '${id}'`);
+            }
+        }
+    }
+
+    /**
+     * Refresh a specific VFX using toggle method
+     * Disables then re-enables to force visibility update without destroying particles
+     */
+    private refreshVFX(id: string): void {
+        const vfx = this.vfxObjects.get(id);
+        const state = this.vfxStates.get(id);
+
+        if (!vfx || !state) return;
+
+        // Toggle method: disable then re-enable with saved state
+        // This should preserve particle state while forcing visibility refresh
+        mod.EnableVFX(vfx, false);
+        mod.EnableVFX(vfx, state.enabled);
+
+        if (DEBUG_MODE) {
+            console.log(`VFXManager: Refreshed VFX '${id}' (toggled ${state.enabled ? 'on' : 'off'})`);
+        }
+    }
+
+    /**
+     * Refresh all managed VFX effects
+     * Called when a player deploys for the first time to fix visibility bugs
+     */
+    refreshAllVFX(): void {
+        if (DEBUG_MODE) {
+            console.log(`VFXManager: Refreshing ${this.vfxStates.size} VFX effects`);
+        }
+
+        for (const id of this.vfxStates.keys()) {
+            this.refreshVFX(id);
+        }
+    }
+
+    /**
+     * Delete all managed VFX
+     */
+    deleteAllVFX(): void {
+        for (const vfx of this.vfxObjects.values()) {
+            mod.UnspawnObject(vfx);
+        }
+        this.vfxObjects.clear();
+        this.vfxStates.clear();
+
+        if (DEBUG_MODE) {
+            console.log('VFXManager: Deleted all VFX');
+        }
+    }
+
+    /**
+     * Get count of managed VFX
+     */
+    getVFXCount(): number {
+        return this.vfxObjects.size;
+    }
+
+    /**
+     * Check if a VFX exists
+     */
+    hasVFX(id: string): boolean {
+        return this.vfxObjects.has(id);
+    }
+}
+
 
 //==============================================================================================
 // BASE SCORE HUD
