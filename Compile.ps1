@@ -245,71 +245,17 @@ def minify_typescript(input_file, output_file):
     # Remove multi-line comments
     code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
 
-    # Step 2: Remove excessive whitespace while preserving single spaces where needed
-    # Replace multiple spaces with single space
-    code = re.sub(r' +', ' ', code)
-    # Remove spaces around operators and punctuation (but keep spaces around keywords)
-    code = re.sub(r'\s*([{}()\[\];,:<>!=+\-*/%&|?])\s*', r'\1', code)
-    # Remove leading/trailing whitespace from lines
-    code = re.sub(r'^\s+|\s+$', '', code, flags=re.MULTILINE)
-    # Remove empty lines
-    code = re.sub(r'\n\n+', '\n', code)
-
-    # Step 3: Add back necessary spaces around keywords to maintain validity
-    keywords = [
-        'async', 'await', 'break', 'case', 'catch', 'class', 'const', 'continue',
-        'debugger', 'default', 'delete', 'do', 'else', 'enum', 'export', 'extends',
-        'finally', 'for', 'function', 'if', 'import', 'in', 'instanceof', 'let',
-        'new', 'return', 'static', 'super', 'switch', 'this', 'throw', 'try',
-        'typeof', 'var', 'void', 'while', 'with', 'yield', 'namespace', 'interface',
-        'type', 'readonly', 'private', 'public', 'protected', 'as', 'from'
-    ]
-
-    for keyword in keywords:
-        # Add space after keyword if followed by alphanumeric
-        code = re.sub(rf'\b{keyword}\b([a-zA-Z0-9_])', rf'{keyword} \1', code)
-        # Add space before keyword if preceded by alphanumeric
-        code = re.sub(rf'([a-zA-Z0-9_])\b{keyword}\b', rf'\1 {keyword}', code)
-
-    # Step 4: Minify local variables and parameters
-    # This is a simplified approach - we'll rename single-letter or short local vars
-    # Pattern: look for 'let/const/var identifier' declarations
-    var_counter = 0
-    var_map = {}
-
-    def get_next_var_name():
-        nonlocal var_counter
-        # Generate: a, b, c, ..., z, aa, ab, ac, ..., zz, aaa, ...
-        result = ''
-        n = var_counter
-        while True:
-            result = chr(ord('a') + (n % 26)) + result
-            n = n // 26
-            if n == 0:
-                break
-            n -= 1
-        var_counter += 1
-        return result
-
-    # Find and rename local variables (simple heuristic)
-    # Match: let/const/var followed by identifier
-    def replace_local_var(match):
-        keyword = match.group(1)
-        var_name = match.group(2)
-
-        # Don't minify if it looks like a class member or exported identifier
-        # or if it's a known API namespace
-        if var_name in ['mod', 'modlib'] or var_name.startswith('On'):
-            return match.group(0)
-
-        # Create or retrieve minified name
-        if var_name not in var_map:
-            var_map[var_name] = get_next_var_name()
-
-        return f'{keyword}{var_map[var_name]}'
-
-    # This is a simplified minification - for production, would need proper AST parsing
-    # For now, we'll focus on whitespace removal which gives the most benefit
+    # Step 2: Conservative whitespace minification
+    # Replace multiple spaces/tabs with single space
+    code = re.sub(r'[ \t]+', ' ', code)
+    # Remove leading whitespace from lines
+    code = re.sub(r'^\s+', '', code, flags=re.MULTILINE)
+    # Remove trailing whitespace from lines
+    code = re.sub(r'\s+$', '', code, flags=re.MULTILINE)
+    # Replace 3+ consecutive newlines with 2 newlines
+    code = re.sub(r'\n{3,}', '\n\n', code)
+    # Remove completely blank lines
+    code = re.sub(r'\n\s*\n', '\n', code)
 
     # Write output
     with open(output_file, 'w', encoding='utf-8') as f:
