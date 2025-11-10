@@ -23,11 +23,12 @@ class JSPlayer {
     score: PlayerScore;
     readonly joinOrder: number; // Track join order for team balancing
     heldFlags: Flag[] = [];
+    hasEverDeployed: boolean = false; // Track if player has deployed at least once
 
     // Player world attributes
     lastPosition: mod.Vector = ZERO_VEC;
     velocity: mod.Vector = ZERO_VEC;
-    
+
     // UI
     scoreboardUI?: BaseScoreboardHUD;
 

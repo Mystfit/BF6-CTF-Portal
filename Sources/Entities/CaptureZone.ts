@@ -12,6 +12,9 @@ class CaptureZone {
     readonly iconPosition: mod.Vector;
     readonly baseIcons?: Map<number, mod.WorldIcon>;// One icon per opposing team
 
+    // WorldIcon manager IDs for tracking
+    private baseIconIds: Map<number, string> = new Map();
+
     constructor(team: mod.Team, captureZoneID?: number, captureZoneSpatialObjId?:number){
         this.team = team;
         this.teamId = mod.GetObjId(team);
@@ -33,19 +36,45 @@ class CaptureZone {
                 // Get our world icon position for this capture zone
                 this.iconPosition = mod.Add(this.position, mod.CreateVector(0.0, FLAG_ICON_HEIGHT_OFFSET, 0.0));
 
-                // Create world icons for our team         
+                // Register WorldIcons with WorldIconManager
+                const iconMgr = worldIconManager;
                 this.baseIcons = new Map();
-                let teamIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
-                mod.SetWorldIconOwner(teamIcon, team);
+
+                // Create world icon for our team
+                const teamIconId = `capturezone_${this.teamId}_team${this.teamId}`;
+                let teamIcon = iconMgr.createIcon(
+                    teamIconId,
+                    this.iconPosition,
+                    {
+                        icon: mod.WorldIconImages.Triangle,
+                        iconEnabled: true,
+                        textEnabled: true,
+                        text: mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)),
+                        color: GetTeamColorById(this.teamId),
+                        teamOwner: team
+                    }
+                );
                 this.baseIcons.set(mod.GetObjId(team), teamIcon);
-                
-                // Create world icons for opposing teams        
+                this.baseIconIds.set(mod.GetObjId(team), teamIconId);
+
+                // Create world icons for opposing teams
                 let opposingTeams = GetOpposingTeams(mod.GetObjId(team));
                 if(opposingTeams.length && team){
                     for(let opposingTeam of opposingTeams){
-                        let opposingIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, this.iconPosition, ZERO_VEC) as mod.WorldIcon;
-                        mod.SetWorldIconOwner(opposingIcon, mod.GetTeam(opposingTeam));
+                        const opposingIconId = `capturezone_${this.teamId}_team${opposingTeam}`;
+                        let opposingIcon = iconMgr.createIcon(
+                            opposingIconId,
+                            this.iconPosition,
+                            {
+                                icon: mod.WorldIconImages.Triangle,
+                                iconEnabled: true,
+                                textEnabled: true,
+                                color: GetTeamColorById(this.teamId),
+                                teamOwner: mod.GetTeam(opposingTeam)
+                            }
+                        );
                         this.baseIcons.set(opposingTeam, opposingIcon);
+                        this.baseIconIds.set(opposingTeam, opposingIconId);
                     }
                 }
 
@@ -59,20 +88,21 @@ class CaptureZone {
     }
 
     UpdateIcons(){
-        if(this.baseIcons){
-            for(let [targetTeamId, icon] of this.baseIcons.entries()){
-                if(targetTeamId == this.teamId){
-                    // Icon is for capture zone owner
-                } else {
-                    // Icon is for opposing team
-                }
-                mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)));
-                mod.SetWorldIconImage(icon, mod.WorldIconImages.Triangle);
-                mod.SetWorldIconColor(icon, GetTeamColorById(this.teamId));
-                mod.SetWorldIconPosition(icon, this.iconPosition);
-                mod.EnableWorldIconText(icon, true);
-                mod.EnableWorldIconImage(icon, true);
+        // Use WorldIconManager methods instead of direct mod calls
+        // This ensures we're updating the current icon even after refresh
+        const iconMgr = worldIconManager;
+
+        for(let [targetTeamId, iconId] of this.baseIconIds.entries()){
+            if(targetTeamId == this.teamId){
+                // Icon is for capture zone owner
+            } else {
+                // Icon is for opposing team
             }
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)));
+            iconMgr.setIcon(iconId, mod.WorldIconImages.Triangle);
+            iconMgr.setColor(iconId, GetTeamColorById(this.teamId));
+            iconMgr.setPosition(iconId, this.iconPosition);
+            iconMgr.setEnabled(iconId, true, true); // icon enabled, text enabled
         }
     } 
 

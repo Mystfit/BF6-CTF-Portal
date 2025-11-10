@@ -12,52 +12,6 @@
  * All imports should go in imports.ts instead.
  */
 
-// ============================================================================
-// MODLIB NAMESPACE
-// ============================================================================
-// Declare modlib so VSCode knows it exists (actual import is in imports.ts)
-
-declare namespace modlib {
-    function Concat(s1: string, s2: string): string;
-    function And(...rest: boolean[]): boolean;
-    function AndFn(...rest: (() => boolean)[]): boolean;
-    function getPlayerId(player: mod.Player): number;
-    function getTeamId(team: mod.Team): number;
-    function ConvertArray(array: mod.Array): any[];
-    function FilteredArray(array: mod.Array, cond: (currentElement: any) => boolean): mod.Array;
-    function IndexOfFirstTrue(array: mod.Array, cond: (element: any, arg: any) => boolean, arg?: any): number;
-    function IfThenElse<T>(condition: boolean, ifTrue: () => T, ifFalse: () => T): T;
-    function IsTrueForAll(array: mod.Array, condition: (element: any, arg: any) => boolean, arg?: any): boolean;
-    function IsTrueForAny(array: mod.Array, condition: (element: any, arg: any) => boolean, arg?: any): boolean;
-    function SortedArray(array: any[], compare: (a: any, b: any) => number): any[];
-    function Equals(a: any, b: any): boolean;
-    function WaitUntil(delay: number, cond: () => boolean): Promise<void>;
-    
-    class ConditionState {
-        lastState: boolean;
-        constructor();
-        update(newState: boolean): boolean;
-    }
-    
-    function getPlayerCondition(obj: mod.Player, n: number): ConditionState;
-    function getTeamCondition(team: mod.Team, n: number): ConditionState;
-    function getCapturePointCondition(obj: mod.CapturePoint, n: number): ConditionState;
-    function getMCOMCondition(obj: mod.MCOM, n: number): ConditionState;
-    function getVehicleCondition(obj: mod.Vehicle, n: number): ConditionState;
-    function getGlobalCondition(n: number): ConditionState;
-    function getPlayersInTeam(team: mod.Team): mod.Player[];
-    
-    // UI Helper function - most commonly used
-    function ParseUI(...params: any[]): mod.UIWidget | undefined;
-    
-    // Message display functions
-    function DisplayCustomNotificationMessage(msg: mod.Message, custom: mod.CustomNotificationSlots, duration: number, target?: mod.Player | mod.Team): void;
-    function ShowEventGameModeMessage(event: mod.Message, target?: mod.Player | mod.Team): void;
-    function ShowHighlightedGameModeMessage(event: mod.Message, target?: mod.Player | mod.Team): void;
-    function ShowNotificationMessage(msg: mod.Message, target?: mod.Player | mod.Team): void;
-    function ClearAllCustomNotificationMessages(target: mod.Player): void;
-    function ClearCustomNotificationMessage(custom: mod.CustomNotificationSlots, target?: mod.Player | mod.Team): void;
-}
 
 // ============================================================================
 // CONSTANTS
@@ -235,21 +189,21 @@ declare class EventDispatcher<TEventMap = Record<string, any>> {
 }
 
 declare interface FlagEventMap {
-    'flagTaken': { 
-        flag: Flag; 
+    'flagTaken': {
+        flag: Flag;
         player: mod.Player;
         isAtHome: boolean;
     };
-    'flagDropped': { 
-        flag: Flag; 
+    'flagDropped': {
+        flag: Flag;
         position: mod.Vector;
         previousCarrier: mod.Player | null;
     };
-    'flagReturned': { 
+    'flagReturned': {
         flag: Flag;
         wasAutoReturned: boolean;
     };
-    'flagAtHome': { 
+    'flagAtHome': {
         flag: Flag;
     };
     'flagStateChanged': {
@@ -261,6 +215,11 @@ declare interface FlagEventMap {
     'flagCaptured': {
         flag: Flag;
     };
+}
+
+declare interface PlayerEventMap {
+    'playerJoined': { player: mod.Player };
+    'playerLeft': { playerId: number };
 }
 
 declare interface AnimationOptions {
@@ -304,6 +263,7 @@ declare class JSPlayer {
     score: PlayerScore;
     readonly joinOrder: number;
     heldFlags: Flag[];
+    hasEverDeployed: boolean;
     lastPosition: mod.Vector;
     velocity: mod.Vector;
     scoreboardUI?: BaseScoreboardHUD;
@@ -340,6 +300,8 @@ declare class Flag {
     autoReturnTime: number;
     flagRecoverIcon: mod.WorldIcon;
     flagCarriedIcons: Map<number, mod.WorldIcon>;
+    recoverIconId: string;
+    carriedIconIds: Map<number, string>;
     flagInteractionPoint: mod.InteractPoint | null;
     flagProp: mod.Object | null;
     flagSmokeVFX: mod.VFX;
@@ -355,7 +317,10 @@ declare class Flag {
     hoverVFX: mod.VFX | null;
     flagImpactVFX: mod.VFX | null;
     flagSparksVFX: mod.VFX | null;
-    
+    smokeVFXId: string;
+    sparksVFXId: string;
+    impactVFXId: string;
+
     // Event system
     readonly events: EventDispatcher<FlagEventMap>;
 
@@ -718,11 +683,91 @@ declare function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean
 declare function AreVectorsEqual(a: mod.Vector, b: mod.Vector, epsilon?: number): boolean;
 
 // ============================================================================
+// WORLD ICON MANAGER
+// ============================================================================
+
+declare class WorldIconManager {
+    static getInstance(): WorldIconManager;
+    createIcon(
+        id: string,
+        position: mod.Vector,
+        options?: {
+            text?: mod.Message;
+            textEnabled?: boolean;
+            icon?: mod.WorldIconImages;
+            iconEnabled?: boolean;
+            color?: mod.Vector;
+            teamOwner?: mod.Team;
+            playerOwner?: mod.Player;
+        }
+    ): mod.WorldIcon;
+    getIcon(id: string): mod.WorldIcon | undefined;
+    setPosition(id: string, position: mod.Vector): void;
+    setText(id: string, text: mod.Message): void;
+    setIcon(id: string, iconImage: mod.WorldIconImages): void;
+    setColor(id: string, color: mod.Vector): void;
+    setTextEnabled(id: string, enabled: boolean): void;
+    setIconEnabled(id: string, enabled: boolean): void;
+    setEnabled(id: string, iconEnabled: boolean, textEnabled: boolean): void;
+    setTeamOwner(id: string, team: mod.Team): void;
+    setPlayerOwner(id: string, player: mod.Player): void;
+    deleteIcon(id: string): void;
+    refreshAllIcons(): void;
+    deleteAllIcons(): void;
+    getIconCount(): number;
+    hasIcon(id: string): boolean;
+}
+
+// ============================================================================
+// VFX MANAGER
+// ============================================================================
+
+type RuntimeSpawnType =
+    | mod.RuntimeSpawn_Common
+    | mod.RuntimeSpawn_Abbasid
+    | mod.RuntimeSpawn_Aftermath
+    | mod.RuntimeSpawn_Battery
+    | mod.RuntimeSpawn_Capstone
+    | mod.RuntimeSpawn_Dumbo
+    | mod.RuntimeSpawn_FireStorm
+    | mod.RuntimeSpawn_Limestone
+    | mod.RuntimeSpawn_Outskirts
+    | mod.RuntimeSpawn_Tungsten;
+
+declare class VFXManager {
+    static getInstance(): VFXManager;
+    createVFX(
+        id: string,
+        vfxType: RuntimeSpawnType,
+        position: mod.Vector,
+        rotation: mod.Vector,
+        options?: {
+            color?: mod.Vector;
+            enabled?: boolean;
+            scale?: number;
+        }
+    ): mod.VFX;
+    getVFX(id: string): mod.VFX | undefined;
+    setPosition(id: string, position: mod.Vector, rotation: mod.Vector): void;
+    setColor(id: string, color: mod.Vector): void;
+    setEnabled(id: string, enabled: boolean): void;
+    setScale(id: string, scale: number): void;
+    deleteVFX(id: string): void;
+    refreshAllVFX(): void;
+    deleteAllVFX(): void;
+    getVFXCount(): number;
+    hasVFX(id: string): boolean;
+}
+
+// ============================================================================
 // GLOBAL INSTANCES
 // ============================================================================
 
 declare const animationManager: AnimationManager;
 declare const raycastManager: RaycastManager;
+declare let worldIconManager: WorldIconManager;
+declare let vfxManager: VFXManager;
+declare const globalPlayerEvents: EventDispatcher<PlayerEventMap>;
 
 // ============================================================================
 // GLOBAL STATE

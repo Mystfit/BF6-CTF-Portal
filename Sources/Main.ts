@@ -55,6 +55,13 @@ const TEAM_ID_STRIDE_OFFSET = 10;
 
 let gameStarted = false;
 
+// Global event dispatcher for player join/leave events
+interface PlayerEventMap {
+    'playerJoined': { player: mod.Player };
+    'playerLeft': { playerId: number };
+}
+const globalPlayerEvents = new EventDispatcher<PlayerEventMap>();
+
 // Team balance state
 let lastBalanceCheckTime = 0;
 let balanceInProgress = false;
@@ -80,6 +87,10 @@ let teamConfigs: Map<number, TeamConfig> = new Map();
 let teamScores: Map<number, number> = new Map();
 let flags: Map<number, Flag> = new Map();
 let captureZones: Map<number, CaptureZone> = new Map();
+
+// Global managers
+let worldIconManager: WorldIconManager;
+let vfxManager: VFXManager;
 
 
 //==============================================================================================
@@ -159,6 +170,10 @@ export async function OnGameModeStarted() {
     console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
     mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_author));
     mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
+
+    // Initialize global managers
+    worldIconManager = WorldIconManager.getInstance();
+    vfxManager = VFXManager.getInstance();
 
     // Initialize legacy team references (still needed for backwards compatibility)
     teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
@@ -336,8 +351,11 @@ export function OnPlayerJoinGame(eventPlayer: mod.Player): void {
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.player_joined, mod.GetObjId(eventPlayer)));
     }
 
-    // Apply UI visibility fix
-    FixTeamScopedUIVisibility(eventPlayer);
+    // Emit player joined event (for any other handlers that need it)
+    globalPlayerEvents.emit('playerJoined', { player: eventPlayer });
+
+    // Note: WorldIcon refresh and UI visibility fix now happens on first deploy, not on join
+    // This prevents icons from disappearing when refreshed before player deploys
 
     // Refresh scoreboard to update new player team entry and score
     RefreshScoreboard();
@@ -370,6 +388,24 @@ export function OnPlayerDeployed(eventPlayer: mod.Player): void {
 
     // If we don't have a JSPlayer by now, we really should create one
     let jsPlayer = JSPlayer.get(eventPlayer);
+
+    // Check if this is the player's first deployment
+    if (jsPlayer && !jsPlayer.hasEverDeployed) {
+        jsPlayer.hasEverDeployed = true;
+
+        if (DEBUG_MODE) {
+            console.log(`Player ${mod.GetObjId(eventPlayer)} deployed for the first time - refreshing WorldIcons, VFX, and UI`);
+        }
+
+        // Refresh WorldIcons to fix visibility for this player
+        worldIconManager.refreshAllIcons();
+
+        // Refresh all VFX to fix visibility for this player
+        vfxManager.refreshAllVFX();
+
+        // Fix team-scoped UI visibility
+        FixTeamScopedUIVisibility(eventPlayer);
+    }
 
     // Set up the player UI on spawn
     jsPlayer?.initUI();

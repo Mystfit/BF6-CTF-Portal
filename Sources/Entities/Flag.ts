@@ -83,7 +83,11 @@ class Flag {
     flagCarriedIcons: Map<number, mod.WorldIcon> = new Map(); // One icon per opposing team
     flagInteractionPoint: mod.InteractPoint | null = null;
     flagProp: mod.Object | null = null;
-    
+
+    // WorldIcon manager IDs for tracking
+    recoverIconId: string = '';
+    carriedIconIds: Map<number, string> = new Map();
+
     // VFX
     flagSmokeVFX: mod.VFX;
     tetherFlagVFX: mod.VFX | null = null;
@@ -93,6 +97,11 @@ class Flag {
     pickupAvailableVFX: mod.VFX | null = null;
     flagImpactVFX: mod.VFX | null = null;
     flagSparksVFX: mod.VFX | null = null;
+
+    // VFX manager IDs for tracking
+    smokeVFXId: string = '';
+    sparksVFXId: string = '';
+    impactVFXId: string = '';
 
     // SFX
     alarmSFX : mod.SFX | null = null;
@@ -124,15 +133,15 @@ class Flag {
         this.followPoints = [];
         this.followDelay = 10;
         this.flagInteractionPoint = null;
-        this.flagRecoverIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, ZERO_VEC, ZERO_VEC);
+        this.flagRecoverIcon = null as any; // Will be created in Initialize()
         this.flagProp = null;
-        this.flagSmokeVFX =  mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom, this.homePosition, ZERO_VEC);       
+        this.flagSmokeVFX = null as any; // Will be created in Initialize()
         this.dragSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_Levels_Brooklyn_Shared_Spots_MetalStress_OneShot3D, this.homePosition, ZERO_VEC);
         this.hoverVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Missile_Javelin, this.homePosition, ZERO_VEC);
         this.pickupChargingVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Gadget_InterativeSpectator_Camera_Light_Red, this.homePosition, ZERO_VEC);
         this.pickupAvailableVFX = null; //mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Gadget_InterativeSpectator_Camera_Light_Green, this.homePosition, ZERO_VEC);
-        this.flagImpactVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_Impact_LootCrate_Generic, this.homePosition, ZERO_VEC);
-        this.flagSparksVFX = mod.SpawnObject(mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L, this.homePosition, ZERO_VEC);
+        this.flagImpactVFX = null as any; // Will be created in Initialize()
+        this.flagSparksVFX = null as any; // Will be created in Initialize()
 
         this.pickupTimerStartSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheStart_OneShot2D, this.homePosition, ZERO_VEC);
         this.pickupTimerRiseSFX = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_UI_Gauntlet_Heist_AltRecoveringCacheTimer_OneShot2D, this.homePosition, ZERO_VEC);
@@ -140,33 +149,101 @@ class Flag {
         
         // Initialize event system
         this.events = new EventDispatcher<FlagEventMap>();
-        
+
         this.Initialize();
     }
-    
+
     Initialize(): void {
-        // Set up initial properties for capture icons
-        mod.SetWorldIconOwner(this.flagRecoverIcon, this.team);
+        // Register WorldIcons with WorldIconManager
+        const iconMgr = worldIconManager;
+
+        // Create recover icon (shown to flag's team)
+        this.recoverIconId = `flag_${this.flagId}_recover`;
+        this.flagRecoverIcon = iconMgr.createIcon(
+            this.recoverIconId,
+            ZERO_VEC,
+            {
+                icon: mod.WorldIconImages.Flag,
+                iconEnabled: false,
+                textEnabled: false,
+                color: this.GetFlagColor(),
+                teamOwner: this.team
+            }
+        );
 
         // Create one carried icon per opposing team
         const opposingTeams = GetOpposingTeamsForFlag(this);
         for (const opposingTeamId of opposingTeams) {
             const opposingTeam = teams.get(opposingTeamId);
             if (opposingTeam) {
-                const carriedIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, ZERO_VEC, ZERO_VEC);
-                mod.SetWorldIconOwner(carriedIcon, opposingTeam);
+                const carriedIconId = `flag_${this.flagId}_carried_team${opposingTeamId}`;
+                const carriedIcon = iconMgr.createIcon(
+                    carriedIconId,
+                    ZERO_VEC,
+                    {
+                        icon: mod.WorldIconImages.Flag,
+                        iconEnabled: false,
+                        textEnabled: false,
+                        color: this.GetFlagColor(),
+                        teamOwner: opposingTeam
+                    }
+                );
                 this.flagCarriedIcons.set(opposingTeamId, carriedIcon);
+                this.carriedIconIds.set(opposingTeamId, carriedIconId);
             }
         }
 
+        // Register VFX with VFXManager
+        const vfxMgr = vfxManager;
+
+        // Create flag smoke VFX (main visual indicator)
+        this.smokeVFXId = `flag_${this.flagId}_smoke`;
+        this.flagSmokeVFX = vfxMgr.createVFX(
+            this.smokeVFXId,
+            mod.RuntimeSpawn_Common.FX_Smoke_Marker_Custom,
+            this.homePosition,
+            ZERO_VEC,
+            {
+                color: this.GetFlagColor(),
+                enabled: true
+            }
+        );
+
+        // Create flag sparks VFX (pickup ready indicator)
+        this.sparksVFXId = `flag_${this.flagId}_sparks`;
+        this.flagSparksVFX = vfxMgr.createVFX(
+            this.sparksVFXId,
+            mod.RuntimeSpawn_Common.FX_BASE_Sparks_Pulse_L,
+            this.homePosition,
+            ZERO_VEC,
+            {
+                enabled: false // Disabled until flag is ready to pickup
+            }
+        );
+
+        // Create flag impact VFX (drop impact effect)
+        this.impactVFXId = `flag_${this.flagId}_impact`;
+        this.flagImpactVFX = vfxMgr.createVFX(
+            this.impactVFXId,
+            mod.RuntimeSpawn_Common.FX_Impact_LootCrate_Generic,
+            this.homePosition,
+            ZERO_VEC,
+            {
+                enabled: false // Only enabled briefly on drop
+            }
+        );
+
+        // Note: VFX are now refreshed on first player deploy using VFXManager
+        // This is handled by vfxManager.refreshAllVFX() in OnPlayerDeployed
+
         // Set up flag at home position
         this.SpawnFlagAtHome();
-        
+
         if (DEBUG_MODE) {
             console.log(`Flag initialized for team ${this.teamId} at position: ${VectorToString(this.homePosition)}`);
         }
     }
-    
+
     SpawnFlagAtHome(): void {
         this.isAtHome = true;
         this.isBeingCarried = false;
@@ -183,10 +260,11 @@ class Flag {
             mod.UnspawnObject(this.flagProp);
         }
         
-        // Enable flag VFX
-        mod.SetVFXColor(this.flagSmokeVFX, GetTeamColor(this.team));
-        mod.EnableVFX(this.flagSmokeVFX, true);
-        mod.MoveVFX(this.flagSmokeVFX, this.currentPosition, ZERO_VEC);
+        // Enable flag VFX using VFXManager
+        const vfxMgr = vfxManager;
+        vfxMgr.setColor(this.smokeVFXId, GetTeamColor(this.team));
+        vfxMgr.setEnabled(this.smokeVFXId, true);
+        vfxMgr.setPosition(this.smokeVFXId, this.currentPosition, ZERO_VEC);
 
         this.flagProp = mod.SpawnObject(
             FLAG_PROP, 
@@ -199,21 +277,20 @@ class Flag {
         if(mcom)
             mod.EnableGameModeObjective(mcom, false);
         
-        // Update defend icons for all opposing teams
-        for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
-            mod.SetWorldIconColor(carriedIcon, GetTeamColor(this.team));
-            mod.EnableWorldIconImage(carriedIcon, false);
-            mod.SetWorldIconImage(carriedIcon, mod.WorldIconImages.Flag);
-            mod.EnableWorldIconText(carriedIcon, false);
-            mod.SetWorldIconText(carriedIcon, mod.Message(mod.stringkeys.pickup_flag_label));
+        // Update defend icons for all opposing teams using WorldIconManager
+        const iconMgr = worldIconManager;
+        for (const [teamId, iconId] of this.carriedIconIds.entries()) {
+            iconMgr.setColor(iconId, GetTeamColor(this.team));
+            iconMgr.setIcon(iconId, mod.WorldIconImages.Flag);
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.pickup_flag_label));
+            iconMgr.setEnabled(iconId, false, false); // Hide both icon and text
         }
 
-        // Update recover icon
-        mod.SetWorldIconColor(this.flagRecoverIcon, GetTeamColor(this.team));
-        mod.EnableWorldIconImage(this.flagRecoverIcon, false);
-        mod.EnableWorldIconText(this.flagRecoverIcon, false);
-        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Flag);
-        mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.recover_flag_label));
+        // Update recover icon using WorldIconManager
+        iconMgr.setColor(this.recoverIconId, GetTeamColor(this.team));
+        iconMgr.setIcon(this.recoverIconId, mod.WorldIconImages.Flag);
+        iconMgr.setText(this.recoverIconId, mod.Message(mod.stringkeys.recover_flag_label));
+        iconMgr.setEnabled(this.recoverIconId, false, false); // Hide both icon and text
 
         // Update interaction point
         this.UpdateFlagInteractionPoint();
@@ -288,17 +365,16 @@ class Flag {
         // Spot the target on the minimap indefinitely
         mod.SpotTarget(this.carrierPlayer, mod.SpotStatus.SpotInMinimap);
         
-        // Show all carried icons for opposing teams
-        for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
-            mod.EnableWorldIconImage(carriedIcon, true);
-            mod.EnableWorldIconText(carriedIcon, true);
+        // Show all carried icons for opposing teams using WorldIconManager
+        const iconMgr = worldIconManager;
+        for (const [teamId, iconId] of this.carriedIconIds.entries()) {
+            iconMgr.setEnabled(iconId, true, true); // Show both icon and text
         }
-        mod.EnableWorldIconImage(this.flagRecoverIcon, true);
-        mod.EnableWorldIconText(this.flagRecoverIcon, true);
+        iconMgr.setEnabled(this.recoverIconId, true, true); // Show both icon and text
 
-        // Set VFX properties
-        mod.SetVFXColor(this.flagSmokeVFX, GetTeamColor(this.team));
-        
+        // Set VFX properties using VFXManager
+        vfxManager.setColor(this.smokeVFXId, GetTeamColor(this.team));
+
         // Notify all players
         const message = mod.Message(mod.stringkeys.team_flag_taken, GetTeamName(this.team));
         if(DEBUG_MODE)
@@ -473,7 +549,7 @@ class Flag {
                     speed: 800,
                     onSpawnAtStart: ():mod.Object | null  => {
                         // Disable smoke whilst flag is thrown to avoid flare leaking out
-                        mod.EnableVFX(this.flagSmokeVFX, false);
+                        vfxManager.setEnabled(this.smokeVFXId, false);
 
                         // Spawn prop
                         this.flagProp = mod.SpawnObject(FLAG_PROP, initialPosition, flagRotation);
@@ -505,27 +581,24 @@ class Flag {
             }
         }
 
-        // Play impact VFX
-        if(this.flagImpactVFX){
-            mod.MoveVFX(this.flagImpactVFX, this.currentPosition, ZERO_VEC);
-            mod.EnableVFX(this.flagImpactVFX, true);
-        }
+        // Play impact VFX using VFXManager
+        vfxManager.setPosition(this.impactVFXId, this.currentPosition, ZERO_VEC);
+        vfxManager.setEnabled(this.impactVFXId, true);
 
-        // Update capture icons for all opposing teams
+        // Update capture icons for all opposing teams using WorldIconManager
+        const iconMgr = worldIconManager;
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2,0));
-        for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
-            mod.EnableWorldIconImage(carriedIcon, true);
-            mod.EnableWorldIconText(carriedIcon, true);
-            mod.SetWorldIconText(carriedIcon, mod.Message(mod.stringkeys.pickup_flag_label));
-            mod.SetWorldIconPosition(carriedIcon, flagIconOffset);
+        for (const [teamId, iconId] of this.carriedIconIds.entries()) {
+            iconMgr.setEnabled(iconId, true, true); // Show both icon and text
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.pickup_flag_label));
+            iconMgr.setPosition(iconId, flagIconOffset);
         }
-        mod.EnableWorldIconImage(this.flagRecoverIcon, true);
-        mod.EnableWorldIconText(this.flagRecoverIcon, true);
-        mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
-        
-        // Update VFX
-        mod.MoveVFX(this.flagSmokeVFX, this.currentPosition, ZERO_VEC);
-        mod.SetVFXColor(this.flagSmokeVFX, GetTeamDroppedColor(this.team));
+        iconMgr.setEnabled(this.recoverIconId, true, true); // Show both icon and text
+        iconMgr.setPosition(this.recoverIconId, flagIconOffset);
+
+        // Update VFX using VFXManager
+        vfxManager.setPosition(this.smokeVFXId, this.currentPosition, ZERO_VEC);
+        vfxManager.setColor(this.smokeVFXId, GetTeamDroppedColor(this.team));
 
         // Play drop VO
         let friendlyVO: mod.VO = mod.SpawnObject(mod.RuntimeSpawn_Common.SFX_VOModule_OneShot2D, this.currentPosition, ZERO_VEC);
@@ -536,12 +609,10 @@ class Flag {
         // Start timers
         this.StartAutoReturn(FLAG_AUTO_RETURN_TIME, this.numFlagTimesPickedUp).then( () => {console.log(`Flag ${this.teamId} auto-returning to base`)});
         this.StartPickupDelay().then(() => {
-            // Activate FX
-            mod.EnableVFX(this.flagSmokeVFX, true);
-            if(this.flagSparksVFX){
-                mod.MoveVFX(this.flagSparksVFX, this.currentPosition, ZERO_VEC);
-                mod.EnableVFX(this.flagSparksVFX, true);
-            }
+            // Activate FX using VFXManager
+            vfxManager.setEnabled(this.smokeVFXId, true);
+            vfxManager.setPosition(this.sparksVFXId, this.currentPosition, ZERO_VEC);
+            vfxManager.setEnabled(this.sparksVFXId, true);
 
             // Update the position of the flag interaction point
             this.UpdateFlagInteractionPoint();   
@@ -592,12 +663,13 @@ class Flag {
     async StartPickupDelay(): Promise<void> {
         let vfxHeightOffset = mod.CreateVector(0, 1.7, 0);
 
-        // Lock the flag icons
-        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Alert);
-        mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.locked_flag_label))
-        for(let [teamId, icon] of this.flagCarriedIcons){
-            mod.SetWorldIconImage(icon, mod.WorldIconImages.Alert);
-            mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.locked_flag_label));
+        // Lock the flag icons using WorldIconManager
+        const iconMgr = worldIconManager;
+        iconMgr.setIcon(this.recoverIconId, mod.WorldIconImages.Alert);
+        iconMgr.setText(this.recoverIconId, mod.Message(mod.stringkeys.locked_flag_label));
+        for(let [teamId, iconId] of this.carriedIconIds){
+            iconMgr.setIcon(iconId, mod.WorldIconImages.Alert);
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.locked_flag_label));
         }
 
         // Charging VFX
@@ -627,12 +699,12 @@ class Flag {
             mod.EnableVFX(this.pickupAvailableVFX, true); 
         }
 
-        // Reset flag icons
-        mod.SetWorldIconText(this.flagRecoverIcon, mod.Message(mod.stringkeys.recover_flag_label));
-        mod.SetWorldIconImage(this.flagRecoverIcon, mod.WorldIconImages.Flag);
-        for(let [teamId, icon] of this.flagCarriedIcons){
-            mod.SetWorldIconImage(icon, mod.WorldIconImages.Flag);
-            mod.SetWorldIconText(icon, mod.Message(mod.stringkeys.pickup_flag_label));
+        // Reset flag icons using WorldIconManager
+        iconMgr.setText(this.recoverIconId, mod.Message(mod.stringkeys.recover_flag_label));
+        iconMgr.setIcon(this.recoverIconId, mod.WorldIconImages.Flag);
+        for(let [teamId, iconId] of this.carriedIconIds){
+            iconMgr.setIcon(iconId, mod.WorldIconImages.Flag);
+            iconMgr.setText(iconId, mod.Message(mod.stringkeys.pickup_flag_label));
         }
 
         if (this.isDropped) {
@@ -757,8 +829,8 @@ class Flag {
             this.currentPosition = currentSoldierPosition;
         }
         
-        // Make smoke effect follow carrier
-        mod.MoveVFX(this.flagSmokeVFX, this.currentPosition, currentRotation);
+        // Make smoke effect follow carrier using VFXManager
+        vfxManager.setPosition(this.smokeVFXId, this.currentPosition, currentRotation);
 
         if(this.hoverVFX){
             if(soldierParachuting){
@@ -855,14 +927,17 @@ class Flag {
     }
 
     UpdateCarrierIcon(){
-        // Move flag icons for all opposing teams
+        // Move flag icons for all opposing teams using WorldIconManager
+        const iconMgr = worldIconManager;
         let flagIconOffset = mod.Add(this.currentPosition, mod.CreateVector(0,2.5,0));
-        for (const [teamId, carriedIcon] of this.flagCarriedIcons.entries()) {
-            mod.SetWorldIconPosition(carriedIcon, flagIconOffset);
-            mod.EnableWorldIconImage(carriedIcon, this.isBeingCarried || this.isDropped);
+        const shouldShowIcon = this.isBeingCarried || this.isDropped;
+
+        for (const [teamId, iconId] of this.carriedIconIds.entries()) {
+            iconMgr.setPosition(iconId, flagIconOffset);
+            iconMgr.setIconEnabled(iconId, shouldShowIcon);
         }
-        mod.SetWorldIconPosition(this.flagRecoverIcon, flagIconOffset);
-        mod.EnableWorldIconImage(this.flagRecoverIcon, this.isBeingCarried || this.isDropped);
+        iconMgr.setPosition(this.recoverIconId, flagIconOffset);
+        iconMgr.setIconEnabled(this.recoverIconId, shouldShowIcon);
     }
     
     RestrictCarrierWeapons(player: mod.Player): void {

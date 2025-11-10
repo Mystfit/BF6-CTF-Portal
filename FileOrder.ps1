@@ -7,21 +7,21 @@
     0 = @(
         # Main constants file should be first
         "imports.ts"
-        "Config.ts",
-        "Main.ts"
+        "Config.ts"
     )
-    
+
     # Level 1: Utility classes and namespaces (minimal dependencies)
     1 = @(
         "Utility/Colour.ts",
         "Utility/Math.ts"
     )
-    
+
     # Level 2: Core infrastructure (uses Level 0-1)
     2 = @(
         "Utility/Raycasts.ts",
         "Utility/Animation.ts",
         "Utility/EventDispatcher.ts"
+        "Main.ts"  # Moved here because it uses EventDispatcher
     )
     
     # Level 3: Game data classes (uses Level 0-2)
@@ -33,7 +33,9 @@
     # Level 4: Entity classes (uses Level 0-3)
     4 = @(
         "Entities/Flag.ts",
-        "Entities/CaptureZone.ts"
+        "Entities/CaptureZone.ts",
+        "Entities/WorldIconManager.ts",
+        "Entities/VFXManager.ts"
     )
 
     # Level 5: UI classes (uses most other classes)
