@@ -69,7 +69,7 @@
 
 const VERSION = [2, 3, 0];
 
-const DEBUG_MODE = false;                                            // Print extra debug messages
+const DEBUG_MODE = true;                                            // Print extra debug messages
 
 // Game Settings
 const GAMEMODE_TARGET_SCORE = 10;                                    // Points needed to win
@@ -7085,6 +7085,9 @@ class TeamScoreboardHUD {
             mod.SetUIWidgetVisible(this.rootWidget, false);
             mod.DeleteUIWidget(this.rootWidget);
         }
+
+        // Remove this instance from the registry
+        TeamScoreboardHUD.instances.delete(this.teamId);
     }
 
     /**

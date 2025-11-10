@@ -101,6 +101,9 @@ class TeamScoreboardHUD {
             mod.SetUIWidgetVisible(this.rootWidget, false);
             mod.DeleteUIWidget(this.rootWidget);
         }
+
+        // Remove this instance from the registry
+        TeamScoreboardHUD.instances.delete(this.teamId);
     }
 
     /**

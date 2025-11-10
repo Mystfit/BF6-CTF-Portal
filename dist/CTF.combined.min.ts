@@ -1,6 +1,6 @@
 ﻿
 const VERSION = [2, 3, 0];
-const DEBUG_MODE = false;
+const DEBUG_MODE = true;
 const GAMEMODE_TARGET_SCORE = 10;
 const FLAG_PICKUP_DELAY = 5;
 const FLAG_AUTO_RETURN_TIME = 30;
@@ -4576,6 +4576,7 @@ if (this.rootWidget) {
 mod.SetUIWidgetVisible(this.rootWidget, false);
 mod.DeleteUIWidget(this.rootWidget);
 }
+TeamScoreboardHUD.instances.delete(this.teamId);
 }
 isOpen(): boolean {
 return this.rootWidget !== undefined && mod.GetUIWidgetVisible(this.rootWidget);
