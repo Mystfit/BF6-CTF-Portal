@@ -277,7 +277,12 @@ class WorldIconManager {
         const state = this.iconStates.get(id);
         const icon = this.icons.get(id);
 
-        if (!state || !icon) return;
+        if (!state || !icon) {
+            if (DEBUG_MODE) {
+                console.log(`WorldIconManager: Cannot refresh icon '${id}' - state=${!!state}, icon=${!!icon}`);
+            }
+            return;
+        }
 
         // Step 1: Disable both icon and text
         mod.EnableWorldIconImage(icon, false);

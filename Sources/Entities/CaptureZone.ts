@@ -40,7 +40,7 @@ class CaptureZone {
                 const iconMgr = worldIconManager;
                 this.baseIcons = new Map();
 
-                // Create world icon for our team
+                // Create global world icon
                 const teamIconId = `capturezone_${this.teamId}_team${this.teamId}`;
                 let teamIcon = iconMgr.createIcon(
                     teamIconId,
@@ -51,32 +51,10 @@ class CaptureZone {
                         textEnabled: true,
                         text: mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)),
                         color: GetTeamColorById(this.teamId),
-                        teamOwner: team
                     }
                 );
                 this.baseIcons.set(mod.GetObjId(team), teamIcon);
                 this.baseIconIds.set(mod.GetObjId(team), teamIconId);
-
-                // Create world icons for opposing teams
-                let opposingTeams = GetOpposingTeams(mod.GetObjId(team));
-                if(opposingTeams.length && team){
-                    for(let opposingTeam of opposingTeams){
-                        const opposingIconId = `capturezone_${this.teamId}_team${opposingTeam}`;
-                        let opposingIcon = iconMgr.createIcon(
-                            opposingIconId,
-                            this.iconPosition,
-                            {
-                                icon: mod.WorldIconImages.Triangle,
-                                iconEnabled: true,
-                                textEnabled: true,
-                                color: GetTeamColorById(this.teamId),
-                                teamOwner: mod.GetTeam(opposingTeam)
-                            }
-                        );
-                        this.baseIcons.set(opposingTeam, opposingIcon);
-                        this.baseIconIds.set(opposingTeam, opposingIconId);
-                    }
-                }
 
                 this.UpdateIcons();
             } else {

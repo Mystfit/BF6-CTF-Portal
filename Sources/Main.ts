@@ -1,6 +1,3 @@
-//@ts-ignore
-import * as modlib from 'modlib';
-
 //==============================================================================================
 // CONSTANTS - Team and object IDs (you probably won't need to modify these)
 //==============================================================================================
@@ -398,7 +395,10 @@ export function OnPlayerDeployed(eventPlayer: mod.Player): void {
         }
 
         // Refresh WorldIcons to fix visibility for this player
-        worldIconManager.refreshAllIcons();
+        // Small delay to ensure player is fully initialized before refreshing
+        mod.Wait(0.1).then(() => {
+            worldIconManager.refreshAllIcons();
+        });
 
         // Refresh all VFX to fix visibility for this player
         vfxManager.refreshAllVFX();
@@ -534,14 +534,16 @@ export function OnGameModeEnding(): void {
 // GAME LOGIC FUNCTIONS
 //==============================================================================================
 
-function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
-
+async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): Promise<void> {
     // Try to find an empty passenger seat
     const seatCount = mod.GetVehicleSeatCount(vehicle);
     let forcedToSeat = false;
     let lastSeat = seatCount - 1;
     for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
+            // Make sure we're not still in the OnPlayerEnteredVehicle event
+            await mod.Wait(0);
+
             mod.ForcePlayerToSeat(player, vehicle, i);
             forcedToSeat = true;
             mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -552,6 +554,9 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     
     // Try last seat as fallback
     if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
+        // Make sure we're not still in the OnPlayerEnteredVehicle event
+        await mod.Wait(0);
+
         mod.ForcePlayerToSeat(player, vehicle, lastSeat);
         forcedToSeat = true;
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -560,6 +565,9 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     }
     mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
 
+    // Make sure we're not still in the OnPlayerEnteredVehicle event
+    await mod.Wait(0);
+    
     // No passenger seats available, force exit
     mod.ForcePlayerExitVehicle(player, vehicle);
     if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");

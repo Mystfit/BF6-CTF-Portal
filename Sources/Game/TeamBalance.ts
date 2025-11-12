@@ -70,6 +70,11 @@ async function CheckAndBalanceTeams(): Promise<void> {
                 mod.SetTeam(jsPlayers[i].player, updatedSmallest.team);
                 // Reset team specific UI elements for this player
                 jsPlayers[i].resetUI();
+
+                // Refresh all team-scoped entities that might depend on a player's team
+                worldIconManager.refreshAllIcons();
+                FixTeamScopedUIVisibility(jsPlayers[i].player);
+
             } catch(error: unknown){
                 console.log(`Could not move player to team`);
             }

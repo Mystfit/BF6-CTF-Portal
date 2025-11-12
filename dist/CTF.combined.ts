@@ -1,4 +1,6 @@
-﻿
+﻿//@ts-ignore
+import * as modlib from 'modlib';
+
 
 /* 
  * Capture the Flag Game Mode
@@ -67,9 +69,9 @@
 // This file contains all configuration constants that need to be loaded before other modules
 //==============================================================================================
 
-const VERSION = [2, 3, 0];
+const VERSION = [2, 3, 1];
 
-const DEBUG_MODE = true;                                            // Print extra debug messages
+const DEBUG_MODE = false;                                            // Print extra debug messages
 
 // Game Settings
 const GAMEMODE_TARGET_SCORE = 10;                                    // Points needed to win
@@ -2093,9 +2095,6 @@ class EventDispatcher<TEventMap = Record<string, any>> {
 }
 
 
-//@ts-ignore
-import * as modlib from 'modlib';
-
 //==============================================================================================
 // CONSTANTS - Team and object IDs (you probably won't need to modify these)
 //==============================================================================================
@@ -2493,7 +2492,10 @@ export function OnPlayerDeployed(eventPlayer: mod.Player): void {
         }
 
         // Refresh WorldIcons to fix visibility for this player
-        worldIconManager.refreshAllIcons();
+        // Small delay to ensure player is fully initialized before refreshing
+        mod.Wait(0.1).then(() => {
+            worldIconManager.refreshAllIcons();
+        });
 
         // Refresh all VFX to fix visibility for this player
         vfxManager.refreshAllVFX();
@@ -2629,14 +2631,16 @@ export function OnGameModeEnding(): void {
 // GAME LOGIC FUNCTIONS
 //==============================================================================================
 
-function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
-
+async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): Promise<void> {
     // Try to find an empty passenger seat
     const seatCount = mod.GetVehicleSeatCount(vehicle);
     let forcedToSeat = false;
     let lastSeat = seatCount - 1;
     for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
+            // Make sure we're not still in the OnPlayerEnteredVehicle event
+            await mod.Wait(0);
+
             mod.ForcePlayerToSeat(player, vehicle, i);
             forcedToSeat = true;
             mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -2647,6 +2651,9 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     
     // Try last seat as fallback
     if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
+        // Make sure we're not still in the OnPlayerEnteredVehicle event
+        await mod.Wait(0);
+
         mod.ForcePlayerToSeat(player, vehicle, lastSeat);
         forcedToSeat = true;
         mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -2655,6 +2662,9 @@ function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
     }
     mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
 
+    // Make sure we're not still in the OnPlayerEnteredVehicle event
+    await mod.Wait(0);
+    
     // No passenger seats available, force exit
     mod.ForcePlayerExitVehicle(player, vehicle);
     if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
@@ -4209,7 +4219,7 @@ class CaptureZone {
                 const iconMgr = worldIconManager;
                 this.baseIcons = new Map();
 
-                // Create world icon for our team
+                // Create global world icon
                 const teamIconId = `capturezone_${this.teamId}_team${this.teamId}`;
                 let teamIcon = iconMgr.createIcon(
                     teamIconId,
@@ -4220,32 +4230,10 @@ class CaptureZone {
                         textEnabled: true,
                         text: mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)),
                         color: GetTeamColorById(this.teamId),
-                        teamOwner: team
                     }
                 );
                 this.baseIcons.set(mod.GetObjId(team), teamIcon);
                 this.baseIconIds.set(mod.GetObjId(team), teamIconId);
-
-                // Create world icons for opposing teams
-                let opposingTeams = GetOpposingTeams(mod.GetObjId(team));
-                if(opposingTeams.length && team){
-                    for(let opposingTeam of opposingTeams){
-                        const opposingIconId = `capturezone_${this.teamId}_team${opposingTeam}`;
-                        let opposingIcon = iconMgr.createIcon(
-                            opposingIconId,
-                            this.iconPosition,
-                            {
-                                icon: mod.WorldIconImages.Triangle,
-                                iconEnabled: true,
-                                textEnabled: true,
-                                color: GetTeamColorById(this.teamId),
-                                teamOwner: mod.GetTeam(opposingTeam)
-                            }
-                        );
-                        this.baseIcons.set(opposingTeam, opposingIcon);
-                        this.baseIconIds.set(opposingTeam, opposingIconId);
-                    }
-                }
 
                 this.UpdateIcons();
             } else {
@@ -4605,49 +4593,56 @@ class WorldIconManager {
     }
 
     /**
-     * Refresh a specific icon (delete and recreate with saved state)
+     * Refresh a specific icon (disable and re-enable with saved state)
      * Called automatically on player join
+     * Uses enable/disable approach similar to VFX system instead of unspawn/respawn
      */
     private refreshIcon(id: string): void {
         const state = this.iconStates.get(id);
-        if (!state) return;
+        const icon = this.icons.get(id);
 
-        // Delete old icon
-        const oldIcon = this.icons.get(id);
-        if (oldIcon) {
-            mod.UnspawnObject(oldIcon);
+        if (!state || !icon) {
+            if (DEBUG_MODE) {
+                console.log(`WorldIconManager: Cannot refresh icon '${id}' - state=${!!state}, icon=${!!icon}`);
+            }
+            return;
         }
 
-        // Recreate with saved state using the correct API
-        const newIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, state.position, ZERO_VEC) as mod.WorldIcon;
+        // Step 1: Disable both icon and text
+        mod.EnableWorldIconImage(icon, false);
+        mod.EnableWorldIconText(icon, false);
 
-        // Reapply owner (team/player scope) first
+        // Step 2: Reapply owner (team/player scope) if set
         if (state.teamOwner !== undefined) {
-            mod.SetWorldIconOwner(newIcon, state.teamOwner);
+            mod.SetWorldIconOwner(icon, state.teamOwner);
         } else if (state.playerOwner !== undefined) {
-            mod.SetWorldIconOwner(newIcon, state.playerOwner);
+            mod.SetWorldIconOwner(icon, state.playerOwner);
         }
 
-        // Reapply all saved properties
+        // Step 3: Reapply position
+        mod.SetWorldIconPosition(icon, state.position);
+
+        // Step 4: Reapply text properties
         if (state.text !== undefined) {
-            mod.SetWorldIconText(newIcon, state.text);
+            mod.SetWorldIconText(icon, state.text);
         }
-        mod.EnableWorldIconText(newIcon, state.textEnabled);
 
+        // Step 5: Reapply icon properties
         if (state.icon !== undefined) {
-            mod.SetWorldIconImage(newIcon, state.icon);
+            mod.SetWorldIconImage(icon, state.icon);
         }
-        mod.EnableWorldIconImage(newIcon, state.iconEnabled);
 
+        // Step 6: Reapply color
         if (state.color !== undefined) {
-            mod.SetWorldIconColor(newIcon, state.color);
+            mod.SetWorldIconColor(icon, state.color);
         }
 
-        // Update reference
-        this.icons.set(id, newIcon);
+        // Step 7: Re-enable with saved state
+        mod.EnableWorldIconText(icon, state.textEnabled);
+        mod.EnableWorldIconImage(icon, state.iconEnabled);
 
         if (DEBUG_MODE) {
-            console.log(`WorldIconManager: Refreshed icon '${id}'`);
+            console.log(`WorldIconManager: Refreshed icon '${id}' (disable/enable approach)`);
         }
     }
 
@@ -7539,6 +7534,11 @@ async function CheckAndBalanceTeams(): Promise<void> {
                 mod.SetTeam(jsPlayers[i].player, updatedSmallest.team);
                 // Reset team specific UI elements for this player
                 jsPlayers[i].resetUI();
+
+                // Refresh all team-scoped entities that might depend on a player's team
+                worldIconManager.refreshAllIcons();
+                FixTeamScopedUIVisibility(jsPlayers[i].player);
+
             } catch(error: unknown){
                 console.log(`Could not move player to team`);
             }

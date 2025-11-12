@@ -1,6 +1,7 @@
 ﻿
-const VERSION = [2, 3, 0];
-const DEBUG_MODE = true;
+import * as modlib from 'modlib';
+const VERSION = [2, 3, 1];
+const DEBUG_MODE = false;
 const GAMEMODE_TARGET_SCORE = 10;
 const FLAG_PICKUP_DELAY = 5;
 const FLAG_AUTO_RETURN_TIME = 30;
@@ -1271,7 +1272,6 @@ eventNames(): string[] {
 return Array.from(this.listeners.keys());
 }
 }
-import * as modlib from 'modlib';
 const enum TeamID {
 TEAM_NEUTRAL = 0,
 TEAM_1,
@@ -1507,7 +1507,9 @@ jsPlayer.hasEverDeployed = true;
 if (DEBUG_MODE) {
 console.log(`Player ${mod.GetObjId(eventPlayer)} deployed for the first time - refreshing WorldIcons, VFX, and UI`);
 }
+mod.Wait(0.1).then(() => {
 worldIconManager.refreshAllIcons();
+});
 vfxManager.refreshAllVFX();
 FixTeamScopedUIVisibility(eventPlayer);
 }
@@ -1607,12 +1609,13 @@ gameStarted = false;
 console.log("CTF: Game ending");
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_ending))
 }
-function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): void {
+async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): Promise<void> {
 const seatCount = mod.GetVehicleSeatCount(vehicle);
 let forcedToSeat = false;
 let lastSeat = seatCount - 1;
 for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
 if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
+await mod.Wait(0);
 mod.ForcePlayerToSeat(player, vehicle, i);
 forcedToSeat = true;
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -1621,6 +1624,7 @@ return;
 }
 }
 if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
+await mod.Wait(0);
 mod.ForcePlayerToSeat(player, vehicle, lastSeat);
 forcedToSeat = true;
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -1628,6 +1632,7 @@ if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${lastSeat}`);
 return;
 }
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
+await mod.Wait(0);
 mod.ForcePlayerExitVehicle(player, vehicle);
 if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
 }
@@ -2733,30 +2738,10 @@ iconEnabled: true,
 textEnabled: true,
 text: mod.Message(mod.stringkeys.capture_zone_label, GetTeamName(this.team)),
 color: GetTeamColorById(this.teamId),
-teamOwner: team
 }
 );
 this.baseIcons.set(mod.GetObjId(team), teamIcon);
 this.baseIconIds.set(mod.GetObjId(team), teamIconId);
-let opposingTeams = GetOpposingTeams(mod.GetObjId(team));
-if(opposingTeams.length && team){
-for(let opposingTeam of opposingTeams){
-const opposingIconId = `capturezone_${this.teamId}_team${opposingTeam}`;
-let opposingIcon = iconMgr.createIcon(
-opposingIconId,
-this.iconPosition,
-{
-icon: mod.WorldIconImages.Triangle,
-iconEnabled: true,
-textEnabled: true,
-color: GetTeamColorById(this.teamId),
-teamOwner: mod.GetTeam(opposingTeam)
-}
-);
-this.baseIcons.set(opposingTeam, opposingIcon);
-this.baseIconIds.set(opposingTeam, opposingIconId);
-}
-}
 this.UpdateIcons();
 } else {
 console.log(`Can't create WorldIcon for ${this.teamId} capture zone. Spatial object ${captureZoneSpatialObj} returned for id ${this.captureZoneSpatialObjId}}`);
@@ -2992,31 +2977,34 @@ console.log(`WorldIconManager: Deleted icon '${id}'`);
 }
 private refreshIcon(id: string): void {
 const state = this.iconStates.get(id);
-if (!state) return;
-const oldIcon = this.icons.get(id);
-if (oldIcon) {
-mod.UnspawnObject(oldIcon);
-}
-const newIcon = mod.SpawnObject(mod.RuntimeSpawn_Common.WorldIcon, state.position, ZERO_VEC) as mod.WorldIcon;
-if (state.teamOwner !== undefined) {
-mod.SetWorldIconOwner(newIcon, state.teamOwner);
-} else if (state.playerOwner !== undefined) {
-mod.SetWorldIconOwner(newIcon, state.playerOwner);
-}
-if (state.text !== undefined) {
-mod.SetWorldIconText(newIcon, state.text);
-}
-mod.EnableWorldIconText(newIcon, state.textEnabled);
-if (state.icon !== undefined) {
-mod.SetWorldIconImage(newIcon, state.icon);
-}
-mod.EnableWorldIconImage(newIcon, state.iconEnabled);
-if (state.color !== undefined) {
-mod.SetWorldIconColor(newIcon, state.color);
-}
-this.icons.set(id, newIcon);
+const icon = this.icons.get(id);
+if (!state || !icon) {
 if (DEBUG_MODE) {
-console.log(`WorldIconManager: Refreshed icon '${id}'`);
+console.log(`WorldIconManager: Cannot refresh icon '${id}' - state=${!!state}, icon=${!!icon}`);
+}
+return;
+}
+mod.EnableWorldIconImage(icon, false);
+mod.EnableWorldIconText(icon, false);
+if (state.teamOwner !== undefined) {
+mod.SetWorldIconOwner(icon, state.teamOwner);
+} else if (state.playerOwner !== undefined) {
+mod.SetWorldIconOwner(icon, state.playerOwner);
+}
+mod.SetWorldIconPosition(icon, state.position);
+if (state.text !== undefined) {
+mod.SetWorldIconText(icon, state.text);
+}
+if (state.icon !== undefined) {
+mod.SetWorldIconImage(icon, state.icon);
+}
+if (state.color !== undefined) {
+mod.SetWorldIconColor(icon, state.color);
+}
+mod.EnableWorldIconText(icon, state.textEnabled);
+mod.EnableWorldIconImage(icon, state.iconEnabled);
+if (DEBUG_MODE) {
+console.log(`WorldIconManager: Refreshed icon '${id}' (disable/enable approach)`);
 }
 }
 refreshAllIcons(): void {
@@ -4884,6 +4872,8 @@ if (jsPlayers[i].player && updatedSmallest.team) {
 try{
 mod.SetTeam(jsPlayers[i].player, updatedSmallest.team);
 jsPlayers[i].resetUI();
+worldIconManager.refreshAllIcons();
+FixTeamScopedUIVisibility(jsPlayers[i].player);
 } catch(error: unknown){
 console.log(`Could not move player to team`);
 }
