@@ -47,7 +47,7 @@ class FlagIcon {
     isPulsing: boolean;
     
     // Flag proportions
-    private readonly POLE_WIDTH_RATIO = 0.15;
+    private readonly POLE_WIDTH_RATIO = 0.1666667;
     private readonly POLE_HEIGHT_RATIO = 1.0;
     private readonly FLAG_WIDTH_RATIO = 0.85;
     private readonly FLAG_HEIGHT_RATIO = 0.55;
@@ -151,7 +151,7 @@ class FlagIcon {
     private createOutlineFlag(): void {
         const totalWidth = mod.XComponentOf(this.params.size);
         const totalHeight = mod.YComponentOf(this.params.size);
-        const thickness = this.params.outlineThickness ?? 2;
+        const thickness = this.params.outlineThickness ?? 1;
         
         const poleWidth = totalWidth * this.POLE_WIDTH_RATIO;
         const poleHeight = totalHeight * this.POLE_HEIGHT_RATIO;
@@ -173,7 +173,8 @@ class FlagIcon {
             bgColor: color,
             bgAlpha: alpha,
             bgFill: mod.UIBgFill.OutlineThin,
-            padding: 0
+            padding: 0,
+            thickness: thickness
         })!;
 
         const pole = modlib.ParseUI({

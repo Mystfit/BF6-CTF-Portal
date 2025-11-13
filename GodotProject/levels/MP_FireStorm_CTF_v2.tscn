@@ -132,7 +132,7 @@ P_AutoSpawnEnabled = true
 
 [node name="TEAM_1_Jeep_Spawn3" parent="TEAM_1_HQ" instance=ExtResource("7_r6eun")]
 transform = Transform3D(0.154003, 0, 0.98807, 0, 1, 0, -0.98807, 0, 0.154003, 17.5461, 1.00086, 35.7715)
-VehicleType = 8
+VehicleType = 11
 P_AutoSpawnEnabled = true
 
 [node name="TEAM_1_Heli_Spawn1" parent="TEAM_1_HQ" instance=ExtResource("7_r6eun")]
@@ -237,8 +237,8 @@ VehicleType = 12
 P_AutoSpawnEnabled = true
 
 [node name="TEAM_2_Jeep_Spawn4" parent="TEAM_2_HQ" instance=ExtResource("7_r6eun")]
-transform = Transform3D(0.00178024, 0, -0.999998, 0, 1, 0, 0.999998, 0, 0.00178024, -8.05798, 0.850113, 27.0996)
-VehicleType = 12
+transform = Transform3D(0.00178024, 0, -0.999998, 0, 1, 0, 0.999998, 0, 0.00178024, -3.16013, 0.850113, 27.0996)
+VehicleType = 11
 P_AutoSpawnEnabled = true
 
 [node name="TEAM_2_Heli_Spawn1" parent="TEAM_2_HQ" instance=ExtResource("7_r6eun")]

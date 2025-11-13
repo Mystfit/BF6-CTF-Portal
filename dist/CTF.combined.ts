@@ -5566,32 +5566,35 @@ interface FlagBarState {
 class FlagBar {
     private readonly params: FlagBarParams;
     private rootContainer: mod.UIWidget;
-    
+
     // Team bars (TickerWidget containers)
     private team1Bar: TickerWidget;
     private team2Bar: TickerWidget;
-    
+
     // Flag icons
     private team1FlagIcon: FlagIcon;
     private team2FlagIcon: FlagIcon;
-    
+
     // Flag states for smooth animation
     private team1FlagState: FlagBarState;
     private team2FlagState: FlagBarState;
-    
+
     // Teams
     private readonly team1: mod.Team;
     private readonly team2: mod.Team;
     private readonly team1Id: number;
     private readonly team2Id: number;
-    
+
     // Dimensions
     private readonly barWidth: number;
     private readonly barHeight: number;
     private readonly halfBarWidth: number;
     private readonly flagIconSize: number[];
     private readonly barSeperatorSize: number;
-    
+
+    // Event subscriptions
+    private eventUnsubscribers: (() => void)[] = [];
+
     constructor(params: FlagBarParams) {
         this.params = params;
         this.team1 = params.team1;
@@ -5603,30 +5606,74 @@ class FlagBar {
         this.barHeight = params.barHeight ?? 16;
         this.halfBarWidth = this.barWidth / 2;
         this.flagIconSize = params.flagIconSize ?? [24, 24];
-        
+
         // Initialize flag states
         this.team1FlagState = {
             targetProgress: 0.0,
             currentProgress: 0.0,
             velocity: 0.0
         };
-        
+
         this.team2FlagState = {
             targetProgress: 0.0,
             currentProgress: 0.0,
             velocity: 0.0
         };
-        
+
         // Create root container
         this.rootContainer = this.createRootContainer();
-        
+
         // Create team bars
         this.team1Bar = this.createTeamBar(this.team1, true);
         this.team2Bar = this.createTeamBar(this.team2, false);
-        
+
         // Create flag icons
         this.team1FlagIcon = this.createFlagIcon(this.team1, this.team1Id);
         this.team2FlagIcon = this.createFlagIcon(this.team2, this.team2Id);
+
+        // Subscribe to flag events
+        this.bindFlagEvents();
+    }
+
+    /**
+     * Subscribe to flag events for visual feedback
+     */
+    private bindFlagEvents(): void {
+        // Create array of flag/icon pairs to avoid duplication
+        const flagPairs = [
+            { flag: flags.get(this.team1Id), icon: this.team1FlagIcon },
+            { flag: flags.get(this.team2Id), icon: this.team2FlagIcon }
+        ];
+
+        for (const { flag, icon } of flagPairs) {
+            if (!flag) continue;
+
+            // Flag picked up - stop throb, solid appearance
+            const unsubTaken = flag.events.on('flagTaken', () => {
+                if (icon.isPulsing) {
+                    icon.StopThrob();
+                }
+                icon.SetFillAlpha(1);
+            });
+            this.eventUnsubscribers.push(unsubTaken);
+
+            // Flag dropped - start throb effect
+            const unsubDropped = flag.events.on('flagDropped', () => {
+                if (!icon.isPulsing) {
+                    icon.StartThrob(1, 0.1, 0.8);
+                }
+            });
+            this.eventUnsubscribers.push(unsubDropped);
+
+            // Flag returned - stop throb, solid appearance
+            const unsubReturned = flag.events.on('flagReturned', () => {
+                if (icon.isPulsing) {
+                    icon.StopThrob();
+                }
+                icon.SetFillAlpha(1);
+            });
+            this.eventUnsubscribers.push(unsubReturned);
+        }
     }
     
     private createRootContainer(): mod.UIWidget {
@@ -5752,40 +5799,29 @@ class FlagBar {
     ): void {
         // Calculate target progress
         flagState.targetProgress = this.calculateFlagProgress(flag, captureZonePosition);
-        
+
         if (DEBUG_MODE) {
             //console.log(`[FlagBar] Team ${flag.teamId} flag state: isAtHome=${flag.isAtHome}, isCarried=${flag.isBeingCarried}, isDropped=${flag.isDropped}`);
             //console.log(`[FlagBar] Team ${flag.teamId} targetProgress: ${flagState.targetProgress.toFixed(3)}`);
         }
-        
+
         // Apply smooth damping
         this.smoothDampProgress(flagState, deltaTime);
-        
+
         if (DEBUG_MODE) {
             //console.log(`[FlagBar] Team ${flag.teamId} currentProgress after damping: ${flagState.currentProgress.toFixed(3)}`);
         }
-        
+
         // Update flag icon position
         this.updateFlagIconPosition(flagIcon, flagState.currentProgress, isLeftTeam);
-        
-        // Update flag icon visibility based on flag state
-        // FIXED: Show flag when NOT dropped (was reversed)
-        if (flag.isDropped && !flagIcon.isPulsing) {
-            //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
-            //flagIcon.SetFillAlpha(0.4);
-            //flagIcon.SetOutlineAlpha(0.4);      
-            flagIcon.StartThrob(1, 0.1, 0.8);
-        } else if(!flag.isDropped && flagIcon.isPulsing) {
-            //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
-            flagIcon.StopThrob();
-            flagIcon.SetFillAlpha(1);
-        }
-        
-        // Update bar progress (bar empties as flag advances). 
+
+        // Flag visual effects (throb, alpha) are now handled by event subscriptions
+
+        // Update bar progress (bar empties as flag advances).
         // Bar at twice the distance of the flag process so we empty it at the moment the flag hits the middle
         const barProgress = 1.0 - flagState.currentProgress * 2;
         opposingBar.setProgressValue(barProgress);
-        
+
         if (DEBUG_MODE) {
             //console.log(`[FlagBar] Team ${flag.teamId} opposing bar progress: ${barProgress.toFixed(3)}`);
         }
@@ -5916,9 +5952,16 @@ class FlagBar {
     }
     
     /**
-     * Clean up all UI widgets
+     * Clean up all UI widgets and event subscriptions
      */
     public destroy(): void {
+        // Unsubscribe from all flag events
+        for (const unsubscribe of this.eventUnsubscribers) {
+            unsubscribe();
+        }
+        this.eventUnsubscribers = [];
+
+        // Destroy UI widgets
         this.team1FlagIcon.Destroy();
         this.team2FlagIcon.Destroy();
         mod.DeleteUIWidget(this.rootContainer);
@@ -5975,7 +6018,7 @@ class FlagIcon {
     isPulsing: boolean;
     
     // Flag proportions
-    private readonly POLE_WIDTH_RATIO = 0.15;
+    private readonly POLE_WIDTH_RATIO = 0.1666667;
     private readonly POLE_HEIGHT_RATIO = 1.0;
     private readonly FLAG_WIDTH_RATIO = 0.85;
     private readonly FLAG_HEIGHT_RATIO = 0.55;
@@ -6079,7 +6122,7 @@ class FlagIcon {
     private createOutlineFlag(): void {
         const totalWidth = mod.XComponentOf(this.params.size);
         const totalHeight = mod.YComponentOf(this.params.size);
-        const thickness = this.params.outlineThickness ?? 2;
+        const thickness = this.params.outlineThickness ?? 1;
         
         const poleWidth = totalWidth * this.POLE_WIDTH_RATIO;
         const poleHeight = totalHeight * this.POLE_HEIGHT_RATIO;
@@ -6101,7 +6144,8 @@ class FlagIcon {
             bgColor: color,
             bgAlpha: alpha,
             bgFill: mod.UIBgFill.OutlineThin,
-            padding: 0
+            padding: 0,
+            thickness: thickness
         })!;
 
         const pole = modlib.ParseUI({
@@ -6505,12 +6549,13 @@ class TeamColumnWidget {
     readonly scoreTicker: ScoreTicker;
     readonly flagIcon: FlagIcon;
     readonly verticalPadding:number = 8;
-    
+    private eventUnsubscribers: (() => void)[] = [];
+
     constructor(team: mod.Team, position: number[], size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
         this.team = team;
         this.teamId = mod.GetObjId(team);
         this.isPlayerTeam = isPlayerTeam;
-        
+
         // Create score ticker with bracket indicators
         this.scoreTicker = new ScoreTicker({
             team: team,
@@ -6527,7 +6572,7 @@ class TeamColumnWidget {
             name: `FlagHomeIcon_Team${this.teamId}`,
             parent: parent,
             position: mod.CreateVector(position[0], position[1] + size[1] + this.verticalPadding, 0),
-            size: mod.CreateVector(28, 28, 0),
+            size: mod.CreateVector(30, 30, 0),
             anchor: mod.UIAnchor.TopCenter,
             fillColor:  GetTeamColorById(this.teamId),
             fillAlpha: 1,
@@ -6536,36 +6581,75 @@ class TeamColumnWidget {
             showFill: true,
             showOutline: true,
             bgFill: mod.UIBgFill.Solid,
-            outlineThickness: 0
+            outlineThickness: 1
         };
         this.flagIcon = new FlagIcon(flagIconConfig);
+
+        // Subscribe to flag events
+        this.bindFlagEvents();
+    }
+
+    /**
+     * Subscribe to flag events for visual feedback
+     */
+    private bindFlagEvents(): void {
+        const flag = flags.get(this.teamId);
+        if (!flag) return;
+
+        // Flag picked up - throb icon
+        const unsubTaken = flag.events.on('flagTaken', (data) => {
+            this.flagIcon.SetVisible(true);
+            this.flagIcon.SetFillVisible(true);
+            this.flagIcon.SetOutlineVisible(false);
+            if (!this.flagIcon.isPulsing) {
+                this.flagIcon.StartThrob(1, 0.15, 1);
+            }
+        });
+        this.eventUnsubscribers.push(unsubTaken);
+
+        // Flag dropped - show outline
+        const unsubDropped = flag.events.on('flagDropped', (data) => {
+            if (this.flagIcon.isPulsing) {
+                this.flagIcon.StopThrob();
+            }
+            this.flagIcon.SetFillVisible(false);
+            this.flagIcon.SetOutlineVisible(true);
+            this.flagIcon.SetOutlineAlpha(1);
+        });
+        this.eventUnsubscribers.push(unsubDropped);
+
+        // Flag returned - normal fill
+        const unsubReturned = flag.events.on('flagReturned', (data) => {
+            this.flagIcon.SetVisible(true);
+            if (this.flagIcon.isPulsing) {
+                this.flagIcon.StopThrob();
+            }
+            this.flagIcon.SetOutlineVisible(true);
+            this.flagIcon.SetFillVisible(true);
+            this.flagIcon.SetFillAlpha(1);
+            this.flagIcon.SetOutlineAlpha(1);
+        });
+        this.eventUnsubscribers.push(unsubReturned);
     }
     
     /**
-     * Update the team's score and flag status display
+     * Update the team's score display
      */
     update(): void {
         // Update score ticker
         this.scoreTicker.updateScore();
+        // Flag visual updates are now handled by event subscriptions
+    }
 
-        // Get flag status for this team
-        const flag = flags.get(this.teamId);
-        if(flag){
-            const flagStatus = BuildFlagStatus(flag);
-            
-            // TODO: Ugly hack. This needs to be event triggered, not changed in update
-            if(flag.isAtHome){
-                this.flagIcon.SetVisible(true);
-                this.flagIcon.SetFillAlpha(1);
-                this.flagIcon.SetOutlineAlpha(1);
-            } else if(flag.isBeingCarried){
-                this.flagIcon.SetVisible(false);
-            } else if(flag.isDropped){
-                this.flagIcon.SetVisible(true);
-                this.flagIcon.SetFillAlpha(0.15);
-                this.flagIcon.SetOutlineAlpha(0.75);
-            }
+    /**
+     * Clean up event subscriptions
+     */
+    destroy(): void {
+        // Unsubscribe from all flag events
+        for (const unsubscribe of this.eventUnsubscribers) {
+            unsubscribe();
         }
+        this.eventUnsubscribers = [];
     }
     
     /**
@@ -6686,6 +6770,7 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
 
         // 1. Destroy all team column widgets
         for (const [teamId, column] of this.teamColumns.entries()) {
+            column.destroy();  // Clean up event subscriptions
             column.scoreTicker.destroy();
             column.flagIcon.Destroy();
         }

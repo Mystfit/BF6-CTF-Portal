@@ -25,12 +25,13 @@ class TeamColumnWidget {
     readonly scoreTicker: ScoreTicker;
     readonly flagIcon: FlagIcon;
     readonly verticalPadding:number = 8;
-    
+    private eventUnsubscribers: (() => void)[] = [];
+
     constructor(team: mod.Team, position: number[], size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
         this.team = team;
         this.teamId = mod.GetObjId(team);
         this.isPlayerTeam = isPlayerTeam;
-        
+
         // Create score ticker with bracket indicators
         this.scoreTicker = new ScoreTicker({
             team: team,
@@ -47,7 +48,7 @@ class TeamColumnWidget {
             name: `FlagHomeIcon_Team${this.teamId}`,
             parent: parent,
             position: mod.CreateVector(position[0], position[1] + size[1] + this.verticalPadding, 0),
-            size: mod.CreateVector(28, 28, 0),
+            size: mod.CreateVector(30, 30, 0),
             anchor: mod.UIAnchor.TopCenter,
             fillColor:  GetTeamColorById(this.teamId),
             fillAlpha: 1,
@@ -56,36 +57,75 @@ class TeamColumnWidget {
             showFill: true,
             showOutline: true,
             bgFill: mod.UIBgFill.Solid,
-            outlineThickness: 0
+            outlineThickness: 1
         };
         this.flagIcon = new FlagIcon(flagIconConfig);
+
+        // Subscribe to flag events
+        this.bindFlagEvents();
+    }
+
+    /**
+     * Subscribe to flag events for visual feedback
+     */
+    private bindFlagEvents(): void {
+        const flag = flags.get(this.teamId);
+        if (!flag) return;
+
+        // Flag picked up - throb icon
+        const unsubTaken = flag.events.on('flagTaken', (data) => {
+            this.flagIcon.SetVisible(true);
+            this.flagIcon.SetFillVisible(true);
+            this.flagIcon.SetOutlineVisible(false);
+            if (!this.flagIcon.isPulsing) {
+                this.flagIcon.StartThrob(1, 0.15, 1);
+            }
+        });
+        this.eventUnsubscribers.push(unsubTaken);
+
+        // Flag dropped - show outline
+        const unsubDropped = flag.events.on('flagDropped', (data) => {
+            if (this.flagIcon.isPulsing) {
+                this.flagIcon.StopThrob();
+            }
+            this.flagIcon.SetFillVisible(false);
+            this.flagIcon.SetOutlineVisible(true);
+            this.flagIcon.SetOutlineAlpha(1);
+        });
+        this.eventUnsubscribers.push(unsubDropped);
+
+        // Flag returned - normal fill
+        const unsubReturned = flag.events.on('flagReturned', (data) => {
+            this.flagIcon.SetVisible(true);
+            if (this.flagIcon.isPulsing) {
+                this.flagIcon.StopThrob();
+            }
+            this.flagIcon.SetOutlineVisible(true);
+            this.flagIcon.SetFillVisible(true);
+            this.flagIcon.SetFillAlpha(1);
+            this.flagIcon.SetOutlineAlpha(1);
+        });
+        this.eventUnsubscribers.push(unsubReturned);
     }
     
     /**
-     * Update the team's score and flag status display
+     * Update the team's score display
      */
     update(): void {
         // Update score ticker
         this.scoreTicker.updateScore();
+        // Flag visual updates are now handled by event subscriptions
+    }
 
-        // Get flag status for this team
-        const flag = flags.get(this.teamId);
-        if(flag){
-            const flagStatus = BuildFlagStatus(flag);
-            
-            // TODO: Ugly hack. This needs to be event triggered, not changed in update
-            if(flag.isAtHome){
-                this.flagIcon.SetVisible(true);
-                this.flagIcon.SetFillAlpha(1);
-                this.flagIcon.SetOutlineAlpha(1);
-            } else if(flag.isBeingCarried){
-                this.flagIcon.SetVisible(false);
-            } else if(flag.isDropped){
-                this.flagIcon.SetVisible(true);
-                this.flagIcon.SetFillAlpha(0.15);
-                this.flagIcon.SetOutlineAlpha(0.75);
-            }
+    /**
+     * Clean up event subscriptions
+     */
+    destroy(): void {
+        // Unsubscribe from all flag events
+        for (const unsubscribe of this.eventUnsubscribers) {
+            unsubscribe();
         }
+        this.eventUnsubscribers = [];
     }
     
     /**
@@ -206,6 +246,7 @@ class MultiTeamScoreHUD implements BaseScoreboardHUD {
 
         // 1. Destroy all team column widgets
         for (const [teamId, column] of this.teamColumns.entries()) {
+            column.destroy();  // Clean up event subscriptions
             column.scoreTicker.destroy();
             column.flagIcon.Destroy();
         }

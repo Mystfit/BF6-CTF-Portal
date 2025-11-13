@@ -3635,6 +3635,7 @@ private readonly barHeight: number;
 private readonly halfBarWidth: number;
 private readonly flagIconSize: number[];
 private readonly barSeperatorSize: number;
+private eventUnsubscribers: (() => void)[] = [];
 constructor(params: FlagBarParams) {
 this.params = params;
 this.team1 = params.team1;
@@ -3661,6 +3662,36 @@ this.team1Bar = this.createTeamBar(this.team1, true);
 this.team2Bar = this.createTeamBar(this.team2, false);
 this.team1FlagIcon = this.createFlagIcon(this.team1, this.team1Id);
 this.team2FlagIcon = this.createFlagIcon(this.team2, this.team2Id);
+this.bindFlagEvents();
+}
+private bindFlagEvents(): void {
+const flagPairs = [
+{ flag: flags.get(this.team1Id), icon: this.team1FlagIcon },
+{ flag: flags.get(this.team2Id), icon: this.team2FlagIcon }
+];
+for (const { flag, icon } of flagPairs) {
+if (!flag) continue;
+const unsubTaken = flag.events.on('flagTaken', () => {
+if (icon.isPulsing) {
+icon.StopThrob();
+}
+icon.SetFillAlpha(1);
+});
+this.eventUnsubscribers.push(unsubTaken);
+const unsubDropped = flag.events.on('flagDropped', () => {
+if (!icon.isPulsing) {
+icon.StartThrob(1, 0.1, 0.8);
+}
+});
+this.eventUnsubscribers.push(unsubDropped);
+const unsubReturned = flag.events.on('flagReturned', () => {
+if (icon.isPulsing) {
+icon.StopThrob();
+}
+icon.SetFillAlpha(1);
+});
+this.eventUnsubscribers.push(unsubReturned);
+}
 }
 private createRootContainer(): mod.UIWidget {
 return modlib.ParseUI({
@@ -3768,12 +3799,6 @@ this.smoothDampProgress(flagState, deltaTime);
 if (DEBUG_MODE) {
 }
 this.updateFlagIconPosition(flagIcon, flagState.currentProgress, isLeftTeam);
-if (flag.isDropped && !flagIcon.isPulsing) {
-flagIcon.StartThrob(1, 0.1, 0.8);
-} else if(!flag.isDropped && flagIcon.isPulsing) {
-flagIcon.StopThrob();
-flagIcon.SetFillAlpha(1);
-}
 const barProgress = 1.0 - flagState.currentProgress * 2;
 opposingBar.setProgressValue(barProgress);
 if (DEBUG_MODE) {
@@ -3837,6 +3862,10 @@ if (DEBUG_MODE) {
 flagIcon.SetPosition(mod.CreateVector(xPos, yPos, 0));
 }
 public destroy(): void {
+for (const unsubscribe of this.eventUnsubscribers) {
+unsubscribe();
+}
+this.eventUnsubscribers = [];
 this.team1FlagIcon.Destroy();
 this.team2FlagIcon.Destroy();
 mod.DeleteUIWidget(this.rootContainer);
@@ -3867,7 +3896,7 @@ private fillContainers: mod.UIWidget[] = [];
 private outlineContainers: mod.UIWidget[] = [];
 private readonly params: FlagIconParams;
 isPulsing: boolean;
-private readonly POLE_WIDTH_RATIO = 0.15;
+private readonly POLE_WIDTH_RATIO = 0.1666667;
 private readonly POLE_HEIGHT_RATIO = 1.0;
 private readonly FLAG_WIDTH_RATIO = 0.85;
 private readonly FLAG_HEIGHT_RATIO = 0.55;
@@ -3947,7 +3976,7 @@ this.fillContainers = [pole, flag];
 private createOutlineFlag(): void {
 const totalWidth = mod.XComponentOf(this.params.size);
 const totalHeight = mod.YComponentOf(this.params.size);
-const thickness = this.params.outlineThickness ?? 2;
+const thickness = this.params.outlineThickness ?? 1;
 const poleWidth = totalWidth * this.POLE_WIDTH_RATIO;
 const poleHeight = totalHeight * this.POLE_HEIGHT_RATIO;
 const flagWidth = totalWidth * this.FLAG_WIDTH_RATIO;
@@ -3966,7 +3995,8 @@ visible: true,
 bgColor: color,
 bgAlpha: alpha,
 bgFill: mod.UIBgFill.OutlineThin,
-padding: 0
+padding: 0,
+thickness: thickness
 })!;
 const pole = modlib.ParseUI({
 type: "Container",
@@ -4232,6 +4262,7 @@ readonly isPlayerTeam: boolean;
 readonly scoreTicker: ScoreTicker;
 readonly flagIcon: FlagIcon;
 readonly verticalPadding:number = 8;
+private eventUnsubscribers: (() => void)[] = [];
 constructor(team: mod.Team, position: number[], size: number[], parent: mod.UIWidget, isPlayerTeam:boolean) {
 this.team = team;
 this.teamId = mod.GetObjId(team);
@@ -4249,7 +4280,7 @@ let flagIconConfig: FlagIconParams = {
 name: `FlagHomeIcon_Team${this.teamId}`,
 parent: parent,
 position: mod.CreateVector(position[0], position[1] + size[1] + this.verticalPadding, 0),
-size: mod.CreateVector(28, 28, 0),
+size: mod.CreateVector(30, 30, 0),
 anchor: mod.UIAnchor.TopCenter,
 fillColor: GetTeamColorById(this.teamId),
 fillAlpha: 1,
@@ -4258,27 +4289,52 @@ outlineAlpha: 1,
 showFill: true,
 showOutline: true,
 bgFill: mod.UIBgFill.Solid,
-outlineThickness: 0
+outlineThickness: 1
 };
 this.flagIcon = new FlagIcon(flagIconConfig);
+this.bindFlagEvents();
+}
+private bindFlagEvents(): void {
+const flag = flags.get(this.teamId);
+if (!flag) return;
+const unsubTaken = flag.events.on('flagTaken', (data) => {
+this.flagIcon.SetVisible(true);
+this.flagIcon.SetFillVisible(true);
+this.flagIcon.SetOutlineVisible(false);
+if (!this.flagIcon.isPulsing) {
+this.flagIcon.StartThrob(1, 0.15, 1);
+}
+});
+this.eventUnsubscribers.push(unsubTaken);
+const unsubDropped = flag.events.on('flagDropped', (data) => {
+if (this.flagIcon.isPulsing) {
+this.flagIcon.StopThrob();
+}
+this.flagIcon.SetFillVisible(false);
+this.flagIcon.SetOutlineVisible(true);
+this.flagIcon.SetOutlineAlpha(1);
+});
+this.eventUnsubscribers.push(unsubDropped);
+const unsubReturned = flag.events.on('flagReturned', (data) => {
+this.flagIcon.SetVisible(true);
+if (this.flagIcon.isPulsing) {
+this.flagIcon.StopThrob();
+}
+this.flagIcon.SetOutlineVisible(true);
+this.flagIcon.SetFillVisible(true);
+this.flagIcon.SetFillAlpha(1);
+this.flagIcon.SetOutlineAlpha(1);
+});
+this.eventUnsubscribers.push(unsubReturned);
 }
 update(): void {
 this.scoreTicker.updateScore();
-const flag = flags.get(this.teamId);
-if(flag){
-const flagStatus = BuildFlagStatus(flag);
-if(flag.isAtHome){
-this.flagIcon.SetVisible(true);
-this.flagIcon.SetFillAlpha(1);
-this.flagIcon.SetOutlineAlpha(1);
-} else if(flag.isBeingCarried){
-this.flagIcon.SetVisible(false);
-} else if(flag.isDropped){
-this.flagIcon.SetVisible(true);
-this.flagIcon.SetFillAlpha(0.15);
-this.flagIcon.SetOutlineAlpha(0.75);
 }
+destroy(): void {
+for (const unsubscribe of this.eventUnsubscribers) {
+unsubscribe();
 }
+this.eventUnsubscribers = [];
 }
 setLeading(isLeading: boolean): void {
 this.scoreTicker.setLeading(isLeading);
@@ -4352,6 +4408,7 @@ column.setLeading(isLeading);
 }
 close(): void {
 for (const [teamId, column] of this.teamColumns.entries()) {
+column.destroy();
 column.scoreTicker.destroy();
 column.flagIcon.Destroy();
 }

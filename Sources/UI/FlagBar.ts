@@ -24,32 +24,35 @@ interface FlagBarState {
 class FlagBar {
     private readonly params: FlagBarParams;
     private rootContainer: mod.UIWidget;
-    
+
     // Team bars (TickerWidget containers)
     private team1Bar: TickerWidget;
     private team2Bar: TickerWidget;
-    
+
     // Flag icons
     private team1FlagIcon: FlagIcon;
     private team2FlagIcon: FlagIcon;
-    
+
     // Flag states for smooth animation
     private team1FlagState: FlagBarState;
     private team2FlagState: FlagBarState;
-    
+
     // Teams
     private readonly team1: mod.Team;
     private readonly team2: mod.Team;
     private readonly team1Id: number;
     private readonly team2Id: number;
-    
+
     // Dimensions
     private readonly barWidth: number;
     private readonly barHeight: number;
     private readonly halfBarWidth: number;
     private readonly flagIconSize: number[];
     private readonly barSeperatorSize: number;
-    
+
+    // Event subscriptions
+    private eventUnsubscribers: (() => void)[] = [];
+
     constructor(params: FlagBarParams) {
         this.params = params;
         this.team1 = params.team1;
@@ -61,30 +64,74 @@ class FlagBar {
         this.barHeight = params.barHeight ?? 16;
         this.halfBarWidth = this.barWidth / 2;
         this.flagIconSize = params.flagIconSize ?? [24, 24];
-        
+
         // Initialize flag states
         this.team1FlagState = {
             targetProgress: 0.0,
             currentProgress: 0.0,
             velocity: 0.0
         };
-        
+
         this.team2FlagState = {
             targetProgress: 0.0,
             currentProgress: 0.0,
             velocity: 0.0
         };
-        
+
         // Create root container
         this.rootContainer = this.createRootContainer();
-        
+
         // Create team bars
         this.team1Bar = this.createTeamBar(this.team1, true);
         this.team2Bar = this.createTeamBar(this.team2, false);
-        
+
         // Create flag icons
         this.team1FlagIcon = this.createFlagIcon(this.team1, this.team1Id);
         this.team2FlagIcon = this.createFlagIcon(this.team2, this.team2Id);
+
+        // Subscribe to flag events
+        this.bindFlagEvents();
+    }
+
+    /**
+     * Subscribe to flag events for visual feedback
+     */
+    private bindFlagEvents(): void {
+        // Create array of flag/icon pairs to avoid duplication
+        const flagPairs = [
+            { flag: flags.get(this.team1Id), icon: this.team1FlagIcon },
+            { flag: flags.get(this.team2Id), icon: this.team2FlagIcon }
+        ];
+
+        for (const { flag, icon } of flagPairs) {
+            if (!flag) continue;
+
+            // Flag picked up - stop throb, solid appearance
+            const unsubTaken = flag.events.on('flagTaken', () => {
+                if (icon.isPulsing) {
+                    icon.StopThrob();
+                }
+                icon.SetFillAlpha(1);
+            });
+            this.eventUnsubscribers.push(unsubTaken);
+
+            // Flag dropped - start throb effect
+            const unsubDropped = flag.events.on('flagDropped', () => {
+                if (!icon.isPulsing) {
+                    icon.StartThrob(1, 0.1, 0.8);
+                }
+            });
+            this.eventUnsubscribers.push(unsubDropped);
+
+            // Flag returned - stop throb, solid appearance
+            const unsubReturned = flag.events.on('flagReturned', () => {
+                if (icon.isPulsing) {
+                    icon.StopThrob();
+                }
+                icon.SetFillAlpha(1);
+            });
+            this.eventUnsubscribers.push(unsubReturned);
+        }
     }
     
     private createRootContainer(): mod.UIWidget {
@@ -210,40 +257,29 @@ class FlagBar {
     ): void {
         // Calculate target progress
         flagState.targetProgress = this.calculateFlagProgress(flag, captureZonePosition);
-        
+
         if (DEBUG_MODE) {
             //console.log(`[FlagBar] Team ${flag.teamId} flag state: isAtHome=${flag.isAtHome}, isCarried=${flag.isBeingCarried}, isDropped=${flag.isDropped}`);
             //console.log(`[FlagBar] Team ${flag.teamId} targetProgress: ${flagState.targetProgress.toFixed(3)}`);
         }
-        
+
         // Apply smooth damping
         this.smoothDampProgress(flagState, deltaTime);
-        
+
         if (DEBUG_MODE) {
             //console.log(`[FlagBar] Team ${flag.teamId} currentProgress after damping: ${flagState.currentProgress.toFixed(3)}`);
         }
-        
+
         // Update flag icon position
         this.updateFlagIconPosition(flagIcon, flagState.currentProgress, isLeftTeam);
-        
-        // Update flag icon visibility based on flag state
-        // FIXED: Show flag when NOT dropped (was reversed)
-        if (flag.isDropped && !flagIcon.isPulsing) {
-            //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is DROPPED, setting alpha to 0.0`);
-            //flagIcon.SetFillAlpha(0.4);
-            //flagIcon.SetOutlineAlpha(0.4);      
-            flagIcon.StartThrob(1, 0.1, 0.8);
-        } else if(!flag.isDropped && flagIcon.isPulsing) {
-            //if (DEBUG_MODE) console.log(`[FlagBar] Team ${flag.teamId} flag is NOT dropped, setting alpha to 1.0`);
-            flagIcon.StopThrob();
-            flagIcon.SetFillAlpha(1);
-        }
-        
-        // Update bar progress (bar empties as flag advances). 
+
+        // Flag visual effects (throb, alpha) are now handled by event subscriptions
+
+        // Update bar progress (bar empties as flag advances).
         // Bar at twice the distance of the flag process so we empty it at the moment the flag hits the middle
         const barProgress = 1.0 - flagState.currentProgress * 2;
         opposingBar.setProgressValue(barProgress);
-        
+
         if (DEBUG_MODE) {
             //console.log(`[FlagBar] Team ${flag.teamId} opposing bar progress: ${barProgress.toFixed(3)}`);
         }
@@ -374,9 +410,16 @@ class FlagBar {
     }
     
     /**
-     * Clean up all UI widgets
+     * Clean up all UI widgets and event subscriptions
      */
     public destroy(): void {
+        // Unsubscribe from all flag events
+        for (const unsubscribe of this.eventUnsubscribers) {
+            unsubscribe();
+        }
+        this.eventUnsubscribers = [];
+
+        // Destroy UI widgets
         this.team1FlagIcon.Destroy();
         this.team2FlagIcon.Destroy();
         mod.DeleteUIWidget(this.rootContainer);
