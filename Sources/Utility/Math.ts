@@ -211,6 +211,28 @@ function VectorClampToRange(vector: mod.Vector, min:number, max:number): mod.Vec
     );
 }
 
+/**
+ * Calculate Euler rotation to face a direction vector
+ * @param direction Direction vector to face
+ * @returns Rotation vector (Euler angles in radians)
+ */
+function VectorDirectionToRotation(direction: mod.Vector): mod.Vector {
+    const normalized = mod.Normalize(direction);
+    const x = mod.XComponentOf(normalized);
+    const y = mod.YComponentOf(normalized);
+    const z = mod.ZComponentOf(normalized);
+
+    // Calculate yaw (rotation around Y axis)
+    const yaw = Math.atan2(x, -z);
+
+    // Calculate pitch (rotation around X axis)
+    const horizontalDist = Math.sqrt(x * x + z * z);
+    const pitch = Math.atan2(y, horizontalDist);
+
+    // Return as Euler angles (pitch, yaw, roll)
+    return mod.CreateVector(pitch, yaw, 0);
+}
+
 function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean
 {
     return Math.abs(a - b) < (epsilon ?? 1e-9);

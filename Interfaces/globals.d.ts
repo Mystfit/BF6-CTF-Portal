@@ -800,6 +800,7 @@ declare function VectorToString(v: mod.Vector): string;
 declare function VectorClampToRange(vector: mod.Vector, min:number, max:number): mod.Vector;
 declare function VectorLength(vec: mod.Vector): number;
 declare function VectorLengthSquared(vec: mod.Vector): number;
+declare function VectorDirectionToRotation(direction: mod.Vector): mod.Vector;
 declare function GetTeamName(team: mod.Team): string;
 declare function GetOpposingTeams(teamId: number): number[];
 declare function GetOpposingTeamsForFlag(flagData: Flag): number[];

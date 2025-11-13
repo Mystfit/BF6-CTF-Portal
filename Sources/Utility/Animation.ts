@@ -109,7 +109,7 @@ class AnimationManager {
                 // Calculate rotation if needed
                 let rotation = ZERO_VEC;
                 if (options.rotateToDirection) {
-                    rotation = this.CalculateRotationFromDirection(
+                    rotation = VectorDirectionToRotation(
                         Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector() //mod.Subtract(endPoint, startPoint)
                     );
                 }
@@ -231,28 +231,6 @@ class AnimationManager {
             ...options,
             duration
         });
-    }
-
-    /**
-     * Calculate Euler rotation to face a direction vector
-     * @param direction Direction vector to face
-     * @returns Rotation vector (Euler angles in radians)
-     */
-    private CalculateRotationFromDirection(direction: mod.Vector): mod.Vector {
-        const normalized = mod.Normalize(direction);
-        const x = mod.XComponentOf(normalized);
-        const y = mod.YComponentOf(normalized);
-        const z = mod.ZComponentOf(normalized);
-
-        // Calculate yaw (rotation around Y axis)
-        const yaw = Math.atan2(x, -z);
-
-        // Calculate pitch (rotation around X axis)
-        const horizontalDist = Math.sqrt(x * x + z * z);
-        const pitch = Math.atan2(y, horizontalDist);
-
-        // Return as Euler angles (pitch, yaw, roll)
-        return mod.CreateVector(pitch, yaw, 0);
     }
 
     /**
@@ -409,7 +387,7 @@ class AnimationManager {
                     // Calculate rotation if needed
                     let rotation = ZERO_VEC;
                     if (options.rotateToDirection) {
-                        rotation = this.CalculateRotationFromDirection(
+                        rotation = VectorDirectionToRotation(
                             Math2.Vec3.FromVector(endPoint.position)
                                 .Subtract(Math2.Vec3.FromVector(startPoint.position))
                                 .ToVector()
@@ -465,7 +443,7 @@ class AnimationManager {
                         
                         let rotation = ZERO_VEC;
                         if (options.rotateToDirection) {
-                            rotation = this.CalculateRotationFromDirection(
+                            rotation = VectorDirectionToRotation(
                                 Math2.Vec3.FromVector(endPoint.position)
                                     .Subtract(Math2.Vec3.FromVector(startPoint.position))
                                     .ToVector()
@@ -504,7 +482,7 @@ class AnimationManager {
                             
                             let finalRotation = ZERO_VEC;
                             if (options.rotateToDirection) {
-                                finalRotation = this.CalculateRotationFromDirection(
+                                finalRotation = VectorDirectionToRotation(
                                     Math2.Vec3.FromVector(startPoint.position)
                                         .Subtract(Math2.Vec3.FromVector(currentPosition))
                                         .ToVector()

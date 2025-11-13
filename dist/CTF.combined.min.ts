@@ -193,6 +193,16 @@ Math.min(Math.max(mod.YComponentOf(vector), min), max),
 Math.min(Math.max(mod.ZComponentOf(vector), min), max),
 );
 }
+function VectorDirectionToRotation(direction: mod.Vector): mod.Vector {
+const normalized = mod.Normalize(direction);
+const x = mod.XComponentOf(normalized);
+const y = mod.YComponentOf(normalized);
+const z = mod.ZComponentOf(normalized);
+const yaw = Math.atan2(x, -z);
+const horizontalDist = Math.sqrt(x * x + z * z);
+const pitch = Math.atan2(y, horizontalDist);
+return mod.CreateVector(pitch, yaw, 0);
+}
 function AreFloatsEqual(a: number, b: number, epsilon?: number): boolean
 {
 return Math.abs(a - b) < (epsilon ?? 1e-9);
@@ -858,7 +868,7 @@ const segmentDistance = VectorLength(Math2.Vec3.FromVector(endPoint).Subtract(Ma
 const segmentDuration = (segmentDistance / totalDistance) * totalDuration;
 let rotation = ZERO_VEC;
 if (options.rotateToDirection) {
-rotation = this.CalculateRotationFromDirection(
+rotation = VectorDirectionToRotation(
 Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector()
 );
 }
@@ -934,16 +944,6 @@ await this.AnimateAlongPath(object, [currentPos, targetPos], {
 ...options,
 duration
 });
-}
-private CalculateRotationFromDirection(direction: mod.Vector): mod.Vector {
-const normalized = mod.Normalize(direction);
-const x = mod.XComponentOf(normalized);
-const y = mod.YComponentOf(normalized);
-const z = mod.ZComponentOf(normalized);
-const yaw = Math.atan2(x, -z);
-const horizontalDist = Math.sqrt(x * x + z * z);
-const pitch = Math.atan2(y, horizontalDist);
-return mod.CreateVector(pitch, yaw, 0);
 }
 async AnimateAlongGeneratedPath(
 object: mod.Object | undefined,
@@ -1054,7 +1054,7 @@ console.log(`[AnimateAlongGeneratedPath] Animating segment ${segmentIndex}: ${Ve
 }
 let rotation = ZERO_VEC;
 if (options.rotateToDirection) {
-rotation = this.CalculateRotationFromDirection(
+rotation = VectorDirectionToRotation(
 Math2.Vec3.FromVector(endPoint.position)
 .Subtract(Math2.Vec3.FromVector(startPoint.position))
 .ToVector()
@@ -1095,7 +1095,7 @@ Math2.Vec3.FromVector(endPoint.position)
 const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
 let rotation = ZERO_VEC;
 if (options.rotateToDirection) {
-rotation = this.CalculateRotationFromDirection(
+rotation = VectorDirectionToRotation(
 Math2.Vec3.FromVector(endPoint.position)
 .Subtract(Math2.Vec3.FromVector(startPoint.position))
 .ToVector()
@@ -1128,7 +1128,7 @@ if (finalDistance > 0.1) {
 const finalDuration = options.speed ? finalDistance / options.speed : 0.1;
 let finalRotation = ZERO_VEC;
 if (options.rotateToDirection) {
-finalRotation = this.CalculateRotationFromDirection(
+finalRotation = VectorDirectionToRotation(
 Math2.Vec3.FromVector(startPoint.position)
 .Subtract(Math2.Vec3.FromVector(currentPosition))
 .ToVector()
