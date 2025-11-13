@@ -14,54 +14,32 @@ import * as modlib from 'modlib';
 // HOW IT WORKS - Understanding CTF Game Flow
 //==============================================================================================
 /*
- * FLAG LIFECYCLE EXPLAINED:
+ * CLASSIC CTF FLAG LIFECYCLE EXPLAINED (ClassicCTFConfig game mode)
  * =========================
  * 1. AT HOME (isAtHome=true)
- *    - Flag sits at spawn point with interaction point
- *    - Opposing teams can pick it up
- *    - Own team sees "DEFEND" icons
+ *    - Flag sits at the flag spawn point with an interaction point
+ *    - Opposing teams can pick up the flag by interacting with it
  *
  * 2. BEING CARRIED (isBeingCarried=true)
- *    - Player picked up flag -> becomes carrier
- *    - Carrier forced to melee weapon (can't shoot)
- *    - Carrier can't drive vehicles (forced to passenger seat)
- *    - VFX smoke trail follows carrier
- *    - Icons update to show "PICKUP" or "RECOVER" for different teams
+ *    - An player on an opposing team can pick up the flag by interacting with it to become a flag carrier  - Carrier forced to melee weapon (can't shoot)
+ *    - Flag carriers can't drive vehicles (forced to passenger seat)
+ *    - Flag carriers are globally visible by an icon above their head as well as a smoke trail and are forcefully spotted
  *
  * 3. DROPPED (isDropped=true)
- *    - Carrier died or manually dropped flag
- *    - 3-second delay before anyone can pick it up
- *    - Auto-returns to base after 30 seconds if not picked up
- *    - Own team can return it early by interacting
+ *    - The flag is dropped when the carrier dies or when manually dropped by the carrier switching weapons
+ *    - Configurable (5 second default) delay before anyone can pick the flag up again
+ *    - The flag will auto-return to base after after a configurable delay (30 second default) if not picked up
+ *    - The flag's owning team can return the flag early by interacting with it
  *
  * 4. SCORING
- *    - Carrier enters their team's capture zone with enemy flag
- *    - Must have own flag at home to score
+ *    - The flag carrier enters their teams capture zone with enemy flag
+ *    - The flag carrier's team flag must be at home to score
  *    - Team gets 1 point, first to TARGET_SCORE wins
  *
- * MULTI-TEAM SUPPORT:
+ * MULTI-TEAM SUPPORT (FourTeamCTFConfig game mode):
  * ===================
- * - Configurable 2-7 team gameplay via GameModeConfig
+ * - Default is 4 teams but compatible with 3-7 teams. 
  * - Each flag can restrict which teams can capture it
- * - Dynamic scoreboard adapts to team count
- * - Team balance system moves players between teams
- *
- * CONFIGURATION SYSTEM:
- * =====================
- * To create a custom game mode, define a GameModeConfig:
- * 
- * const config = {
- *   teams: [
- *     { teamId: 1, name: "Red", color: redVector},
- *     { teamId: 2, name: "Blue", color: blueVector}
- *   ],
- *   flags: [
- *     { flagId: 1, owningTeamId: 1 },  // Red flag
- *     { flagId: 2, owningTeamId: 2 }   // Blue flag
- *   ]
- * };
- * 
- * Then call LoadGameModeConfig(config) to apply it.
  */
 
 //==============================================================================================
