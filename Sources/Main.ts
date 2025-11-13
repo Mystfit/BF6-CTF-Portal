@@ -298,6 +298,19 @@ async function SecondUpdate(): Promise<void> {
             flag.SlowUpdate(timeDelta);
         }
 
+        // Verify player is not driving
+        // Fix for some vehicles not trigger events
+        if(VEHICLE_BLOCK_CARRIER_DRIVING){
+            JSPlayer.getAllAsArray().forEach((jsPlayer: JSPlayer) => {
+                if (IsCarryingAnyFlag(jsPlayer.player)) {      
+                    if (mod.GetPlayerVehicleSeat(jsPlayer.player) === VEHICLE_DRIVER_SEAT) {
+                        if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
+                        ForceToPassengerSeat(jsPlayer.player, mod.GetVehicleFromPlayer(jsPlayer.player));
+                    }
+                }
+            });
+        }
+
         lastSecondUpdateTime = currentTime;
     }
 }
@@ -542,7 +555,7 @@ async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): P
     for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
             // Make sure we're not still in the OnPlayerEnteredVehicle event
-            await mod.Wait(0);
+            await mod.Wait(TICK_RATE);
 
             mod.ForcePlayerToSeat(player, vehicle, i);
             forcedToSeat = true;
@@ -555,7 +568,7 @@ async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): P
     // Try last seat as fallback
     if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
         // Make sure we're not still in the OnPlayerEnteredVehicle event
-        await mod.Wait(0);
+        await mod.Wait(TICK_RATE);
 
         mod.ForcePlayerToSeat(player, vehicle, lastSeat);
         forcedToSeat = true;
@@ -566,7 +579,7 @@ async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): P
     mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
 
     // Make sure we're not still in the OnPlayerEnteredVehicle event
-    await mod.Wait(0);
+    await mod.Wait(TICK_RATE);
     
     // No passenger seats available, force exit
     mod.ForcePlayerExitVehicle(player, vehicle);

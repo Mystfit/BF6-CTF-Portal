@@ -1457,6 +1457,16 @@ EndGameByTime();
 for(let [flagID, flag] of flags){
 flag.SlowUpdate(timeDelta);
 }
+if(VEHICLE_BLOCK_CARRIER_DRIVING){
+JSPlayer.getAllAsArray().forEach((jsPlayer: JSPlayer) => {
+if (IsCarryingAnyFlag(jsPlayer.player)) {
+if (mod.GetPlayerVehicleSeat(jsPlayer.player) === VEHICLE_DRIVER_SEAT) {
+if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
+ForceToPassengerSeat(jsPlayer.player, mod.GetVehicleFromPlayer(jsPlayer.player));
+}
+}
+});
+}
 lastSecondUpdateTime = currentTime;
 }
 }
@@ -1615,7 +1625,7 @@ let forcedToSeat = false;
 let lastSeat = seatCount - 1;
 for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
 if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
-await mod.Wait(0);
+await mod.Wait(TICK_RATE);
 mod.ForcePlayerToSeat(player, vehicle, i);
 forcedToSeat = true;
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -1624,7 +1634,7 @@ return;
 }
 }
 if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
-await mod.Wait(0);
+await mod.Wait(TICK_RATE);
 mod.ForcePlayerToSeat(player, vehicle, lastSeat);
 forcedToSeat = true;
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -1632,7 +1642,7 @@ if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${lastSeat}`);
 return;
 }
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
-await mod.Wait(0);
+await mod.Wait(TICK_RATE);
 mod.ForcePlayerExitVehicle(player, vehicle);
 if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
 }
