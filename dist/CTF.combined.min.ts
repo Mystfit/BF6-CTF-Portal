@@ -1623,9 +1623,10 @@ async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): P
 const seatCount = mod.GetVehicleSeatCount(vehicle);
 let forcedToSeat = false;
 let lastSeat = seatCount - 1;
+let delayBeforeSwitch = TICK_RATE * 2;
 for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
 if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
-await mod.Wait(TICK_RATE);
+await mod.Wait(delayBeforeSwitch);
 mod.ForcePlayerToSeat(player, vehicle, i);
 forcedToSeat = true;
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -1634,7 +1635,7 @@ return;
 }
 }
 if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
-await mod.Wait(TICK_RATE);
+await mod.Wait(delayBeforeSwitch);
 mod.ForcePlayerToSeat(player, vehicle, lastSeat);
 forcedToSeat = true;
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.forced_to_seat), player);
@@ -1642,7 +1643,7 @@ if (DEBUG_MODE) console.log(`Forced flag carrier to seat ${lastSeat}`);
 return;
 }
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
-await mod.Wait(TICK_RATE);
+await mod.Wait(delayBeforeSwitch);
 mod.ForcePlayerExitVehicle(player, vehicle);
 if (DEBUG_MODE) console.log("No passenger seats available, forcing exit");
 }

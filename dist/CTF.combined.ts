@@ -2649,10 +2649,11 @@ async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): P
     const seatCount = mod.GetVehicleSeatCount(vehicle);
     let forcedToSeat = false;
     let lastSeat = seatCount - 1;
+    let delayBeforeSwitch = TICK_RATE * 2;
     for (let i = seatCount-1; i >= VEHICLE_FIRST_PASSENGER_SEAT; --i) {
         if (!mod.IsVehicleSeatOccupied(vehicle, i)) {
             // Make sure we're not still in the OnPlayerEnteredVehicle event
-            await mod.Wait(TICK_RATE);
+            await mod.Wait(delayBeforeSwitch);
 
             mod.ForcePlayerToSeat(player, vehicle, i);
             forcedToSeat = true;
@@ -2665,7 +2666,7 @@ async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): P
     // Try last seat as fallback
     if (!mod.IsVehicleSeatOccupied(vehicle, lastSeat)) {
         // Make sure we're not still in the OnPlayerEnteredVehicle event
-        await mod.Wait(TICK_RATE);
+        await mod.Wait(delayBeforeSwitch);
 
         mod.ForcePlayerToSeat(player, vehicle, lastSeat);
         forcedToSeat = true;
@@ -2676,7 +2677,7 @@ async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): P
     mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.no_passenger_seats, player));
 
     // Make sure we're not still in the OnPlayerEnteredVehicle event
-    await mod.Wait(TICK_RATE);
+    await mod.Wait(delayBeforeSwitch);
     
     // No passenger seats available, force exit
     mod.ForcePlayerExitVehicle(player, vehicle);
