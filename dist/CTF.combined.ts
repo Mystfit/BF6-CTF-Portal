@@ -1322,13 +1322,129 @@ export function OnRayCastMissed(eventPlayer: mod.Player) {
 //==============================================================================================
 
 /**
- * AnimationManager - Asynchronous object animation system
- * 
- * Provides complex animation capabilities beyond the basic MoveObjectOverTime function.
- * Supports path-based animations, speed/duration control, rotation, and callbacks.
- * 
- * Usage:
- *   await animationManager.AnimateAlongPath(object, points, { speed: 10 });
+ * AnimationManager - Asynchronous object and value animation system
+ *
+ * Provides complex animation capabilities for both spatial objects and arbitrary numeric values.
+ * Supports path-based animations, easing functions, speed/duration control, and callbacks.
+ *
+ * =========================================================================================
+ * SPATIAL OBJECT ANIMATION
+ * =========================================================================================
+ *
+ * Animate objects along paths in 3D space:
+ *
+ * @example Basic path animation
+ * await animationManager.AnimateAlongPath(object, [pos1, pos2, pos3], { speed: 10 });
+ *
+ * @example Concurrent path generation
+ * const generator = RaycastManager.ProjectileRaycastGenerator(start, velocity, distance, sampleRate);
+ * await animationManager.AnimateAlongGeneratedPath(undefined, generator, 3, {
+ *     speed: 50,
+ *     onSpawnAtStart: () => mod.SpawnObject(mod.RuntimeSpawn_Common.Sphere01, start),
+ *     onComplete: () => console.log("Projectile reached destination")
+ * });
+ *
+ * =========================================================================================
+ * VALUE ANIMATION WITH EASING
+ * =========================================================================================
+ *
+ * Animate arbitrary numeric values with easing functions for smooth UI animations:
+ *
+ * @example Fade in UI element
+ * await animationManager.AnimateValue(0, 1, {
+ *     duration: 0.5,
+ *     easingFunction: Easing.EaseOutCubic,
+ *     onProgress: (alpha) => {
+ *         mod.SetUIWidgetBgAlpha(element, alpha);
+ *     }
+ * });
+ *
+ * @example Scale bounce effect
+ * await animationManager.AnimateValue(0, 1.2, {
+ *     duration: 0.8,
+ *     easingFunction: Easing.EaseOutBounce,
+ *     onProgress: (scale) => {
+ *         mod.SetUIWidgetSize(element, mod.CreateVector(scale,scale,0));
+ *     }
+ * });
+ *
+ * @example Sliding panel with overshoot
+ * await animationManager.AnimateValue(-200, 0, {
+ *     duration: 0.6,
+ *     easingFunction: Easing.EaseOutBack,
+ *     onProgress: (xPos) => {
+ *         mod.mod.SetUIWidgetPosition(panel, mod.CreateVector(xPos, 100, 0));
+ *     }
+ * });
+ *
+ * @example Looping pulse animation
+ * animationManager.AnimateValue(0.5, 1.0, {
+ *     duration: 1.0,
+ *     easingFunction: Easing.EaseInOutSine,
+ *     loop: true,
+ *     onProgress: (alpha) => {
+ *         mod.SetUIWidgetBgAlpha(indicator, alpha);
+ *     }
+ * });
+ *
+ * =========================================================================================
+ * MULTI-VALUE ANIMATION
+ * =========================================================================================
+ *
+ * Animate multiple values in parallel (useful for RGB colors, positions, etc.):
+ *
+ * @example RGB color transition
+ * await animationManager.AnimateValues([255, 0, 0], [0, 0, 255], {
+ *     duration: 1.0,
+ *     easingFunction: Easing.EaseInOutCubic,
+ *     onProgress: ([r, g, b]) => {
+ *         const color = mod.CreateVector(r / 255, g / 255, b / 255);
+ *         mod.SetUIWidgetBgColor(element, color);
+ *     }
+ * });
+ *
+ * @example Position and scale simultaneously
+ * await animationManager.AnimateValues([0, 0, 0.5], [100, 50, 1.5], {
+ *     duration: 0.8,
+ *     easingFunction: Easing.EaseOutBack,
+ *     onProgress: ([x, y, scale]) => {
+ *         mod.SetUIWidgetPosition(element, mod.CreateVector(x, y, 0));
+ *         mod.SetUIWidgetSize(element, mod.CreateVector(scale, scale, 0));
+ *     }
+ * });
+ *
+ * =========================================================================================
+ * AVAILABLE EASING FUNCTIONS
+ * =========================================================================================
+ *
+ * All easing functions are available in the Easing namespace:
+ *
+ * - Linear: No easing, constant speed
+ * - Quad/Cubic/Quart/Quint: Polynomial curves (In, Out, InOut variants)
+ * - Sine: Smooth sinusoidal easing (In, Out, InOut variants)
+ * - Expo: Exponential acceleration/deceleration (In, Out, InOut variants)
+ * - Circ: Circular easing (In, Out, InOut variants)
+ * - Bounce: Bouncing effect (In, Out, InOut variants)
+ * - Elastic: Elastic spring effect (In, Out, InOut variants)
+ * - Back: Overshooting easing (In, Out, InOut variants)
+ *
+ * Naming convention:
+ * - EaseIn*: Slow start, fast end
+ * - EaseOut*: Fast start, slow end
+ * - EaseInOut*: Slow start, fast middle, slow end
+ *
+ * @example Comparing easing functions
+ * // Gentle fade
+ * easingFunction: Easing.EaseInOutSine
+ *
+ * // Dramatic acceleration
+ * easingFunction: Easing.EaseInQuart
+ *
+ * // Bouncy overshoot
+ * easingFunction: Easing.EaseOutBack
+ *
+ * // Springy bounce
+ * easingFunction: Easing.EaseOutBounce
  */
 
 interface ProjectilePoint {
@@ -1352,6 +1468,241 @@ interface AnimationOptions {
     onProgress?: (progress: number, position: mod.Vector) => void;
     onComplete?: () => void;
     onSegmentComplete?: (segmentIndex: number) => void;
+}
+
+interface ValueAnimationOptions {
+    duration: number;                                              // Total duration in seconds
+    easingFunction?: EasingFunction;                               // Easing curve (default: Linear)
+    onProgress: (value: number, normalizedTime: number) => void;   // Called each tick with interpolated value
+    onStart?: () => void;                                          // Called when animation starts
+    onComplete?: () => void;                                       // Called when animation completes
+    tickRate?: number;                                             // Seconds per tick (default: 0.032 ~30fps)
+    loop?: boolean;                                                // Loop the animation
+}
+
+type EasingFunction = (t: number) => number;  // t in [0,1] -> output in [0,1]
+
+//==============================================================================================
+// EASING FUNCTIONS
+//==============================================================================================
+
+/**
+ * Easing - Collection of easing/tweening functions for smooth animations
+ *
+ * All functions take t in [0,1] and return output in [0,1]
+ *
+ * Usage:
+ *   await animationManager.AnimateValue(0, 100, {
+ *       duration: 1.0,
+ *       easingFunction: Easing.EaseOutBounce,
+ *       onProgress: (value) => console.log(value)
+ *   });
+ */
+namespace Easing {
+    // Linear
+    export function Linear(t: number): number {
+        return t;
+    }
+
+    // Quadratic
+    export function EaseInQuad(t: number): number {
+        return t * t;
+    }
+
+    export function EaseOutQuad(t: number): number {
+        return t * (2 - t);
+    }
+
+    export function EaseInOutQuad(t: number): number {
+        return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    }
+
+    // Cubic
+    export function EaseInCubic(t: number): number {
+        return t * t * t;
+    }
+
+    export function EaseOutCubic(t: number): number {
+        const t1 = t - 1;
+        return t1 * t1 * t1 + 1;
+    }
+
+    export function EaseInOutCubic(t: number): number {
+        return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+    }
+
+    // Quartic
+    export function EaseInQuart(t: number): number {
+        return t * t * t * t;
+    }
+
+    export function EaseOutQuart(t: number): number {
+        const t1 = t - 1;
+        return 1 - t1 * t1 * t1 * t1;
+    }
+
+    export function EaseInOutQuart(t: number): number {
+        if (t < 0.5) {
+            return 8 * t * t * t * t;
+        } else {
+            const t1 = t - 1;
+            return 1 - 8 * t1 * t1 * t1 * t1;
+        }
+    }
+
+    // Quintic
+    export function EaseInQuint(t: number): number {
+        return t * t * t * t * t;
+    }
+
+    export function EaseOutQuint(t: number): number {
+        const t1 = t - 1;
+        return 1 + t1 * t1 * t1 * t1 * t1;
+    }
+
+    export function EaseInOutQuint(t: number): number {
+        if (t < 0.5) {
+            return 16 * t * t * t * t * t;
+        } else {
+            const t1 = t - 1;
+            return 1 + 16 * t1 * t1 * t1 * t1 * t1;
+        }
+    }
+
+    // Sine
+    export function EaseInSine(t: number): number {
+        return 1 - Math.cos((t * Math.PI) / 2);
+    }
+
+    export function EaseOutSine(t: number): number {
+        return Math.sin((t * Math.PI) / 2);
+    }
+
+    export function EaseInOutSine(t: number): number {
+        return -(Math.cos(Math.PI * t) - 1) / 2;
+    }
+
+    // Exponential
+    export function EaseInExpo(t: number): number {
+        return t === 0 ? 0 : Math.pow(2, 10 * t - 10);
+    }
+
+    export function EaseOutExpo(t: number): number {
+        return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+    }
+
+    export function EaseInOutExpo(t: number): number {
+        if (t === 0) return 0;
+        if (t === 1) return 1;
+        if (t < 0.5) {
+            return Math.pow(2, 20 * t - 10) / 2;
+        } else {
+            return (2 - Math.pow(2, -20 * t + 10)) / 2;
+        }
+    }
+
+    // Circular
+    export function EaseInCirc(t: number): number {
+        return 1 - Math.sqrt(1 - t * t);
+    }
+
+    export function EaseOutCirc(t: number): number {
+        return Math.sqrt(1 - Math.pow(t - 1, 2));
+    }
+
+    export function EaseInOutCirc(t: number): number {
+        if (t < 0.5) {
+            return (1 - Math.sqrt(1 - Math.pow(2 * t, 2))) / 2;
+        } else {
+            return (Math.sqrt(1 - Math.pow(-2 * t + 2, 2)) + 1) / 2;
+        }
+    }
+
+    // Bounce
+    export function EaseInBounce(t: number): number {
+        return 1 - EaseOutBounce(1 - t);
+    }
+
+    export function EaseOutBounce(t: number): number {
+        const n1 = 7.5625;
+        const d1 = 2.75;
+
+        if (t < 1 / d1) {
+            return n1 * t * t;
+        } else if (t < 2 / d1) {
+            const t2 = t - 1.5 / d1;
+            return n1 * t2 * t2 + 0.75;
+        } else if (t < 2.5 / d1) {
+            const t2 = t - 2.25 / d1;
+            return n1 * t2 * t2 + 0.9375;
+        } else {
+            const t2 = t - 2.625 / d1;
+            return n1 * t2 * t2 + 0.984375;
+        }
+    }
+
+    export function EaseInOutBounce(t: number): number {
+        if (t < 0.5) {
+            return (1 - EaseOutBounce(1 - 2 * t)) / 2;
+        } else {
+            return (1 + EaseOutBounce(2 * t - 1)) / 2;
+        }
+    }
+
+    // Elastic
+    export function EaseInElastic(t: number): number {
+        const c4 = (2 * Math.PI) / 3;
+
+        if (t === 0) return 0;
+        if (t === 1) return 1;
+        return -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
+    }
+
+    export function EaseOutElastic(t: number): number {
+        const c4 = (2 * Math.PI) / 3;
+
+        if (t === 0) return 0;
+        if (t === 1) return 1;
+        return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+    }
+
+    export function EaseInOutElastic(t: number): number {
+        const c5 = (2 * Math.PI) / 4.5;
+
+        if (t === 0) return 0;
+        if (t === 1) return 1;
+        if (t < 0.5) {
+            return -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) / 2;
+        } else {
+            return (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) / 2 + 1;
+        }
+    }
+
+    // Back (overshooting)
+    export function EaseInBack(t: number): number {
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        return c3 * t * t * t - c1 * t * t;
+    }
+
+    export function EaseOutBack(t: number): number {
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        const t1 = t - 1;
+        return 1 + c3 * t1 * t1 * t1 + c1 * t1 * t1;
+    }
+
+    export function EaseInOutBack(t: number): number {
+        const c1 = 1.70158;
+        const c2 = c1 * 1.525;
+
+        if (t < 0.5) {
+            return (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2;
+        } else {
+            const t2 = 2 * t - 2;
+            return (Math.pow(t2, 2) * ((c2 + 1) * t2 + c2) + 2) / 2;
+        }
+    }
 }
 
 interface ActiveAnimation {
@@ -1919,10 +2270,261 @@ class AnimationManager {
         }
         this.activeAnimations.clear();
     }
+
+    /**
+     * Animate a single numeric value from start to end with easing
+     *
+     * @param startValue Starting value
+     * @param endValue Ending value
+     * @param options Animation configuration options
+     * @returns Promise that resolves when animation completes
+     *
+     * @example
+     * // Fade in UI element
+     * await animationManager.AnimateValue(0, 1, {
+     *     duration: 0.5,
+     *     easingFunction: Easing.EaseOutCubic,
+     *     onProgress: (alpha) => {
+     *         mod.SetUIElementOpacity(element, alpha);
+     *     }
+     * });
+     *
+     * @example
+     * // Bounce scale animation
+     * await animationManager.AnimateValue(0, 1.2, {
+     *     duration: 0.8,
+     *     easingFunction: Easing.EaseOutBounce,
+     *     onProgress: (scale) => {
+     *         mod.SetUIWidgetSize(element, mod.CreateVector(scale, scale, 0));
+     *     }
+     * });
+     */
+    async AnimateValue(
+        startValue: number,
+        endValue: number,
+        options: ValueAnimationOptions
+    ): Promise<void> {
+        const easingFn = options.easingFunction || Easing.Linear;
+        const tickRate = options.tickRate || 0.032;
+
+        try {
+            // Call onStart callback if provided
+            if (options.onStart) {
+                options.onStart();
+            }
+
+            // Create generator for eased values
+            const generator = GenerateEasedValues(
+                startValue,
+                endValue,
+                options.duration,
+                easingFn,
+                tickRate
+            );
+
+            // Consume generator and call onProgress for each value
+            for await (const value of generator) {
+                const normalizedTime = (value - startValue) / (endValue - startValue);
+                options.onProgress(value, normalizedTime);
+            }
+
+            // Handle looping
+            if (options.loop) {
+                await this.AnimateValue(startValue, endValue, options);
+                return;
+            }
+
+            // Call onComplete callback if provided
+            if (options.onComplete) {
+                options.onComplete();
+            }
+        } catch (error) {
+            console.error(`[AnimateValue] Error during animation:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Animate multiple numeric values in parallel from start to end with easing
+     * Useful for animating RGB colors, XYZ positions, or any multi-dimensional values
+     *
+     * @param startValues Array of starting values
+     * @param endValues Array of ending values (must match length of startValues)
+     * @param options Animation configuration options (onProgress receives array of values)
+     * @returns Promise that resolves when animation completes
+     *
+     * @example
+     * // Animate RGB color from red to blue
+     * await animationManager.AnimateValues([255, 0, 0], [0, 0, 255], {
+     *     duration: 1.0,
+     *     easingFunction: Easing.EaseInOutCubic,
+     *     onProgress: ([r, g, b]) => {
+     *         mod.SetUIWidgetBgColor(element, mod.CreateVector(r, g, b));
+     *     }
+     * });
+     *
+     * @example
+     * // Animate position and scale simultaneously
+     * await animationManager.AnimateValues([0, 0, 0.5], [100, 50, 1.5], {
+     *     duration: 0.8,
+     *     easingFunction: Easing.EaseOutBack,
+     *     onProgress: ([x, y, scale]) => {
+     *         mod.SetUIElementPosition(element, mod.CreateVector(x, y, 0));
+     *         mod.SetUIElementScale(element, mod.CreateVector(scale, scale, 0);
+     *     }
+     * });
+     */
+    async AnimateValues(
+        startValues: number[],
+        endValues: number[],
+        options: Omit<ValueAnimationOptions, 'onProgress'> & {
+            onProgress: (values: number[], normalizedTime: number) => void;
+        }
+    ): Promise<void> {
+        if (startValues.length !== endValues.length) {
+            console.error("AnimateValues: startValues and endValues must have the same length");
+            return;
+        }
+
+        const easingFn = options.easingFunction || Easing.Linear;
+        const tickRate = options.tickRate || TICK_RATE;
+
+        try {
+            // Call onStart callback if provided
+            if (options.onStart) {
+                options.onStart();
+            }
+
+            // Create generator for eased values
+            const generator = GenerateEasedValuesMulti(
+                startValues,
+                endValues,
+                options.duration,
+                easingFn,
+                tickRate
+            );
+
+            // Consume generator and call onProgress for each value set
+            for await (const values of generator) {
+                // Calculate normalized time from first value
+                const normalizedTime = (values[0] - startValues[0]) / (endValues[0] - startValues[0]);
+                options.onProgress(values, normalizedTime);
+            }
+
+            // Handle looping
+            if (options.loop) {
+                await this.AnimateValues(startValues, endValues, options);
+                return;
+            }
+
+            // Call onComplete callback if provided
+            if (options.onComplete) {
+                options.onComplete();
+            }
+        } catch (error) {
+            console.error(`[AnimateValues] Error during animation:`, error);
+            throw error;
+        }
+    }
 }
 
-// Global animation manager instance
-const animationManager = new AnimationManager();
+//==============================================================================================
+// VALUE ANIMATION GENERATORS
+//==============================================================================================
+
+/**
+ * Generate eased values from start to end over a duration
+ *
+ * @param startValue Starting value
+ * @param endValue Ending value
+ * @param duration Total animation duration in seconds
+ * @param easingFn Easing function to apply (default: Linear)
+ * @param tickRate Time between each generated value in seconds (default: 0.032 ~30fps)
+ * @returns AsyncGenerator yielding interpolated values
+ *
+ * @example
+ * for await (const value of GenerateEasedValues(0, 100, 1.0, Easing.EaseOutCubic)) {
+ *     console.log(value);
+ * }
+ */
+async function* GenerateEasedValues(
+    startValue: number,
+    endValue: number,
+    duration: number,
+    easingFn: EasingFunction = Easing.Linear,
+    tickRate: number = 0.032
+): AsyncGenerator<number> {
+    const totalTicks = Math.ceil(duration / tickRate);
+    const valueRange = endValue - startValue;
+
+    for (let tick = 0; tick <= totalTicks; tick++) {
+        // Calculate normalized time (0 to 1)
+        const normalizedTime = Math.min(tick / totalTicks, 1.0);
+
+        // Apply easing function
+        const easedTime = easingFn(normalizedTime);
+
+        // Interpolate value
+        const value = startValue + valueRange * easedTime;
+
+        yield value;
+
+        // Wait for next tick (except on last iteration)
+        if (tick < totalTicks) {
+            await mod.Wait(tickRate);
+        }
+    }
+}
+
+/**
+ * Generate multiple eased values in parallel (useful for RGB, XYZ, etc.)
+ *
+ * @param startValues Array of starting values
+ * @param endValues Array of ending values (must match length of startValues)
+ * @param duration Total animation duration in seconds
+ * @param easingFn Easing function to apply (default: Linear)
+ * @param tickRate Time between each generated value in seconds (default: 0.032 ~30fps)
+ * @returns AsyncGenerator yielding arrays of interpolated values
+ *
+ * @example
+ * // Animate RGB color from red to blue
+ * for await (const [r, g, b] of GenerateEasedValuesMulti([255, 0, 0], [0, 0, 255], 1.0)) {
+ *     console.log(`RGB: ${r}, ${g}, ${b}`);
+ * }
+ */
+async function* GenerateEasedValuesMulti(
+    startValues: number[],
+    endValues: number[],
+    duration: number,
+    easingFn: EasingFunction = Easing.Linear,
+    tickRate: number = 0.032
+): AsyncGenerator<number[]> {
+    if (startValues.length !== endValues.length) {
+        console.error("GenerateEasedValuesMulti: startValues and endValues must have the same length");
+        return;
+    }
+
+    const totalTicks = Math.ceil(duration / tickRate);
+    const valueRanges = endValues.map((end, i) => end - startValues[i]);
+
+    for (let tick = 0; tick <= totalTicks; tick++) {
+        // Calculate normalized time (0 to 1)
+        const normalizedTime = Math.min(tick / totalTicks, 1.0);
+
+        // Apply easing function
+        const easedTime = easingFn(normalizedTime);
+
+        // Interpolate all values
+        const values = startValues.map((start, i) => start + valueRanges[i] * easedTime);
+
+        yield values;
+
+        // Wait for next tick (except on last iteration)
+        if (tick < totalTicks) {
+            await mod.Wait(tickRate);
+        }
+    }
+}
 
 
 //==============================================================================================
@@ -2163,6 +2765,7 @@ let captureZones: Map<number, CaptureZone> = new Map();
 // Global managers
 let worldIconManager: WorldIconManager;
 let vfxManager: VFXManager;
+let animationManager: AnimationManager;
 
 
 //==============================================================================================
@@ -2246,6 +2849,7 @@ export async function OnGameModeStarted() {
     // Initialize global managers
     worldIconManager = WorldIconManager.getInstance();
     vfxManager = VFXManager.getInstance();
+    animationManager = new AnimationManager();
 
     // Initialize legacy team references (still needed for backwards compatibility)
     teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
@@ -6369,6 +6973,18 @@ class TeamOrdersBar extends TickerWidget {
     lastOrder: TeamOrders;
     private eventUnsubscribers: Array<() => void> = [];
 
+    // Animation state
+    private isExpanded: boolean = false;
+    private isAnimating: boolean = false;
+    private isTextVisible: boolean = false;
+    private collapseTimeoutTime: number | null = null;
+    private readonly normalHeight: number = 30;
+    private readonly minimizedHeight: number = 4;
+    private readonly expandDuration: number = 0.4;
+    private readonly collapseDuration: number = 0.3;
+    private readonly visibleDuration: number = 5.0;
+    private currentHeight: number = 4;
+
     constructor(team:mod.Team, tickerParams: TickerWidgetParams) {
          // Call parent constructor with team-specific colors
         super({
@@ -6391,12 +7007,128 @@ class TeamOrdersBar extends TickerWidget {
         this.team = team;
         this.teamId = mod.GetObjId(team);
         this.lastOrder = TeamOrders.TeamIdentify;
-        this.SetTeamOrder(this.lastOrder);
-        
+
+        // Set initial text (widget now exists after super() called createWidgets())
+        this.updateText(this.TeamOrderToMessage(this.lastOrder));
+
+        // Initialize in minimized state (after widgets are created)
+        this.updateWidgetSizes(this.minimizedHeight);
+        const textWidget = (this as any).textWidget as mod.UIWidget;
+        if (textWidget) {
+            mod.SetUIWidgetVisible(textWidget, false);
+            this.isTextVisible = false;
+        }
+
         // Bind to all flag events
         this.bindFlagEvents();
     }
-    
+
+    /**
+     * Update widget sizes for animation
+     * @param height The new height in pixels
+     */
+    private updateWidgetSizes(height: number): void {
+        this.currentHeight = height;
+        const newSize = mod.CreateVector(this.size[0], height, 0);
+        const columnWidget = (this as any).columnWidget as mod.UIWidget;
+        const columnWidgetOutline = (this as any).columnWidgetOutline as mod.UIWidget;
+        mod.SetUIWidgetSize(columnWidget, newSize);
+        mod.SetUIWidgetSize(columnWidgetOutline, newSize);
+    }
+
+    /**
+     * Expand bar animation from minimized to normal state
+     */
+    private async expandBar(): Promise<void> {
+        if (this.isAnimating) return;
+
+        // Cancel any pending collapse
+        this.collapseTimeoutTime = null;
+
+        this.isAnimating = true;
+        const startHeight = this.currentHeight;
+
+        await animationManager.AnimateValue(startHeight, this.normalHeight, {
+            duration: this.expandDuration,
+            easingFunction: Easing.EaseOutCubic,
+            onProgress: (height, normalizedTime) => {
+                this.updateWidgetSizes(height);
+
+                // Show text at 50% progress
+                if (normalizedTime >= 0.5 && !this.isTextVisible) {
+                    const textWidget = (this as any).textWidget as mod.UIWidget;
+                    mod.SetUIWidgetVisible(textWidget, true);
+                    this.isTextVisible = true;
+                }
+            },
+            onComplete: () => {
+                this.isExpanded = true;
+                this.isAnimating = false;
+                this.startCollapseTimer();
+            }
+        });
+    }
+
+    /**
+     * Collapse bar animation from normal to minimized state
+     */
+    private async collapseBar(): Promise<void> {
+        if (this.isAnimating || !this.isExpanded) return;
+
+        // Cancel any pending collapse
+        this.collapseTimeoutTime = null;
+
+        this.isAnimating = true;
+        const startHeight = this.currentHeight;
+
+        await animationManager.AnimateValue(startHeight, this.minimizedHeight, {
+            duration: this.collapseDuration,
+            easingFunction: Easing.EaseInCubic,
+            onProgress: (height, normalizedTime) => {
+                this.updateWidgetSizes(height);
+
+                // Hide text at 50% progress
+                if (normalizedTime >= 0.5 && this.isTextVisible) {
+                    const textWidget = (this as any).textWidget as mod.UIWidget;
+                    mod.SetUIWidgetVisible(textWidget, false);
+                    this.isTextVisible = false;
+                }
+            },
+            onComplete: () => {
+                this.isExpanded = false;
+                this.isAnimating = false;
+            }
+        });
+    }
+
+    /**
+     * Start the timer for auto-collapse
+     */
+    private startCollapseTimer(): void {
+        // Set timeout time
+        this.collapseTimeoutTime = GetCurrentTime() + this.visibleDuration;
+
+        // Start async countdown
+        this.checkCollapseTimeout();
+    }
+
+    /**
+     * Check if collapse timeout has elapsed
+     */
+    private async checkCollapseTimeout(): Promise<void> {
+        if (this.collapseTimeoutTime === null) return;
+
+        const timeoutTime = this.collapseTimeoutTime;
+
+        // Wait for the duration
+        await mod.Wait(this.visibleDuration);
+
+        // Check if timeout wasn't cancelled or reset
+        if (this.collapseTimeoutTime === timeoutTime && this.isExpanded && !this.isAnimating) {
+            this.collapseBar();
+        }
+    }
+
     private bindFlagEvents(): void {
         // Bind to each flag's events
         for (let [flagId, flag] of flags) {
@@ -6482,6 +7214,9 @@ class TeamOrdersBar extends TickerWidget {
     }
     
     destroy(): void {
+        // Cancel any pending collapse animation
+        this.collapseTimeoutTime = null;
+
         // Clean up event listeners
         for (const unsubscribe of this.eventUnsubscribers) {
             unsubscribe();
@@ -6493,7 +7228,16 @@ class TeamOrdersBar extends TickerWidget {
     }
 
     SetTeamOrder(teamOrder: TeamOrders): void {
+        this.lastOrder = teamOrder;
         this.updateText(this.TeamOrderToMessage(teamOrder));
+
+        // Trigger expand animation if not already expanded
+        if (!this.isExpanded && !this.isAnimating) {
+            this.expandBar(); // Fire and forget (non-blocking)
+        } else if (this.isExpanded) {
+            // Already expanded, just reset the collapse timer
+            this.startCollapseTimer();
+        }
     }
 
     TeamOrderToMessage(order:TeamOrders): mod.Message {

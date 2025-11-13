@@ -237,10 +237,64 @@ declare interface AnimationOptions {
     onSegmentComplete?: (segmentIndex: number) => void;
 }
 
+declare interface ValueAnimationOptions {
+    duration: number;                                              // Total duration in seconds
+    easingFunction?: EasingFunction;                               // Easing curve (default: Linear)
+    onProgress: (value: number, normalizedTime: number) => void;   // Called each tick with interpolated value
+    onStart?: () => void;                                          // Called when animation starts
+    onComplete?: () => void;                                       // Called when animation completes
+    tickRate?: number;                                             // Seconds per tick (default: 0.032 ~30fps)
+    loop?: boolean;                                                // Loop the animation
+}
+
+declare type EasingFunction = (t: number) => number;
+
+declare namespace Easing {
+    function Linear(t: number): number;
+    function EaseInQuad(t: number): number;
+    function EaseOutQuad(t: number): number;
+    function EaseInOutQuad(t: number): number;
+    function EaseInCubic(t: number): number;
+    function EaseOutCubic(t: number): number;
+    function EaseInOutCubic(t: number): number;
+    function EaseInQuart(t: number): number;
+    function EaseOutQuart(t: number): number;
+    function EaseInOutQuart(t: number): number;
+    function EaseInQuint(t: number): number;
+    function EaseOutQuint(t: number): number;
+    function EaseInOutQuint(t: number): number;
+    function EaseInSine(t: number): number;
+    function EaseOutSine(t: number): number;
+    function EaseInOutSine(t: number): number;
+    function EaseInExpo(t: number): number;
+    function EaseOutExpo(t: number): number;
+    function EaseInOutExpo(t: number): number;
+    function EaseInCirc(t: number): number;
+    function EaseOutCirc(t: number): number;
+    function EaseInOutCirc(t: number): number;
+    function EaseInBounce(t: number): number;
+    function EaseOutBounce(t: number): number;
+    function EaseInOutBounce(t: number): number;
+    function EaseInElastic(t: number): number;
+    function EaseOutElastic(t: number): number;
+    function EaseInOutElastic(t: number): number;
+    function EaseInBack(t: number): number;
+    function EaseOutBack(t: number): number;
+    function EaseInOutBack(t: number): number;
+}
+
 declare class AnimationManager {
     AnimateAlongPath(object: mod.Object, points: mod.Vector[], options?: any): Promise<void>;
     AnimateAlongGeneratedPath(object: mod.Object | undefined, generator: AsyncGenerator<ProjectilePoint>, minBufferSize: number, options?: AnimationOptions): Promise<void>;
     AnimateToPosition(object: mod.Object, targetPos: mod.Vector, duration: number, options?: any): Promise<void>;
+    AnimateValue(startValue: number, endValue: number, options: ValueAnimationOptions): Promise<void>;
+    AnimateValues(
+        startValues: number[],
+        endValues: number[],
+        options: Omit<ValueAnimationOptions, 'onProgress'> & {
+            onProgress: (values: number[], normalizedTime: number) => void;
+        }
+    ): Promise<void>;
     StopAnimation(object: mod.Object): void;
     IsAnimating(object: mod.Object): boolean;
     GetAnimationProgress(object: mod.Object): number;
@@ -248,6 +302,22 @@ declare class AnimationManager {
     ResumeAnimation(object: mod.Object): void;
     StopAllAnimations(): void;
 }
+
+declare function GenerateEasedValues(
+    startValue: number,
+    endValue: number,
+    duration: number,
+    easingFn?: EasingFunction,
+    tickRate?: number
+): AsyncGenerator<number>;
+
+declare function GenerateEasedValuesMulti(
+    startValues: number[],
+    endValues: number[],
+    duration: number,
+    easingFn?: EasingFunction,
+    tickRate?: number
+): AsyncGenerator<number[]>;
 
 declare class PlayerScore {
     captures: number;

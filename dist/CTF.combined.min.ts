@@ -818,6 +818,176 @@ onProgress?: (progress: number, position: mod.Vector) => void;
 onComplete?: () => void;
 onSegmentComplete?: (segmentIndex: number) => void;
 }
+interface ValueAnimationOptions {
+duration: number;
+easingFunction?: EasingFunction;
+onProgress: (value: number, normalizedTime: number) => void;
+onStart?: () => void;
+onComplete?: () => void;
+tickRate?: number;
+loop?: boolean;
+}
+type EasingFunction = (t: number) => number;
+namespace Easing {
+export function Linear(t: number): number {
+return t;
+}
+export function EaseInQuad(t: number): number {
+return t * t;
+}
+export function EaseOutQuad(t: number): number {
+return t * (2 - t);
+}
+export function EaseInOutQuad(t: number): number {
+return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+}
+export function EaseInCubic(t: number): number {
+return t * t * t;
+}
+export function EaseOutCubic(t: number): number {
+const t1 = t - 1;
+return t1 * t1 * t1 + 1;
+}
+export function EaseInOutCubic(t: number): number {
+return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1;
+}
+export function EaseInQuart(t: number): number {
+return t * t * t * t;
+}
+export function EaseOutQuart(t: number): number {
+const t1 = t - 1;
+return 1 - t1 * t1 * t1 * t1;
+}
+export function EaseInOutQuart(t: number): number {
+if (t < 0.5) {
+return 8 * t * t * t * t;
+} else {
+const t1 = t - 1;
+return 1 - 8 * t1 * t1 * t1 * t1;
+}
+}
+export function EaseInQuint(t: number): number {
+return t * t * t * t * t;
+}
+export function EaseOutQuint(t: number): number {
+const t1 = t - 1;
+return 1 + t1 * t1 * t1 * t1 * t1;
+}
+export function EaseInOutQuint(t: number): number {
+if (t < 0.5) {
+return 16 * t * t * t * t * t;
+} else {
+const t1 = t - 1;
+return 1 + 16 * t1 * t1 * t1 * t1 * t1;
+}
+}
+export function EaseInSine(t: number): number {
+return 1 - Math.cos((t * Math.PI) / 2);
+}
+export function EaseOutSine(t: number): number {
+return Math.sin((t * Math.PI) / 2);
+}
+export function EaseInOutSine(t: number): number {
+return -(Math.cos(Math.PI * t) - 1) / 2;
+}
+export function EaseInExpo(t: number): number {
+return t === 0 ? 0 : Math.pow(2, 10 * t - 10);
+}
+export function EaseOutExpo(t: number): number {
+return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+}
+export function EaseInOutExpo(t: number): number {
+if (t === 0) return 0;
+if (t === 1) return 1;
+if (t < 0.5) {
+return Math.pow(2, 20 * t - 10) / 2;
+} else {
+return (2 - Math.pow(2, -20 * t + 10)) / 2;
+}
+}
+export function EaseInCirc(t: number): number {
+return 1 - Math.sqrt(1 - t * t);
+}
+export function EaseOutCirc(t: number): number {
+return Math.sqrt(1 - Math.pow(t - 1, 2));
+}
+export function EaseInOutCirc(t: number): number {
+if (t < 0.5) {
+return (1 - Math.sqrt(1 - Math.pow(2 * t, 2))) / 2;
+} else {
+return (Math.sqrt(1 - Math.pow(-2 * t + 2, 2)) + 1) / 2;
+}
+}
+export function EaseInBounce(t: number): number {
+return 1 - EaseOutBounce(1 - t);
+}
+export function EaseOutBounce(t: number): number {
+const n1 = 7.5625;
+const d1 = 2.75;
+if (t < 1 / d1) {
+return n1 * t * t;
+} else if (t < 2 / d1) {
+const t2 = t - 1.5 / d1;
+return n1 * t2 * t2 + 0.75;
+} else if (t < 2.5 / d1) {
+const t2 = t - 2.25 / d1;
+return n1 * t2 * t2 + 0.9375;
+} else {
+const t2 = t - 2.625 / d1;
+return n1 * t2 * t2 + 0.984375;
+}
+}
+export function EaseInOutBounce(t: number): number {
+if (t < 0.5) {
+return (1 - EaseOutBounce(1 - 2 * t)) / 2;
+} else {
+return (1 + EaseOutBounce(2 * t - 1)) / 2;
+}
+}
+export function EaseInElastic(t: number): number {
+const c4 = (2 * Math.PI) / 3;
+if (t === 0) return 0;
+if (t === 1) return 1;
+return -Math.pow(2, 10 * t - 10) * Math.sin((t * 10 - 10.75) * c4);
+}
+export function EaseOutElastic(t: number): number {
+const c4 = (2 * Math.PI) / 3;
+if (t === 0) return 0;
+if (t === 1) return 1;
+return Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+}
+export function EaseInOutElastic(t: number): number {
+const c5 = (2 * Math.PI) / 4.5;
+if (t === 0) return 0;
+if (t === 1) return 1;
+if (t < 0.5) {
+return -(Math.pow(2, 20 * t - 10) * Math.sin((20 * t - 11.125) * c5)) / 2;
+} else {
+return (Math.pow(2, -20 * t + 10) * Math.sin((20 * t - 11.125) * c5)) / 2 + 1;
+}
+}
+export function EaseInBack(t: number): number {
+const c1 = 1.70158;
+const c3 = c1 + 1;
+return c3 * t * t * t - c1 * t * t;
+}
+export function EaseOutBack(t: number): number {
+const c1 = 1.70158;
+const c3 = c1 + 1;
+const t1 = t - 1;
+return 1 + c3 * t1 * t1 * t1 + c1 * t1 * t1;
+}
+export function EaseInOutBack(t: number): number {
+const c1 = 1.70158;
+const c2 = c1 * 1.525;
+if (t < 0.5) {
+return (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2;
+} else {
+const t2 = 2 * t - 2;
+return (Math.pow(t2, 2) * ((c2 + 1) * t2 + c2) + 2) / 2;
+}
+}
+}
 interface ActiveAnimation {
 object: mod.Object | undefined;
 objectId: number | undefined;
@@ -1206,8 +1376,123 @@ mod.StopActiveMovementForObject(animation.object);
 }
 this.activeAnimations.clear();
 }
+async AnimateValue(
+startValue: number,
+endValue: number,
+options: ValueAnimationOptions
+): Promise<void> {
+const easingFn = options.easingFunction || Easing.Linear;
+const tickRate = options.tickRate || 0.032;
+try {
+if (options.onStart) {
+options.onStart();
 }
-const animationManager = new AnimationManager();
+const generator = GenerateEasedValues(
+startValue,
+endValue,
+options.duration,
+easingFn,
+tickRate
+);
+for await (const value of generator) {
+const normalizedTime = (value - startValue) / (endValue - startValue);
+options.onProgress(value, normalizedTime);
+}
+if (options.loop) {
+await this.AnimateValue(startValue, endValue, options);
+return;
+}
+if (options.onComplete) {
+options.onComplete();
+}
+} catch (error) {
+console.error(`[AnimateValue] Error during animation:`, error);
+throw error;
+}
+}
+async AnimateValues(
+startValues: number[],
+endValues: number[],
+options: Omit<ValueAnimationOptions, 'onProgress'> & {
+onProgress: (values: number[], normalizedTime: number) => void;
+}
+): Promise<void> {
+if (startValues.length !== endValues.length) {
+console.error("AnimateValues: startValues and endValues must have the same length");
+return;
+}
+const easingFn = options.easingFunction || Easing.Linear;
+const tickRate = options.tickRate || TICK_RATE;
+try {
+if (options.onStart) {
+options.onStart();
+}
+const generator = GenerateEasedValuesMulti(
+startValues,
+endValues,
+options.duration,
+easingFn,
+tickRate
+);
+for await (const values of generator) {
+const normalizedTime = (values[0] - startValues[0]) / (endValues[0] - startValues[0]);
+options.onProgress(values, normalizedTime);
+}
+if (options.loop) {
+await this.AnimateValues(startValues, endValues, options);
+return;
+}
+if (options.onComplete) {
+options.onComplete();
+}
+} catch (error) {
+console.error(`[AnimateValues] Error during animation:`, error);
+throw error;
+}
+}
+}
+async function* GenerateEasedValues(
+startValue: number,
+endValue: number,
+duration: number,
+easingFn: EasingFunction = Easing.Linear,
+tickRate: number = 0.032
+): AsyncGenerator<number> {
+const totalTicks = Math.ceil(duration / tickRate);
+const valueRange = endValue - startValue;
+for (let tick = 0; tick <= totalTicks; tick++) {
+const normalizedTime = Math.min(tick / totalTicks, 1.0);
+const easedTime = easingFn(normalizedTime);
+const value = startValue + valueRange * easedTime;
+yield value;
+if (tick < totalTicks) {
+await mod.Wait(tickRate);
+}
+}
+}
+async function* GenerateEasedValuesMulti(
+startValues: number[],
+endValues: number[],
+duration: number,
+easingFn: EasingFunction = Easing.Linear,
+tickRate: number = 0.032
+): AsyncGenerator<number[]> {
+if (startValues.length !== endValues.length) {
+console.error("GenerateEasedValuesMulti: startValues and endValues must have the same length");
+return;
+}
+const totalTicks = Math.ceil(duration / tickRate);
+const valueRanges = endValues.map((end, i) => end - startValues[i]);
+for (let tick = 0; tick <= totalTicks; tick++) {
+const normalizedTime = Math.min(tick / totalTicks, 1.0);
+const easedTime = easingFn(normalizedTime);
+const values = startValues.map((start, i) => start + valueRanges[i] * easedTime);
+yield values;
+if (tick < totalTicks) {
+await mod.Wait(tickRate);
+}
+}
+}
 type EventHandler<T = any> = (data: T) => void;
 class EventDispatcher<TEventMap = Record<string, any>> {
 private listeners: Map<string, Set<EventHandler>> = new Map();
@@ -1334,6 +1619,7 @@ let flags: Map<number, Flag> = new Map();
 let captureZones: Map<number, CaptureZone> = new Map();
 let worldIconManager: WorldIconManager;
 let vfxManager: VFXManager;
+let animationManager: AnimationManager;
 function PositionTeamHUD(teamId: number): void {
 let globalHUD = GlobalScoreboardHUD.getInstance().getHUD();
 if (!globalHUD?.rootWidget) return;
@@ -1377,6 +1663,7 @@ mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_aut
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
 worldIconManager = WorldIconManager.getInstance();
 vfxManager = VFXManager.getInstance();
+animationManager = new AnimationManager();
 teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
 team1 = mod.GetTeam(TeamID.TEAM_1);
 team2 = mod.GetTeam(TeamID.TEAM_2);
@@ -4136,6 +4423,16 @@ team: mod.Team;
 teamId: number;
 lastOrder: TeamOrders;
 private eventUnsubscribers: Array<() => void> = [];
+private isExpanded: boolean = false;
+private isAnimating: boolean = false;
+private isTextVisible: boolean = false;
+private collapseTimeoutTime: number | null = null;
+private readonly normalHeight: number = 30;
+private readonly minimizedHeight: number = 4;
+private readonly expandDuration: number = 0.4;
+private readonly collapseDuration: number = 0.3;
+private readonly visibleDuration: number = 5.0;
+private currentHeight: number = 4;
 constructor(team:mod.Team, tickerParams: TickerWidgetParams) {
 super({
 position: tickerParams.position,
@@ -4156,8 +4453,79 @@ bgAlpha: 0.75
 this.team = team;
 this.teamId = mod.GetObjId(team);
 this.lastOrder = TeamOrders.TeamIdentify;
-this.SetTeamOrder(this.lastOrder);
+this.updateText(this.TeamOrderToMessage(this.lastOrder));
+this.updateWidgetSizes(this.minimizedHeight);
+const textWidget = (this as any).textWidget as mod.UIWidget;
+if (textWidget) {
+mod.SetUIWidgetVisible(textWidget, false);
+this.isTextVisible = false;
+}
 this.bindFlagEvents();
+}
+private updateWidgetSizes(height: number): void {
+this.currentHeight = height;
+const newSize = mod.CreateVector(this.size[0], height, 0);
+const columnWidget = (this as any).columnWidget as mod.UIWidget;
+const columnWidgetOutline = (this as any).columnWidgetOutline as mod.UIWidget;
+mod.SetUIWidgetSize(columnWidget, newSize);
+mod.SetUIWidgetSize(columnWidgetOutline, newSize);
+}
+private async expandBar(): Promise<void> {
+if (this.isAnimating) return;
+this.collapseTimeoutTime = null;
+this.isAnimating = true;
+const startHeight = this.currentHeight;
+await animationManager.AnimateValue(startHeight, this.normalHeight, {
+duration: this.expandDuration,
+easingFunction: Easing.EaseOutCubic,
+onProgress: (height, normalizedTime) => {
+this.updateWidgetSizes(height);
+if (normalizedTime >= 0.5 && !this.isTextVisible) {
+const textWidget = (this as any).textWidget as mod.UIWidget;
+mod.SetUIWidgetVisible(textWidget, true);
+this.isTextVisible = true;
+}
+},
+onComplete: () => {
+this.isExpanded = true;
+this.isAnimating = false;
+this.startCollapseTimer();
+}
+});
+}
+private async collapseBar(): Promise<void> {
+if (this.isAnimating || !this.isExpanded) return;
+this.collapseTimeoutTime = null;
+this.isAnimating = true;
+const startHeight = this.currentHeight;
+await animationManager.AnimateValue(startHeight, this.minimizedHeight, {
+duration: this.collapseDuration,
+easingFunction: Easing.EaseInCubic,
+onProgress: (height, normalizedTime) => {
+this.updateWidgetSizes(height);
+if (normalizedTime >= 0.5 && this.isTextVisible) {
+const textWidget = (this as any).textWidget as mod.UIWidget;
+mod.SetUIWidgetVisible(textWidget, false);
+this.isTextVisible = false;
+}
+},
+onComplete: () => {
+this.isExpanded = false;
+this.isAnimating = false;
+}
+});
+}
+private startCollapseTimer(): void {
+this.collapseTimeoutTime = GetCurrentTime() + this.visibleDuration;
+this.checkCollapseTimeout();
+}
+private async checkCollapseTimeout(): Promise<void> {
+if (this.collapseTimeoutTime === null) return;
+const timeoutTime = this.collapseTimeoutTime;
+await mod.Wait(this.visibleDuration);
+if (this.collapseTimeoutTime === timeoutTime && this.isExpanded && !this.isAnimating) {
+this.collapseBar();
+}
 }
 private bindFlagEvents(): void {
 for (let [flagId, flag] of flags) {
@@ -4216,6 +4584,7 @@ this.SetTeamOrder(TeamOrders.EnemyFlagCaptured);
 refresh(): void {
 }
 destroy(): void {
+this.collapseTimeoutTime = null;
 for (const unsubscribe of this.eventUnsubscribers) {
 unsubscribe();
 }
@@ -4223,7 +4592,13 @@ this.eventUnsubscribers = [];
 super.destroy();
 }
 SetTeamOrder(teamOrder: TeamOrders): void {
+this.lastOrder = teamOrder;
 this.updateText(this.TeamOrderToMessage(teamOrder));
+if (!this.isExpanded && !this.isAnimating) {
+this.expandBar();
+} else if (this.isExpanded) {
+this.startCollapseTimer();
+}
 }
 TeamOrderToMessage(order:TeamOrders): mod.Message {
 switch(order){

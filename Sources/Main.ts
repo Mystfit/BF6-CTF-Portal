@@ -88,6 +88,7 @@ let captureZones: Map<number, CaptureZone> = new Map();
 // Global managers
 let worldIconManager: WorldIconManager;
 let vfxManager: VFXManager;
+let animationManager: AnimationManager;
 
 
 //==============================================================================================
@@ -171,6 +172,7 @@ export async function OnGameModeStarted() {
     // Initialize global managers
     worldIconManager = WorldIconManager.getInstance();
     vfxManager = VFXManager.getInstance();
+    animationManager = new AnimationManager();
 
     // Initialize legacy team references (still needed for backwards compatibility)
     teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
