@@ -396,6 +396,170 @@ interface ActiveAnimation {
 
 class AnimationManager {
     private activeAnimations: Map<number, ActiveAnimation> = new Map();
+    private debugMode: boolean;
+    private tickRate: number;
+    private zeroVec: mod.Vector;
+
+    constructor(
+        debugMode: boolean = false,
+        tickRate: number = 0.032,
+        zeroVec: mod.Vector = mod.CreateVector(0, 0, 0)
+    ) {
+        this.debugMode = debugMode;
+        this.tickRate = tickRate;
+        this.zeroVec = zeroVec;
+    }
+
+    //==============================================================================================
+    // PRIVATE HELPER CLASSES
+    //==============================================================================================
+
+    /**
+     * Simple 3D Vector helper class for internal animation calculations
+     * Inlined from Math.ts with basic arithmetic operations
+     */
+    private static Vec3 = class {
+        x: number;
+        y: number;
+        z: number;
+
+        constructor(x: number, y: number, z: number) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        static FromVector(vector: mod.Vector): InstanceType<typeof AnimationManager.Vec3> {
+            let x = mod.XComponentOf(vector);
+            let y = mod.YComponentOf(vector);
+            let z = mod.ZComponentOf(vector);
+
+            // Check for NaN or undefined values and default to 0
+            if (isNaN(x) || x === undefined) x = 0;
+            if (isNaN(y) || y === undefined) y = 0;
+            if (isNaN(z) || z === undefined) z = 0;
+
+            return new AnimationManager.Vec3(x, y, z);
+        }
+
+        ToVector(): mod.Vector {
+            return mod.CreateVector(this.x, this.y, this.z);
+        }
+
+        Add(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x + other.x,
+                this.y + other.y,
+                this.z + other.z
+            );
+        }
+
+        Subtract(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x - other.x,
+                this.y - other.y,
+                this.z - other.z
+            );
+        }
+
+        Multiply(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x * other.x,
+                this.y * other.y,
+                this.z * other.z
+            );
+        }
+
+        MultiplyScalar(scalar: number): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x * scalar,
+                this.y * scalar,
+                this.z * scalar
+            );
+        }
+
+        Divide(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x / other.x,
+                this.y / other.y,
+                this.z / other.z
+            );
+        }
+
+        DivideScalar(scalar: number): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x / scalar,
+                this.y / scalar,
+                this.z / scalar
+            );
+        }
+
+        Length(): number {
+            return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+        }
+
+        LengthSquared(): number {
+            return (this.x * this.x) + (this.y * this.y) + (this.z * this.z);
+        }
+
+        Normalize(): InstanceType<typeof AnimationManager.Vec3> {
+            const len = this.Length();
+            if (len < 1e-9) {
+                return new AnimationManager.Vec3(0, 0, 0);
+            }
+            return new AnimationManager.Vec3(
+                this.x / len,
+                this.y / len,
+                this.z / len
+            );
+        }
+
+        ToString(): string {
+            return `X:${this.x}, Y:${this.y}, Z:${this.z}`;
+        }
+    };
+
+    //==============================================================================================
+    // INLINED UTILITY METHODS
+    //==============================================================================================
+
+    /**
+     * Convert vector to readable string format
+     * Math.ts
+     */
+    private static VectorToString(v: mod.Vector): string {
+        return `X: ${mod.XComponentOf(v)}, Y: ${mod.YComponentOf(v)}, Z: ${mod.ZComponentOf(v)}`;
+    }
+
+    /**
+     * Calculate vector magnitude/length
+     * Math.ts
+     */
+    private static VectorLength(vec: mod.Vector): number {
+        const x = mod.XComponentOf(vec);
+        const y = mod.YComponentOf(vec);
+        const z = mod.ZComponentOf(vec);
+        return Math.sqrt(x * x + y * y + z * z);
+    }
+
+    /**
+     * Convert direction vector to Euler rotation angles
+     * Math.ts
+     */
+    private static VectorDirectionToRotation(direction: mod.Vector): mod.Vector {
+        const normalized = mod.Normalize(direction);
+        const x = mod.XComponentOf(normalized);
+        const y = mod.YComponentOf(normalized);
+        const z = mod.ZComponentOf(normalized);
+        const yaw = Math.atan2(x, -z);
+        const horizontalDist = Math.sqrt(x * x + z * z);
+        const pitch = Math.atan2(y, horizontalDist);
+        return mod.CreateVector(pitch, yaw, 0);
+    }
+
+    //==============================================================================================
+    // PUBLIC ANIMATION METHODS
+    //==============================================================================================
 
     /**
      * Animate an object along a path defined by an array of points
@@ -433,7 +597,7 @@ class AnimationManager {
             // Calculate total path distance
             let totalDistance = 0;
             for (let i = 0; i < points.length - 1; i++) {
-                totalDistance += VectorLength(Math2.Vec3.FromVector(points[i + 1]).Subtract(Math2.Vec3.FromVector(points[i])).ToVector()); //mod.Subtract(points[i + 1], points[i]));
+                totalDistance += AnimationManager.VectorLength(AnimationManager.Vec3.FromVector(points[i + 1]).Subtract(AnimationManager.Vec3.FromVector(points[i])).ToVector()); //mod.Subtract(points[i + 1], points[i]));
             }
 
             // Determine timing
@@ -454,14 +618,14 @@ class AnimationManager {
 
                 const startPoint = expectedPosition; // Use tracked position
                 const endPoint = points[i + 1];
-                const segmentDistance = VectorLength(Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector()); //mod.Subtract(endPoint, startPoint));
+                const segmentDistance = AnimationManager.VectorLength(AnimationManager.Vec3.FromVector(endPoint).Subtract(AnimationManager.Vec3.FromVector(startPoint)).ToVector()); //mod.Subtract(endPoint, startPoint));
                 const segmentDuration = (segmentDistance / totalDistance) * totalDuration;
 
                 // Calculate rotation if needed
-                let rotation = ZERO_VEC;
+                let rotation = this.zeroVec;
                 if (options.rotateToDirection) {
-                    rotation = VectorDirectionToRotation(
-                        Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector() //mod.Subtract(endPoint, startPoint)
+                    rotation = AnimationManager.VectorDirectionToRotation(
+                        AnimationManager.Vec3.FromVector(endPoint).Subtract(AnimationManager.Vec3.FromVector(startPoint)).ToVector() //mod.Subtract(endPoint, startPoint)
                     );
                 }
 
@@ -537,10 +701,10 @@ class AnimationManager {
         // Calculate delta from expected start position to end position
         // We use startPos (which is our tracked expected position) instead of GetObjectPosition
         // to avoid precision loss from the engine's position rounding
-        const positionDelta = Math2.Vec3.FromVector(endPos).Subtract(Math2.Vec3.FromVector(startPos)).ToVector(); //mod.Subtract(endPos, startPos);
-        const rotationDelta = options.rotation || ZERO_VEC;
+        const positionDelta = AnimationManager.Vec3.FromVector(endPos).Subtract(AnimationManager.Vec3.FromVector(startPos)).ToVector(); //mod.Subtract(endPos, startPos);
+        const rotationDelta = options.rotation || this.zeroVec;
 
-        if (DEBUG_MODE) {
+        if (this.debugMode) {
             // Detailed precision logging
             console.log(`=== Animation Segment Debug ===`);
             console.log(`Start pos (tracked): X:${mod.XComponentOf(startPos).toFixed(6)}, Y:${mod.YComponentOf(startPos).toFixed(6)}, Z:${mod.ZComponentOf(startPos).toFixed(6)}`);
@@ -608,7 +772,7 @@ class AnimationManager {
         let objectId: number = -1;
 
         try {
-            if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
+            if(this.debugMode) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
 
             // Phase 1: Fill initial buffer (minBufferSize + 2 points)
             const initialBufferSize = minBufferSize;
@@ -619,9 +783,9 @@ class AnimationManager {
                     break;
                 }
                 pointBuffer.push(result.value);
-                
-                if(DEBUG_MODE) {
-                    console.log(`[AnimateAlongGeneratedPath] Buffered point ${i + 1}/${initialBufferSize}: ${VectorToString(result.value.position)}`);
+
+                if(this.debugMode) {
+                    console.log(`[AnimateAlongGeneratedPath] Buffered point ${i + 1}/${initialBufferSize}: ${AnimationManager.VectorToString(result.value.position)}`);
                 }
             }
 
@@ -632,8 +796,8 @@ class AnimationManager {
 
             // Set starting position
             currentPosition = pointBuffer[0].position;
-            
-            if(DEBUG_MODE) {
+
+            if(this.debugMode) {
                 console.log(`[AnimateAlongGeneratedPath] Initial buffer filled with ${pointBuffer.length} points, starting animation`);
             }
 
@@ -678,20 +842,20 @@ class AnimationManager {
 
                 // Check if we need to wait for more points
                 if (pointBuffer.length <= minBufferSize && !generatorComplete) {
-                    if(DEBUG_MODE) {
+                    if(this.debugMode) {
                         console.log(`[AnimateAlongGeneratedPath] Buffer low (${pointBuffer.length} points), waiting for generator...`);
                     }
                     bufferStarvationCount++;
-                    
+
                     // Try to fill buffer back up
                     const result = await generator.next();
                     if (result.done) {
                         generatorComplete = true;
-                        if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+                        if(this.debugMode) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
                     } else {
                         pointBuffer.push(result.value);
-                        if(DEBUG_MODE) {
-                            console.log(`[AnimateAlongGeneratedPath] Added point to buffer: ${VectorToString(result.value.position)}`);
+                        if(this.debugMode) {
+                            console.log(`[AnimateAlongGeneratedPath] Added point to buffer: ${AnimationManager.VectorToString(result.value.position)}`);
                         }
                     }
                     continue;
@@ -702,7 +866,7 @@ class AnimationManager {
                     const result = await generator.next();
                     if (result.done) {
                         generatorComplete = true;
-                        if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+                        if(this.debugMode) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
                     } else {
                         pointBuffer.push(result.value);
                     }
@@ -710,9 +874,9 @@ class AnimationManager {
 
                 // Check if we should stop consuming points (hit detected or at end)
                 const shouldStopConsuming = generatorComplete && pointBuffer.length <= minBufferSize + 2;
-                
+
                 if (shouldStopConsuming) {
-                    if(DEBUG_MODE) {
+                    if(this.debugMode) {
                         console.log(`[AnimateAlongGeneratedPath] Stopping animation consumption, ${pointBuffer.length} points remaining in buffer`);
                     }
                     break;
@@ -722,25 +886,25 @@ class AnimationManager {
                 if (pointBuffer.length > 1) {
                     const startPoint = pointBuffer.shift()!; // Remove first point
                     const endPoint = pointBuffer[0]; // Peek at next point (don't remove yet)
-                    
-                    const segmentDistance = VectorLength(
-                        Math2.Vec3.FromVector(endPoint.position)
-                            .Subtract(Math2.Vec3.FromVector(startPoint.position))
+
+                    const segmentDistance = AnimationManager.VectorLength(
+                        AnimationManager.Vec3.FromVector(endPoint.position)
+                            .Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
                             .ToVector()
                     );
-                    
+
                     const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
 
-                    if(DEBUG_MODE) {
-                        console.log(`[AnimateAlongGeneratedPath] Animating segment ${segmentIndex}: ${VectorToString(startPoint.position)} -> ${VectorToString(endPoint.position)} (${segmentDistance.toFixed(2)} units, ${segmentDuration.toFixed(3)}s, buffer: ${pointBuffer.length})`);
+                    if(this.debugMode) {
+                        console.log(`[AnimateAlongGeneratedPath] Animating segment ${segmentIndex}: ${AnimationManager.VectorToString(startPoint.position)} -> ${AnimationManager.VectorToString(endPoint.position)} (${segmentDistance.toFixed(2)} units, ${segmentDuration.toFixed(3)}s, buffer: ${pointBuffer.length})`);
                     }
 
                     // Calculate rotation if needed
-                    let rotation = ZERO_VEC;
+                    let rotation = this.zeroVec;
                     if (options.rotateToDirection) {
-                        rotation = VectorDirectionToRotation(
-                            Math2.Vec3.FromVector(endPoint.position)
-                                .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                        rotation = AnimationManager.VectorDirectionToRotation(
+                            AnimationManager.Vec3.FromVector(endPoint.position)
+                                .Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
                                 .ToVector()
                         );
                     } else if(options.rotation){
@@ -772,7 +936,7 @@ class AnimationManager {
 
             // Phase 3: Animate through remaining buffered points
             if (pointBuffer.length > 0) {
-                if(DEBUG_MODE) {
+                if(this.debugMode) {
                     console.log(`[AnimateAlongGeneratedPath] Animating through ${pointBuffer.length} remaining buffered points`);
                 }
                 
@@ -783,20 +947,20 @@ class AnimationManager {
                     // If there's a next point, animate to it; otherwise we're at the last point
                     if (pointBuffer.length > 0) {
                         const endPoint = pointBuffer[0];
-                        
-                        const segmentDistance = VectorLength(
-                            Math2.Vec3.FromVector(endPoint.position)
-                                .Subtract(Math2.Vec3.FromVector(startPoint.position))
+
+                        const segmentDistance = AnimationManager.VectorLength(
+                            AnimationManager.Vec3.FromVector(endPoint.position)
+                                .Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
                                 .ToVector()
                         );
-                        
+
                         const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
-                        
-                        let rotation = ZERO_VEC;
+
+                        let rotation = this.zeroVec;
                         if (options.rotateToDirection) {
-                            rotation = VectorDirectionToRotation(
-                                Math2.Vec3.FromVector(endPoint.position)
-                                    .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                            rotation = AnimationManager.VectorDirectionToRotation(
+                                AnimationManager.Vec3.FromVector(endPoint.position)
+                                    .Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
                                     .ToVector()
                             );
                         } else if(options.rotation){
@@ -819,23 +983,23 @@ class AnimationManager {
                         }
                     } else {
                         // This was the last point - just set position directly if not already there
-                        if(DEBUG_MODE) {
-                            console.log(`[AnimateAlongGeneratedPath] Reached final point: ${VectorToString(startPoint.position)}`);
+                        if(this.debugMode) {
+                            console.log(`[AnimateAlongGeneratedPath] Reached final point: ${AnimationManager.VectorToString(startPoint.position)}`);
                         }
-                        const finalDistance = VectorLength(
-                            Math2.Vec3.FromVector(startPoint.position)
-                                .Subtract(Math2.Vec3.FromVector(currentPosition))
+                        const finalDistance = AnimationManager.VectorLength(
+                            AnimationManager.Vec3.FromVector(startPoint.position)
+                                .Subtract(AnimationManager.Vec3.FromVector(currentPosition))
                                 .ToVector()
                         );
-                        
+
                         if (finalDistance > 0.1) {
                             const finalDuration = options.speed ? finalDistance / options.speed : 0.1;
-                            
-                            let finalRotation = ZERO_VEC;
+
+                            let finalRotation = this.zeroVec;
                             if (options.rotateToDirection) {
-                                finalRotation = VectorDirectionToRotation(
-                                    Math2.Vec3.FromVector(startPoint.position)
-                                        .Subtract(Math2.Vec3.FromVector(currentPosition))
+                                finalRotation = AnimationManager.VectorDirectionToRotation(
+                                    AnimationManager.Vec3.FromVector(startPoint.position)
+                                        .Subtract(AnimationManager.Vec3.FromVector(currentPosition))
                                         .ToVector()
                                 );
                             } else if(options.rotation){
@@ -856,7 +1020,7 @@ class AnimationManager {
                 }
             }
 
-            if(DEBUG_MODE) {
+            if(this.debugMode) {
                 console.log(`[AnimateAlongGeneratedPath] Animation complete. Segments: ${segmentIndex}, Buffer starvation events: ${bufferStarvationCount}`);
                 if (bufferStarvationCount > 0) {
                     console.log(`[AnimateAlongGeneratedPath] WARNING: Buffer was starved ${bufferStarvationCount} times. Consider increasing minBufferSize or reducing animation speed.`);
@@ -1068,7 +1232,7 @@ class AnimationManager {
         }
 
         const easingFn = options.easingFunction || Easing.Linear;
-        const tickRate = options.tickRate || TICK_RATE;
+        const tickRate = options.tickRate || this.tickRate;
 
         try {
             // Call onStart callback if provided
