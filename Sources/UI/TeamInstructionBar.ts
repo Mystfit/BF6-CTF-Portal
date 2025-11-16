@@ -22,7 +22,7 @@ class TeamOrdersBar extends TickerWidget {
     private isTextVisible: boolean = false;
     private collapseTimeoutTime: number | null = null;
     private readonly normalHeight: number = 30;
-    private readonly minimizedHeight: number = 4;
+    private readonly minimizedHeight: number = 0;
     private readonly expandDuration: number = 0.4;
     private readonly collapseDuration: number = 0.3;
     private readonly visibleDuration: number = 5.0;
@@ -52,7 +52,7 @@ class TeamOrdersBar extends TickerWidget {
         this.lastOrder = TeamOrders.TeamIdentify;
 
         // Set initial text (widget now exists after super() called createWidgets())
-        this.updateText(this.TeamOrderToMessage(this.lastOrder));
+        this.updateText(this.TeamOrderToMessage(this.lastOrder, this.team));
 
         // Initialize in minimized state (after widgets are created)
         this.updateWidgetSizes(this.minimizedHeight);
@@ -91,6 +91,11 @@ class TeamOrdersBar extends TickerWidget {
         this.isAnimating = true;
         const startHeight = this.currentHeight;
 
+        let startColorVec = mod.GetUIWidgetBgColor(this.columnWidget);
+        let startColor:number[] = [mod.XComponentOf(startColorVec), mod.YComponentOf(startColorVec), mod.ZComponentOf(startColorVec)];
+        let endColorVec = VectorClampToRange(mod.Add(startColorVec, mod.CreateVector(0.75, 0.75, 0.75)), 0, 1);
+        let endColor:number[] = [mod.XComponentOf(endColorVec), mod.YComponentOf(endColorVec), mod.ZComponentOf(endColorVec)];
+
         await animationManager.AnimateValue(startHeight, this.normalHeight, {
             duration: this.expandDuration,
             easingFunction: Easing.EaseOutCubic,
@@ -103,12 +108,11 @@ class TeamOrdersBar extends TickerWidget {
                     mod.SetUIWidgetVisible(textWidget, true);
                     this.isTextVisible = true;
                 }
-            },
-            onComplete: () => {
-                this.isExpanded = true;
-                this.isAnimating = false;
-                this.startCollapseTimer();
             }
+        }).then(async () => {
+            this.isExpanded = true;
+            this.isAnimating = false;
+            this.startCollapseTimer();
         });
     }
 
@@ -189,12 +193,12 @@ class TeamOrdersBar extends TickerWidget {
             
             // Flag returned event
             const unsubReturned = flag.events.on('flagReturned', (data) => {
-                this.handleFlagReturned(data.flag, data.wasAutoReturned);
+                this.handleFlagReturned(data.flag, data.player);
             });
             this.eventUnsubscribers.push(unsubReturned);
 
             const unsubCaptured = flag.events.on("flagCaptured", (data) => {
-                this.handleFlagCaptured(data.flag);
+                this.handleFlagCaptured(data.flag, data.player);
             });
             this.eventUnsubscribers.push(unsubCaptured);
         }
@@ -206,48 +210,63 @@ class TeamOrdersBar extends TickerWidget {
         // Check if this is our team's flag
         if (flag.teamId === this.teamId) {
             // Our flag was taken
-            this.SetTeamOrder(TeamOrders.OurFlagTaken);
+            this.SetTeamOrder(TeamOrders.OurFlagTaken, this.team, player);
         } else if (playerTeamId === this.teamId) {
             // We took the enemy flag
-            this.SetTeamOrder(TeamOrders.EnemyFlagTaken);
+            this.SetTeamOrder(TeamOrders.EnemyFlagTaken, mod.GetTeam(player), player);
         }
     }
     
     private handleFlagDropped(flag: Flag, position: mod.Vector, previousCarrier: mod.Player | null): void {
+        if(!previousCarrier)
+            return;
+        
         // Check if this is our team's flag
         if (flag.teamId === this.teamId) {
             // Our flag was dropped
-            this.SetTeamOrder(TeamOrders.OurFlagDropped);
+            this.SetTeamOrder(TeamOrders.OurFlagDropped, this.team, previousCarrier);
         } else {
             // Enemy flag was dropped (check if we were carrying it)
             if (previousCarrier) {
-                const carrierTeamId = mod.GetObjId(mod.GetTeam(previousCarrier));
+                let otherTeam = mod.GetTeam(previousCarrier);
+                const carrierTeamId = mod.GetObjId(otherTeam);
                 if (carrierTeamId === this.teamId) {
-                    this.SetTeamOrder(TeamOrders.EnemyFlagDropped);
+                    this.SetTeamOrder(TeamOrders.EnemyFlagDropped, otherTeam, previousCarrier);
                 }
             }
         }
     }
     
-    private handleFlagReturned(flag: Flag, wasAutoReturned: boolean): void {
-        // Check if this is our team's flag
-        if (flag.teamId === this.teamId) {
-            // Our flag was returned
-            this.SetTeamOrder(TeamOrders.OurFlagReturned);
+    private handleFlagReturned(flag: Flag, player: mod.Player | undefined): void {
+        if(player){
+            // Check if this is our team's flag
+            if (flag.teamId === this.teamId) {
+                // Our flag was returned
+                this.SetTeamOrder(TeamOrders.OurFlagReturned, this.team, player);
+            } else {
+                // Enemy flag was returned
+                this.SetTeamOrder(TeamOrders.EnemyFlagReturned, mod.GetTeam(player), player);
+            }
         } else {
-            // Enemy flag was returned
-            this.SetTeamOrder(TeamOrders.EnemyFlagReturned);
+            // Flag was auto returned
+            if (flag.teamId === this.teamId) {
+                // Our flag was returned
+                this.SetTeamOrder(TeamOrders.OurFlagReturned, this.team, player);
+            } else {
+                // Enemy flag was returned
+                this.SetTeamOrder(TeamOrders.EnemyFlagReturned, flag.team, player);
+            }
         }
     }
 
-     private handleFlagCaptured(flag: Flag): void {
+     private handleFlagCaptured(flag: Flag, player: mod.Player): void {
         // Check if this is our team's flag
         if (flag.teamId === this.teamId) {
             // Our flag was captured
-            this.SetTeamOrder(TeamOrders.OurFlagCaptured);
+            this.SetTeamOrder(TeamOrders.OurFlagCaptured, this.team, player);
         } else {
             // Enemy flag was returned
-            this.SetTeamOrder(TeamOrders.EnemyFlagCaptured);
+            this.SetTeamOrder(TeamOrders.EnemyFlagCaptured, mod.GetTeam(player), player);
         }
     }
     
@@ -270,9 +289,9 @@ class TeamOrdersBar extends TickerWidget {
         super.destroy();
     }
 
-    SetTeamOrder(teamOrder: TeamOrders): void {
+    SetTeamOrder(teamOrder: TeamOrders, team:mod.Team, player?:mod.Player): void {
         this.lastOrder = teamOrder;
-        this.updateText(this.TeamOrderToMessage(teamOrder));
+        this.updateText(this.TeamOrderToMessage(teamOrder, team, player));
 
         // Trigger expand animation if not already expanded
         if (!this.isExpanded && !this.isAnimating) {
@@ -283,27 +302,38 @@ class TeamOrdersBar extends TickerWidget {
         }
     }
 
-    TeamOrderToMessage(order:TeamOrders): mod.Message {
-        switch(order){
-            case TeamOrders.OurFlagTaken:
-                return mod.Message(mod.stringkeys.order_flag_taken, mod.stringkeys.order_friendly);
-            case TeamOrders.OurFlagDropped:
-                return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_friendly);
-            case TeamOrders.OurFlagReturned:
-                return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_friendly);
-            case TeamOrders.OurFlagCaptured:
-                return mod.Message(mod.stringkeys.order_flag_captured_friendly);
-            case TeamOrders.EnemyFlagTaken:
-                return mod.Message(mod.stringkeys.order_flag_taken, mod.stringkeys.order_enemy);
-            case TeamOrders.EnemyFlagDropped:
-                return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_enemy);
-            case TeamOrders.EnemyFlagReturned:
-                return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_enemy);
-            case TeamOrders.EnemyFlagCaptured:
-                return mod.Message(mod.stringkeys.order_flag_captured_enemy);
-            case TeamOrders.TeamIdentify:
-                return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
+    TeamOrderToMessage(order:TeamOrders, team: mod.Team, player?:mod.Player): mod.Message {
+        // Messages relating to a specific player
+        if(player){
+            switch(order){
+                case TeamOrders.OurFlagTaken:
+                    return mod.Message(mod.stringkeys.order_flag_taken_friendly, player);
+                case TeamOrders.OurFlagDropped:
+                    return mod.Message(mod.stringkeys.order_flag_dropped_friendly, player);
+                case TeamOrders.OurFlagReturned:
+                    return mod.Message(mod.stringkeys.order_flag_returned_friendly, player);
+                case TeamOrders.OurFlagCaptured:
+                    return mod.Message(mod.stringkeys.order_flag_captured_friendly, player);
+                case TeamOrders.EnemyFlagTaken:
+                    return mod.Message(mod.stringkeys.order_flag_taken_enemy, player, GetTeamName(team));
+                case TeamOrders.EnemyFlagDropped:
+                    return mod.Message(mod.stringkeys.order_flag_dropped_enemy, player, GetTeamName(team));
+                case TeamOrders.EnemyFlagReturned:
+                    return mod.Message(mod.stringkeys.order_flag_returned_enemy, player, GetTeamName(team));
+                case TeamOrders.EnemyFlagCaptured:
+                    return mod.Message(mod.stringkeys.order_flag_captured_enemy, player, GetTeamName(team));
+            }
+        } else {
+            // General team messages
+            switch(order){
+                case TeamOrders.OurFlagReturned:
+                    return mod.Message(mod.stringkeys.order_flag_returned_timeout_friendly);
+                case TeamOrders.EnemyFlagReturned:
+                    return mod.Message(mod.stringkeys.order_flag_returned_timeout_enemy, GetTeamName(team));
+            }
+           
         }
+        
         return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
     }
 }

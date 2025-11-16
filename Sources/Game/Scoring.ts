@@ -87,10 +87,9 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
 
     // Return all captured flags to their home spawners
     GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => {
-        flag.events.emit("flagCaptured", {flag});
+        flag.events.emit("flagCaptured", {flag: flag, player: scoringPlayer});
         flag.ResetFlag();
     });
-    
     // Check win condition
     if (currentScore >= GAMEMODE_TARGET_SCORE) {
         EndGameByScore(scoringTeamId);

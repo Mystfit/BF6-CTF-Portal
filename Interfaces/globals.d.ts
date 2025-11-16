@@ -189,23 +189,32 @@ declare class EventDispatcher<TEventMap = Record<string, any>> {
 }
 
 declare interface FlagEventMap {
-    'flagTaken': {
-        flag: Flag;
+    /** Emitted when a flag is picked up by a player */
+    'flagTaken': { 
+        flag: Flag; 
         player: mod.Player;
-        isAtHome: boolean;
+        isAtHome: boolean;  // Was the flag taken from home or picked up after being dropped?
     };
-    'flagDropped': {
-        flag: Flag;
+    
+    /** Emitted when a flag is dropped by a player */
+    'flagDropped': { 
+        flag: Flag; 
         position: mod.Vector;
         previousCarrier: mod.Player | null;
     };
-    'flagReturned': {
+    
+    /** Emitted when a flag is returned to its home position */
+    'flagReturned': { 
         flag: Flag;
-        wasAutoReturned: boolean;
+        player: mod.Player | undefined     // Player that returened the flag. Null if auto returned
     };
-    'flagAtHome': {
+    
+    /** Emitted when a flag reaches its home position (same as return, but separate for clarity) */
+    'flagAtHome': { 
         flag: Flag;
     };
+    
+    /** Emitted when a flag's state changes in any way */
     'flagStateChanged': {
         flag: Flag;
         isAtHome: boolean;
@@ -214,6 +223,7 @@ declare interface FlagEventMap {
     };
     'flagCaptured': {
         flag: Flag;
+        player: mod.Player;
     };
 }
 
@@ -284,6 +294,7 @@ declare namespace Easing {
 }
 
 declare class AnimationManager {
+    constructor(debugMode?: boolean, tickRate?: number, zeroVec?: mod.Vector);
     AnimateAlongPath(object: mod.Object, points: mod.Vector[], options?: any): Promise<void>;
     AnimateAlongGeneratedPath(object: mod.Object | undefined, generator: AsyncGenerator<ProjectilePoint>, minBufferSize: number, options?: AnimationOptions): Promise<void>;
     AnimateToPosition(object: mod.Object, targetPos: mod.Vector, duration: number, options?: any): Promise<void>;
@@ -614,8 +625,9 @@ declare class TeamOrdersBar extends TickerWidget {
     constructor(team:mod.Team, tickerParams: TickerWidgetParams);
     refresh(): void;
     destroy(): void;
-    SetTeamOrder(teamOrder: TeamOrders): void; 
-    TeamOrderToMessage(order:TeamOrders): mod.Message;
+    SetTeamOrder(teamOrder: TeamOrders, team:mod.Team, player?:mod.Player): void; 
+    TeamOrderToMessage(order:TeamOrders, team:mod.Team, player?:mod.Player): mod.Message;
+    Pulse(reverse?: boolean): Promise<void>;
 }
 
 interface TickerWidgetParams {
@@ -644,6 +656,7 @@ declare abstract class TickerWidget {
     protected textColor: mod.Vector;
     protected bgAlpha: number;
     protected columnWidget: mod.UIWidget;
+    protected textWidget: mod.UIWidget;
 
     constructor(params: TickerWidgetParams);
     protected updateText(message: mod.Message): void;
@@ -653,6 +666,7 @@ declare abstract class TickerWidget {
     getProgressValue(): number;
     destroy(): void;
     abstract refresh(): void;
+    pulse(reverse?: boolean): Promise<void>;
 }
 
 interface ScoreTickerParams {
@@ -663,6 +677,7 @@ interface ScoreTickerParams {
     textSize?: number;
     bracketTopBottomLength?: number;
     bracketThickness?: number;
+    reversePulse?: boolean
 }
 
 declare class ScoreTicker extends TickerWidget {
@@ -877,6 +892,7 @@ declare function GetOpposingTeamsForFlag(flagData: Flag): number[];
 declare function GetTeamColorById(teamId: number): mod.Vector;
 declare function GetTeamColor(team: mod.Team): mod.Vector;
 declare function GetTeamColorLight(team: mod.Team): mod.Vector;
+declare function GetTeamColorDark(team: mod.Team): mod.Vector;
 declare function GetTeamDroppedColor(team: mod.Team): mod.Vector;
 declare function IsCarryingAnyFlag(player: mod.Player): boolean;
 declare function WasCarryingAnyFlag(player: mod.Player): boolean;

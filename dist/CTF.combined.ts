@@ -47,7 +47,7 @@ import * as modlib from 'modlib';
 // This file contains all configuration constants that need to be loaded before other modules
 //==============================================================================================
 
-const VERSION = [2, 3, 1];
+const VERSION = [2, 4, 0];
 
 const DEBUG_MODE = false;                                            // Print extra debug messages
 
@@ -1715,6 +1715,170 @@ interface ActiveAnimation {
 
 class AnimationManager {
     private activeAnimations: Map<number, ActiveAnimation> = new Map();
+    private debugMode: boolean;
+    private tickRate: number;
+    private zeroVec: mod.Vector;
+
+    constructor(
+        debugMode: boolean = false,
+        tickRate: number = 0.032,
+        zeroVec: mod.Vector = mod.CreateVector(0, 0, 0)
+    ) {
+        this.debugMode = debugMode;
+        this.tickRate = tickRate;
+        this.zeroVec = zeroVec;
+    }
+
+    //==============================================================================================
+    // PRIVATE HELPER CLASSES
+    //==============================================================================================
+
+    /**
+     * Simple 3D Vector helper class for internal animation calculations
+     * Inlined from Math.ts with basic arithmetic operations
+     */
+    private static Vec3 = class {
+        x: number;
+        y: number;
+        z: number;
+
+        constructor(x: number, y: number, z: number) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        static FromVector(vector: mod.Vector): InstanceType<typeof AnimationManager.Vec3> {
+            let x = mod.XComponentOf(vector);
+            let y = mod.YComponentOf(vector);
+            let z = mod.ZComponentOf(vector);
+
+            // Check for NaN or undefined values and default to 0
+            if (isNaN(x) || x === undefined) x = 0;
+            if (isNaN(y) || y === undefined) y = 0;
+            if (isNaN(z) || z === undefined) z = 0;
+
+            return new AnimationManager.Vec3(x, y, z);
+        }
+
+        ToVector(): mod.Vector {
+            return mod.CreateVector(this.x, this.y, this.z);
+        }
+
+        Add(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x + other.x,
+                this.y + other.y,
+                this.z + other.z
+            );
+        }
+
+        Subtract(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x - other.x,
+                this.y - other.y,
+                this.z - other.z
+            );
+        }
+
+        Multiply(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x * other.x,
+                this.y * other.y,
+                this.z * other.z
+            );
+        }
+
+        MultiplyScalar(scalar: number): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x * scalar,
+                this.y * scalar,
+                this.z * scalar
+            );
+        }
+
+        Divide(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x / other.x,
+                this.y / other.y,
+                this.z / other.z
+            );
+        }
+
+        DivideScalar(scalar: number): InstanceType<typeof AnimationManager.Vec3> {
+            return new AnimationManager.Vec3(
+                this.x / scalar,
+                this.y / scalar,
+                this.z / scalar
+            );
+        }
+
+        Length(): number {
+            return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+        }
+
+        LengthSquared(): number {
+            return (this.x * this.x) + (this.y * this.y) + (this.z * this.z);
+        }
+
+        Normalize(): InstanceType<typeof AnimationManager.Vec3> {
+            const len = this.Length();
+            if (len < 1e-9) {
+                return new AnimationManager.Vec3(0, 0, 0);
+            }
+            return new AnimationManager.Vec3(
+                this.x / len,
+                this.y / len,
+                this.z / len
+            );
+        }
+
+        ToString(): string {
+            return `X:${this.x}, Y:${this.y}, Z:${this.z}`;
+        }
+    };
+
+    //==============================================================================================
+    // INLINED UTILITY METHODS
+    //==============================================================================================
+
+    /**
+     * Convert vector to readable string format
+     * Math.ts
+     */
+    private static VectorToString(v: mod.Vector): string {
+        return `X: ${mod.XComponentOf(v)}, Y: ${mod.YComponentOf(v)}, Z: ${mod.ZComponentOf(v)}`;
+    }
+
+    /**
+     * Calculate vector magnitude/length
+     * Math.ts
+     */
+    private static VectorLength(vec: mod.Vector): number {
+        const x = mod.XComponentOf(vec);
+        const y = mod.YComponentOf(vec);
+        const z = mod.ZComponentOf(vec);
+        return Math.sqrt(x * x + y * y + z * z);
+    }
+
+    /**
+     * Convert direction vector to Euler rotation angles
+     * Math.ts
+     */
+    private static VectorDirectionToRotation(direction: mod.Vector): mod.Vector {
+        const normalized = mod.Normalize(direction);
+        const x = mod.XComponentOf(normalized);
+        const y = mod.YComponentOf(normalized);
+        const z = mod.ZComponentOf(normalized);
+        const yaw = Math.atan2(x, -z);
+        const horizontalDist = Math.sqrt(x * x + z * z);
+        const pitch = Math.atan2(y, horizontalDist);
+        return mod.CreateVector(pitch, yaw, 0);
+    }
+
+    //==============================================================================================
+    // PUBLIC ANIMATION METHODS
+    //==============================================================================================
 
     /**
      * Animate an object along a path defined by an array of points
@@ -1752,7 +1916,7 @@ class AnimationManager {
             // Calculate total path distance
             let totalDistance = 0;
             for (let i = 0; i < points.length - 1; i++) {
-                totalDistance += VectorLength(Math2.Vec3.FromVector(points[i + 1]).Subtract(Math2.Vec3.FromVector(points[i])).ToVector()); //mod.Subtract(points[i + 1], points[i]));
+                totalDistance += AnimationManager.VectorLength(AnimationManager.Vec3.FromVector(points[i + 1]).Subtract(AnimationManager.Vec3.FromVector(points[i])).ToVector()); //mod.Subtract(points[i + 1], points[i]));
             }
 
             // Determine timing
@@ -1773,14 +1937,14 @@ class AnimationManager {
 
                 const startPoint = expectedPosition; // Use tracked position
                 const endPoint = points[i + 1];
-                const segmentDistance = VectorLength(Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector()); //mod.Subtract(endPoint, startPoint));
+                const segmentDistance = AnimationManager.VectorLength(AnimationManager.Vec3.FromVector(endPoint).Subtract(AnimationManager.Vec3.FromVector(startPoint)).ToVector()); //mod.Subtract(endPoint, startPoint));
                 const segmentDuration = (segmentDistance / totalDistance) * totalDuration;
 
                 // Calculate rotation if needed
-                let rotation = ZERO_VEC;
+                let rotation = this.zeroVec;
                 if (options.rotateToDirection) {
-                    rotation = VectorDirectionToRotation(
-                        Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector() //mod.Subtract(endPoint, startPoint)
+                    rotation = AnimationManager.VectorDirectionToRotation(
+                        AnimationManager.Vec3.FromVector(endPoint).Subtract(AnimationManager.Vec3.FromVector(startPoint)).ToVector() //mod.Subtract(endPoint, startPoint)
                     );
                 }
 
@@ -1856,10 +2020,10 @@ class AnimationManager {
         // Calculate delta from expected start position to end position
         // We use startPos (which is our tracked expected position) instead of GetObjectPosition
         // to avoid precision loss from the engine's position rounding
-        const positionDelta = Math2.Vec3.FromVector(endPos).Subtract(Math2.Vec3.FromVector(startPos)).ToVector(); //mod.Subtract(endPos, startPos);
-        const rotationDelta = options.rotation || ZERO_VEC;
+        const positionDelta = AnimationManager.Vec3.FromVector(endPos).Subtract(AnimationManager.Vec3.FromVector(startPos)).ToVector(); //mod.Subtract(endPos, startPos);
+        const rotationDelta = options.rotation || this.zeroVec;
 
-        if (DEBUG_MODE) {
+        if (this.debugMode) {
             // Detailed precision logging
             console.log(`=== Animation Segment Debug ===`);
             console.log(`Start pos (tracked): X:${mod.XComponentOf(startPos).toFixed(6)}, Y:${mod.YComponentOf(startPos).toFixed(6)}, Z:${mod.ZComponentOf(startPos).toFixed(6)}`);
@@ -1927,7 +2091,7 @@ class AnimationManager {
         let objectId: number = -1;
 
         try {
-            if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
+            if(this.debugMode) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
 
             // Phase 1: Fill initial buffer (minBufferSize + 2 points)
             const initialBufferSize = minBufferSize;
@@ -1938,9 +2102,9 @@ class AnimationManager {
                     break;
                 }
                 pointBuffer.push(result.value);
-                
-                if(DEBUG_MODE) {
-                    console.log(`[AnimateAlongGeneratedPath] Buffered point ${i + 1}/${initialBufferSize}: ${VectorToString(result.value.position)}`);
+
+                if(this.debugMode) {
+                    console.log(`[AnimateAlongGeneratedPath] Buffered point ${i + 1}/${initialBufferSize}: ${AnimationManager.VectorToString(result.value.position)}`);
                 }
             }
 
@@ -1951,8 +2115,8 @@ class AnimationManager {
 
             // Set starting position
             currentPosition = pointBuffer[0].position;
-            
-            if(DEBUG_MODE) {
+
+            if(this.debugMode) {
                 console.log(`[AnimateAlongGeneratedPath] Initial buffer filled with ${pointBuffer.length} points, starting animation`);
             }
 
@@ -1997,20 +2161,20 @@ class AnimationManager {
 
                 // Check if we need to wait for more points
                 if (pointBuffer.length <= minBufferSize && !generatorComplete) {
-                    if(DEBUG_MODE) {
+                    if(this.debugMode) {
                         console.log(`[AnimateAlongGeneratedPath] Buffer low (${pointBuffer.length} points), waiting for generator...`);
                     }
                     bufferStarvationCount++;
-                    
+
                     // Try to fill buffer back up
                     const result = await generator.next();
                     if (result.done) {
                         generatorComplete = true;
-                        if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+                        if(this.debugMode) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
                     } else {
                         pointBuffer.push(result.value);
-                        if(DEBUG_MODE) {
-                            console.log(`[AnimateAlongGeneratedPath] Added point to buffer: ${VectorToString(result.value.position)}`);
+                        if(this.debugMode) {
+                            console.log(`[AnimateAlongGeneratedPath] Added point to buffer: ${AnimationManager.VectorToString(result.value.position)}`);
                         }
                     }
                     continue;
@@ -2021,7 +2185,7 @@ class AnimationManager {
                     const result = await generator.next();
                     if (result.done) {
                         generatorComplete = true;
-                        if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+                        if(this.debugMode) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
                     } else {
                         pointBuffer.push(result.value);
                     }
@@ -2029,9 +2193,9 @@ class AnimationManager {
 
                 // Check if we should stop consuming points (hit detected or at end)
                 const shouldStopConsuming = generatorComplete && pointBuffer.length <= minBufferSize + 2;
-                
+
                 if (shouldStopConsuming) {
-                    if(DEBUG_MODE) {
+                    if(this.debugMode) {
                         console.log(`[AnimateAlongGeneratedPath] Stopping animation consumption, ${pointBuffer.length} points remaining in buffer`);
                     }
                     break;
@@ -2041,25 +2205,25 @@ class AnimationManager {
                 if (pointBuffer.length > 1) {
                     const startPoint = pointBuffer.shift()!; // Remove first point
                     const endPoint = pointBuffer[0]; // Peek at next point (don't remove yet)
-                    
-                    const segmentDistance = VectorLength(
-                        Math2.Vec3.FromVector(endPoint.position)
-                            .Subtract(Math2.Vec3.FromVector(startPoint.position))
+
+                    const segmentDistance = AnimationManager.VectorLength(
+                        AnimationManager.Vec3.FromVector(endPoint.position)
+                            .Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
                             .ToVector()
                     );
-                    
+
                     const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
 
-                    if(DEBUG_MODE) {
-                        console.log(`[AnimateAlongGeneratedPath] Animating segment ${segmentIndex}: ${VectorToString(startPoint.position)} -> ${VectorToString(endPoint.position)} (${segmentDistance.toFixed(2)} units, ${segmentDuration.toFixed(3)}s, buffer: ${pointBuffer.length})`);
+                    if(this.debugMode) {
+                        console.log(`[AnimateAlongGeneratedPath] Animating segment ${segmentIndex}: ${AnimationManager.VectorToString(startPoint.position)} -> ${AnimationManager.VectorToString(endPoint.position)} (${segmentDistance.toFixed(2)} units, ${segmentDuration.toFixed(3)}s, buffer: ${pointBuffer.length})`);
                     }
 
                     // Calculate rotation if needed
-                    let rotation = ZERO_VEC;
+                    let rotation = this.zeroVec;
                     if (options.rotateToDirection) {
-                        rotation = VectorDirectionToRotation(
-                            Math2.Vec3.FromVector(endPoint.position)
-                                .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                        rotation = AnimationManager.VectorDirectionToRotation(
+                            AnimationManager.Vec3.FromVector(endPoint.position)
+                                .Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
                                 .ToVector()
                         );
                     } else if(options.rotation){
@@ -2091,7 +2255,7 @@ class AnimationManager {
 
             // Phase 3: Animate through remaining buffered points
             if (pointBuffer.length > 0) {
-                if(DEBUG_MODE) {
+                if(this.debugMode) {
                     console.log(`[AnimateAlongGeneratedPath] Animating through ${pointBuffer.length} remaining buffered points`);
                 }
                 
@@ -2102,20 +2266,20 @@ class AnimationManager {
                     // If there's a next point, animate to it; otherwise we're at the last point
                     if (pointBuffer.length > 0) {
                         const endPoint = pointBuffer[0];
-                        
-                        const segmentDistance = VectorLength(
-                            Math2.Vec3.FromVector(endPoint.position)
-                                .Subtract(Math2.Vec3.FromVector(startPoint.position))
+
+                        const segmentDistance = AnimationManager.VectorLength(
+                            AnimationManager.Vec3.FromVector(endPoint.position)
+                                .Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
                                 .ToVector()
                         );
-                        
+
                         const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
-                        
-                        let rotation = ZERO_VEC;
+
+                        let rotation = this.zeroVec;
                         if (options.rotateToDirection) {
-                            rotation = VectorDirectionToRotation(
-                                Math2.Vec3.FromVector(endPoint.position)
-                                    .Subtract(Math2.Vec3.FromVector(startPoint.position))
+                            rotation = AnimationManager.VectorDirectionToRotation(
+                                AnimationManager.Vec3.FromVector(endPoint.position)
+                                    .Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
                                     .ToVector()
                             );
                         } else if(options.rotation){
@@ -2138,23 +2302,23 @@ class AnimationManager {
                         }
                     } else {
                         // This was the last point - just set position directly if not already there
-                        if(DEBUG_MODE) {
-                            console.log(`[AnimateAlongGeneratedPath] Reached final point: ${VectorToString(startPoint.position)}`);
+                        if(this.debugMode) {
+                            console.log(`[AnimateAlongGeneratedPath] Reached final point: ${AnimationManager.VectorToString(startPoint.position)}`);
                         }
-                        const finalDistance = VectorLength(
-                            Math2.Vec3.FromVector(startPoint.position)
-                                .Subtract(Math2.Vec3.FromVector(currentPosition))
+                        const finalDistance = AnimationManager.VectorLength(
+                            AnimationManager.Vec3.FromVector(startPoint.position)
+                                .Subtract(AnimationManager.Vec3.FromVector(currentPosition))
                                 .ToVector()
                         );
-                        
+
                         if (finalDistance > 0.1) {
                             const finalDuration = options.speed ? finalDistance / options.speed : 0.1;
-                            
-                            let finalRotation = ZERO_VEC;
+
+                            let finalRotation = this.zeroVec;
                             if (options.rotateToDirection) {
-                                finalRotation = VectorDirectionToRotation(
-                                    Math2.Vec3.FromVector(startPoint.position)
-                                        .Subtract(Math2.Vec3.FromVector(currentPosition))
+                                finalRotation = AnimationManager.VectorDirectionToRotation(
+                                    AnimationManager.Vec3.FromVector(startPoint.position)
+                                        .Subtract(AnimationManager.Vec3.FromVector(currentPosition))
                                         .ToVector()
                                 );
                             } else if(options.rotation){
@@ -2175,7 +2339,7 @@ class AnimationManager {
                 }
             }
 
-            if(DEBUG_MODE) {
+            if(this.debugMode) {
                 console.log(`[AnimateAlongGeneratedPath] Animation complete. Segments: ${segmentIndex}, Buffer starvation events: ${bufferStarvationCount}`);
                 if (bufferStarvationCount > 0) {
                     console.log(`[AnimateAlongGeneratedPath] WARNING: Buffer was starved ${bufferStarvationCount} times. Consider increasing minBufferSize or reducing animation speed.`);
@@ -2387,7 +2551,7 @@ class AnimationManager {
         }
 
         const easingFn = options.easingFunction || Easing.Linear;
-        const tickRate = options.tickRate || TICK_RATE;
+        const tickRate = options.tickRate || this.tickRate;
 
         try {
             // Call onStart callback if provided
@@ -2849,7 +3013,7 @@ export async function OnGameModeStarted() {
     // Initialize global managers
     worldIconManager = WorldIconManager.getInstance();
     vfxManager = VFXManager.getInstance();
-    animationManager = new AnimationManager();
+    animationManager = new AnimationManager(DEBUG_MODE, TICK_RATE, ZERO_VEC);
 
     // Initialize legacy team references (still needed for backwards compatibility)
     teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
@@ -2981,10 +3145,14 @@ async function SecondUpdate(): Promise<void> {
         // Fix for some vehicles not trigger events
         if(VEHICLE_BLOCK_CARRIER_DRIVING){
             JSPlayer.getAllAsArray().forEach((jsPlayer: JSPlayer) => {
-                if (IsCarryingAnyFlag(jsPlayer.player)) {      
-                    if (mod.GetPlayerVehicleSeat(jsPlayer.player) === VEHICLE_DRIVER_SEAT) {
-                        if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
-                        ForceToPassengerSeat(jsPlayer.player, mod.GetVehicleFromPlayer(jsPlayer.player));
+                if(jsPlayer.player) {  
+                    if (IsCarryingAnyFlag(jsPlayer.player)) {      
+                        if(mod.GetSoldierState(jsPlayer.player, mod.SoldierStateBool.IsInVehicle)){
+                            if (mod.GetPlayerVehicleSeat(jsPlayer.player) === VEHICLE_DRIVER_SEAT) {
+                                if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
+                                ForceToPassengerSeat(jsPlayer.player, mod.GetVehicleFromPlayer(jsPlayer.player));
+                            }
+                        }
                     }
                 }
             });
@@ -3208,9 +3376,11 @@ export function OnPlayerEnterVehicleSeat(
 ): void {
     // If player is carrying flag and in driver seat, force to passenger
     if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {      
-        if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
-            if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
-            ForceToPassengerSeat(eventPlayer, eventVehicle);
+        if(eventPlayer) {  
+            if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
+                if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
+                ForceToPassengerSeat(eventPlayer, eventVehicle);
+            }
         }
     }
 }
@@ -3321,7 +3491,11 @@ function GetTeamDroppedColor(team: mod.Team): mod.Vector {
 }
 
 function GetTeamColorLight(team: mod.Team): mod.Vector {
-    return mod.Add(GetTeamColor(team), mod.CreateVector(0.5, 0.5, 0.5));
+    return VectorClampToRange(mod.Add(GetTeamColor(team), mod.CreateVector(0.65, 0.65, 0.65)), 0, 1);
+}
+
+function GetTeamColorDark(team: mod.Team): mod.Vector {
+    return VectorClampToRange(mod.Multiply(GetTeamColor(team), 0.8), 0, 1);
 }
 
 export function GetPlayersInTeam(team: mod.Team) {
@@ -3545,10 +3719,9 @@ function ScoreCapture(scoringPlayer: mod.Player, capturedFlag: Flag, scoringTeam
 
     // Return all captured flags to their home spawners
     GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => {
-        flag.events.emit("flagCaptured", {flag});
+        flag.events.emit("flagCaptured", {flag: flag, player: scoringPlayer});
         flag.ResetFlag();
     });
-    
     // Check win condition
     if (currentScore >= GAMEMODE_TARGET_SCORE) {
         EndGameByScore(scoringTeamId);
@@ -3624,7 +3797,7 @@ interface FlagEventMap {
     /** Emitted when a flag is returned to its home position */
     'flagReturned': { 
         flag: Flag;
-        wasAutoReturned: boolean;  // True if auto-returned due to timeout
+        player: mod.Player | undefined    // Player that returned the flag. Null if auto returned
     };
     
     /** Emitted when a flag reaches its home position (same as return, but separate for clarity) */
@@ -3641,6 +3814,7 @@ interface FlagEventMap {
     };
     'flagCaptured': {
         flag: Flag;
+        player: mod.Player;
     };
 }
 
@@ -4314,7 +4488,7 @@ class Flag {
         }
     }
 
-    ReturnFlag(): void {
+    ReturnFlag(player?:mod.Player): void {
         if(DEBUG_MODE)
             mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
         this.PlayFlagReturnedSFX();
@@ -4322,7 +4496,7 @@ class Flag {
         // Emit flag returned event (before reset)
         this.events.emit('flagReturned', {
             flag: this,
-            wasAutoReturned: false  // Manual return
+            player: player
         });
         
         this.ResetFlag();
@@ -4378,7 +4552,7 @@ class Flag {
             // Emit flag returned event with auto-return flag
             this.events.emit('flagReturned', {
                 flag: this,
-                wasAutoReturned: true
+                player: undefined
             });
 
             
@@ -4695,7 +4869,7 @@ function HandleFlagInteraction(
             if(DEBUG_MODE)
                 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned, GetTeamName(flag.team)));
             flag.PlayFlagReturnedSFX();
-            flag.ReturnFlag();
+            flag.ReturnFlag(player);
         } else if(flag.isAtHome) {
             mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.flag_friendly_at_home), player);
         }
@@ -5572,6 +5746,8 @@ interface BaseScoreboardHUD {
 // TICKER WIDGET BASE CLASS - Base class for UI widgets with position, text, background, and brackets
 //==============================================================================================
 
+import { ParseUI } from "modlib";
+
 interface TickerWidgetParams {
     position: number[];
     size: number[];
@@ -5602,6 +5778,7 @@ abstract class TickerWidget {
     protected columnWidget!: mod.UIWidget;
     protected columnWidgetOutline!: mod.UIWidget;
     protected textWidget!: mod.UIWidget;
+    protected pulseGradientWidget!: mod.UIWidget;
     
     // Progress bar
     protected progressBarContainer: mod.UIWidget | undefined;
@@ -5674,6 +5851,18 @@ abstract class TickerWidget {
         if (this.showProgressBar) {
             this.createProgressBar();
         }
+
+        // Create gradient pulse effect
+        this.pulseGradientWidget = ParseUI({
+            type: "Container",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [0, this.size[1]],
+            anchor: mod.UIAnchor.TopLeft,
+            bgFill: mod.UIBgFill.GradientRight,
+            bgColor: this.textColor,
+            bgAlpha: 0.6
+        })!;
         
         // Create leading indicator brackets
         this.createBrackets();
@@ -5872,6 +6061,59 @@ abstract class TickerWidget {
         this.isPulsing = false;
     }
 
+    async pulse(reverse?: boolean): Promise<void> {
+        if(this.isPulsing)
+            return;
+
+        // Set start state
+        this.isPulsing = true;
+        let startSizeVec = mod.GetUIWidgetSize(this.columnWidget);
+        let startSize: number[] = this.size;
+        let startPosition: number[] = [0,0];
+
+        // Configure gradient direction and anchor based on reverse parameter
+        if (reverse) {
+            // Right-to-left: Use left gradient anchored to the right
+            mod.SetUIWidgetBgFill(this.pulseGradientWidget, mod.UIBgFill.GradientLeft);
+            mod.SetUIWidgetAnchor(this.pulseGradientWidget, mod.UIAnchor.TopRight);
+        } else {
+            // Left-to-right: Use right gradient anchored to the left
+            mod.SetUIWidgetBgFill(this.pulseGradientWidget, mod.UIBgFill.GradientRight);
+            mod.SetUIWidgetAnchor(this.pulseGradientWidget, mod.UIAnchor.TopLeft);
+        }
+
+        mod.SetUIWidgetSize(this.pulseGradientWidget, mod.CreateVector(5, startSize[1], 0));
+        mod.SetUIWidgetPosition(this.pulseGradientWidget, mod.CreateVector(startPosition[0], startPosition[1], 0));
+
+        // Scale up gradient wipe
+        await animationManager.AnimateValue(0, startSize[0], {
+            duration: 0.25,
+            easingFunction: Easing.EaseInSine,
+            onProgress: (value, normalizedTime) => {
+                mod.SetUIWidgetPosition(this.pulseGradientWidget, ZERO_VEC);
+                mod.SetUIWidgetSize(this.pulseGradientWidget, mod.CreateVector(value, startSize[1], 0));
+            },
+        }).then(async ()=>{
+            await animationManager.AnimateValue(0, startSize[0],
+            {
+                duration: 0.25,
+                easingFunction: Easing.EaseOutSine,
+                onProgress: (value, normalizedTime) => {
+                    if (reverse) {
+                        // Right-to-left: Move left and shrink
+                        mod.SetUIWidgetPosition(this.pulseGradientWidget, mod.CreateVector(value - 4, 0, 0));
+                    } else {
+                        // Left-to-right: Move right and shrink
+                        mod.SetUIWidgetPosition(this.pulseGradientWidget, mod.CreateVector(value - 4, 0, 0));
+                    }
+                    mod.SetUIWidgetSize(this.pulseGradientWidget, mod.CreateVector(startSize[0] - value, startSize[1], 0));
+                },
+            });
+            
+            this.isPulsing = false;
+        });
+    }
+
     /**
      * Destroy all UI widgets created by this ticker
      * Should be called before discarding the ticker instance
@@ -5915,6 +6157,7 @@ interface ScoreTickerParams {
     textSize?: number;
     bracketTopBottomLength?: number;
     bracketThickness?: number;
+    reversePulse?: boolean
 }
 
 class ScoreTicker extends TickerWidget {
@@ -5923,16 +6166,13 @@ class ScoreTicker extends TickerWidget {
     
     private currentScore: number = -1;
     private isLeading: boolean = false;
+    private reversePulse: boolean = false;
     
     constructor(params: ScoreTickerParams) {
         // Get team colors before calling super
         const teamId = mod.GetObjId(params.team);
-        const teamColor = GetTeamColorById(teamId);
-        const textColor = VectorClampToRange(
-            GetTeamColorLight(params.team), 
-            0, 
-            1
-        );
+        const teamColor = GetTeamColorDark(params.team);
+        const textColor = GetTeamColorLight(params.team);
         
         // Call parent constructor with team-specific colors
         super({
@@ -5949,7 +6189,7 @@ class ScoreTicker extends TickerWidget {
         
         this.team = params.team;
         this.teamId = teamId;
-        
+        this.reversePulse = params.reversePulse ?? false;
         this.refresh();
     }
     
@@ -5962,7 +6202,25 @@ class ScoreTicker extends TickerWidget {
         // Only update if score has changed
         if (this.currentScore !== score) {
             this.currentScore = score;
-            this.updateText(mod.Message(score));
+
+            let pulseAndUpdateText = async () => {
+                this.pulse(this.reversePulse);
+
+                // Wait until pulse reaches text widget
+                await mod.Wait(0.1625);
+                this.updateText(mod.Message(score));
+
+                // Set the text colour to white and fade back down
+                let textColor: number[] = [mod.XComponentOf(this.textColor), mod.YComponentOf(this.textColor), mod.ZComponentOf(this.textColor)];
+                await animationManager.AnimateValues([1, 1, 1], textColor, {
+                    duration: 0.3,
+                    easingFunction: Easing.EaseOutCubic,
+                    onProgress: (values, normalizedTime) => {
+                        mod.SetUITextColor(this.textWidget,  mod.CreateVector(values[0], values[1], values[2]));
+                    }
+                });
+            };
+            pulseAndUpdateText();
 
             // Show brackets only if this team is the sole leader (no ties)
             let leadingTeams = GetLeadingTeamIDs();
@@ -6253,7 +6511,7 @@ class FlagBar {
             if (!flag) continue;
 
             // Flag picked up - stop throb, solid appearance
-            const unsubTaken = flag.events.on('flagTaken', () => {
+            const unsubTaken = flag.events.on('flagTaken', (data) => {
                 if (icon.isPulsing) {
                     icon.StopThrob();
                 }
@@ -6305,12 +6563,7 @@ class FlagBar {
             }
         }
 
-        const textColor = VectorClampToRange(
-            GetTeamColorLight(team), 
-            0, 
-            1
-        );
-
+        const textColor = GetTeamColorLight(team);
         const midColor = VectorClampToRange(
             Math2.Vec3.FromVector(teamColor).Add(new Math2.Vec3(0.15, 0.15, 0.15)).ToVector(),
             0, 
@@ -6332,12 +6585,7 @@ class FlagBar {
     
     private createFlagIcon(team: mod.Team, teamId: number): FlagIcon {
         const teamColor = GetTeamColorById(teamId);
-
-        const textColor = VectorClampToRange(
-            GetTeamColorLight(team), 
-            0, 
-            1
-        );
+        const textColor = GetTeamColorLight(team);
         
         return new FlagIcon({
             name: `FlagBar_FlagIcon_Team${teamId}`,
@@ -6979,7 +7227,7 @@ class TeamOrdersBar extends TickerWidget {
     private isTextVisible: boolean = false;
     private collapseTimeoutTime: number | null = null;
     private readonly normalHeight: number = 30;
-    private readonly minimizedHeight: number = 4;
+    private readonly minimizedHeight: number = 0;
     private readonly expandDuration: number = 0.4;
     private readonly collapseDuration: number = 0.3;
     private readonly visibleDuration: number = 5.0;
@@ -7009,7 +7257,7 @@ class TeamOrdersBar extends TickerWidget {
         this.lastOrder = TeamOrders.TeamIdentify;
 
         // Set initial text (widget now exists after super() called createWidgets())
-        this.updateText(this.TeamOrderToMessage(this.lastOrder));
+        this.updateText(this.TeamOrderToMessage(this.lastOrder, this.team));
 
         // Initialize in minimized state (after widgets are created)
         this.updateWidgetSizes(this.minimizedHeight);
@@ -7048,6 +7296,11 @@ class TeamOrdersBar extends TickerWidget {
         this.isAnimating = true;
         const startHeight = this.currentHeight;
 
+        let startColorVec = mod.GetUIWidgetBgColor(this.columnWidget);
+        let startColor:number[] = [mod.XComponentOf(startColorVec), mod.YComponentOf(startColorVec), mod.ZComponentOf(startColorVec)];
+        let endColorVec = VectorClampToRange(mod.Add(startColorVec, mod.CreateVector(0.75, 0.75, 0.75)), 0, 1);
+        let endColor:number[] = [mod.XComponentOf(endColorVec), mod.YComponentOf(endColorVec), mod.ZComponentOf(endColorVec)];
+
         await animationManager.AnimateValue(startHeight, this.normalHeight, {
             duration: this.expandDuration,
             easingFunction: Easing.EaseOutCubic,
@@ -7060,12 +7313,11 @@ class TeamOrdersBar extends TickerWidget {
                     mod.SetUIWidgetVisible(textWidget, true);
                     this.isTextVisible = true;
                 }
-            },
-            onComplete: () => {
-                this.isExpanded = true;
-                this.isAnimating = false;
-                this.startCollapseTimer();
             }
+        }).then(async () => {
+            this.isExpanded = true;
+            this.isAnimating = false;
+            this.startCollapseTimer();
         });
     }
 
@@ -7146,12 +7398,12 @@ class TeamOrdersBar extends TickerWidget {
             
             // Flag returned event
             const unsubReturned = flag.events.on('flagReturned', (data) => {
-                this.handleFlagReturned(data.flag, data.wasAutoReturned);
+                this.handleFlagReturned(data.flag, data.player);
             });
             this.eventUnsubscribers.push(unsubReturned);
 
             const unsubCaptured = flag.events.on("flagCaptured", (data) => {
-                this.handleFlagCaptured(data.flag);
+                this.handleFlagCaptured(data.flag, data.player);
             });
             this.eventUnsubscribers.push(unsubCaptured);
         }
@@ -7163,48 +7415,63 @@ class TeamOrdersBar extends TickerWidget {
         // Check if this is our team's flag
         if (flag.teamId === this.teamId) {
             // Our flag was taken
-            this.SetTeamOrder(TeamOrders.OurFlagTaken);
+            this.SetTeamOrder(TeamOrders.OurFlagTaken, this.team, player);
         } else if (playerTeamId === this.teamId) {
             // We took the enemy flag
-            this.SetTeamOrder(TeamOrders.EnemyFlagTaken);
+            this.SetTeamOrder(TeamOrders.EnemyFlagTaken, mod.GetTeam(player), player);
         }
     }
     
     private handleFlagDropped(flag: Flag, position: mod.Vector, previousCarrier: mod.Player | null): void {
+        if(!previousCarrier)
+            return;
+        
         // Check if this is our team's flag
         if (flag.teamId === this.teamId) {
             // Our flag was dropped
-            this.SetTeamOrder(TeamOrders.OurFlagDropped);
+            this.SetTeamOrder(TeamOrders.OurFlagDropped, this.team, previousCarrier);
         } else {
             // Enemy flag was dropped (check if we were carrying it)
             if (previousCarrier) {
-                const carrierTeamId = mod.GetObjId(mod.GetTeam(previousCarrier));
+                let otherTeam = mod.GetTeam(previousCarrier);
+                const carrierTeamId = mod.GetObjId(otherTeam);
                 if (carrierTeamId === this.teamId) {
-                    this.SetTeamOrder(TeamOrders.EnemyFlagDropped);
+                    this.SetTeamOrder(TeamOrders.EnemyFlagDropped, otherTeam, previousCarrier);
                 }
             }
         }
     }
     
-    private handleFlagReturned(flag: Flag, wasAutoReturned: boolean): void {
-        // Check if this is our team's flag
-        if (flag.teamId === this.teamId) {
-            // Our flag was returned
-            this.SetTeamOrder(TeamOrders.OurFlagReturned);
+    private handleFlagReturned(flag: Flag, player: mod.Player | undefined): void {
+        if(player){
+            // Check if this is our team's flag
+            if (flag.teamId === this.teamId) {
+                // Our flag was returned
+                this.SetTeamOrder(TeamOrders.OurFlagReturned, this.team, player);
+            } else {
+                // Enemy flag was returned
+                this.SetTeamOrder(TeamOrders.EnemyFlagReturned, mod.GetTeam(player), player);
+            }
         } else {
-            // Enemy flag was returned
-            this.SetTeamOrder(TeamOrders.EnemyFlagReturned);
+            // Flag was auto returned
+            if (flag.teamId === this.teamId) {
+                // Our flag was returned
+                this.SetTeamOrder(TeamOrders.OurFlagReturned, this.team, player);
+            } else {
+                // Enemy flag was returned
+                this.SetTeamOrder(TeamOrders.EnemyFlagReturned, flag.team, player);
+            }
         }
     }
 
-     private handleFlagCaptured(flag: Flag): void {
+     private handleFlagCaptured(flag: Flag, player: mod.Player): void {
         // Check if this is our team's flag
         if (flag.teamId === this.teamId) {
             // Our flag was captured
-            this.SetTeamOrder(TeamOrders.OurFlagCaptured);
+            this.SetTeamOrder(TeamOrders.OurFlagCaptured, this.team, player);
         } else {
             // Enemy flag was returned
-            this.SetTeamOrder(TeamOrders.EnemyFlagCaptured);
+            this.SetTeamOrder(TeamOrders.EnemyFlagCaptured, mod.GetTeam(player), player);
         }
     }
     
@@ -7227,9 +7494,9 @@ class TeamOrdersBar extends TickerWidget {
         super.destroy();
     }
 
-    SetTeamOrder(teamOrder: TeamOrders): void {
+    SetTeamOrder(teamOrder: TeamOrders, team:mod.Team, player?:mod.Player): void {
         this.lastOrder = teamOrder;
-        this.updateText(this.TeamOrderToMessage(teamOrder));
+        this.updateText(this.TeamOrderToMessage(teamOrder, team, player));
 
         // Trigger expand animation if not already expanded
         if (!this.isExpanded && !this.isAnimating) {
@@ -7240,27 +7507,38 @@ class TeamOrdersBar extends TickerWidget {
         }
     }
 
-    TeamOrderToMessage(order:TeamOrders): mod.Message {
-        switch(order){
-            case TeamOrders.OurFlagTaken:
-                return mod.Message(mod.stringkeys.order_flag_taken, mod.stringkeys.order_friendly);
-            case TeamOrders.OurFlagDropped:
-                return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_friendly);
-            case TeamOrders.OurFlagReturned:
-                return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_friendly);
-            case TeamOrders.OurFlagCaptured:
-                return mod.Message(mod.stringkeys.order_flag_captured_friendly);
-            case TeamOrders.EnemyFlagTaken:
-                return mod.Message(mod.stringkeys.order_flag_taken, mod.stringkeys.order_enemy);
-            case TeamOrders.EnemyFlagDropped:
-                return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_enemy);
-            case TeamOrders.EnemyFlagReturned:
-                return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_enemy);
-            case TeamOrders.EnemyFlagCaptured:
-                return mod.Message(mod.stringkeys.order_flag_captured_enemy);
-            case TeamOrders.TeamIdentify:
-                return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
+    TeamOrderToMessage(order:TeamOrders, team: mod.Team, player?:mod.Player): mod.Message {
+        // Messages relating to a specific player
+        if(player){
+            switch(order){
+                case TeamOrders.OurFlagTaken:
+                    return mod.Message(mod.stringkeys.order_flag_taken_friendly, player);
+                case TeamOrders.OurFlagDropped:
+                    return mod.Message(mod.stringkeys.order_flag_dropped_friendly, player);
+                case TeamOrders.OurFlagReturned:
+                    return mod.Message(mod.stringkeys.order_flag_returned_friendly, player);
+                case TeamOrders.OurFlagCaptured:
+                    return mod.Message(mod.stringkeys.order_flag_captured_friendly, player);
+                case TeamOrders.EnemyFlagTaken:
+                    return mod.Message(mod.stringkeys.order_flag_taken_enemy, player, GetTeamName(team));
+                case TeamOrders.EnemyFlagDropped:
+                    return mod.Message(mod.stringkeys.order_flag_dropped_enemy, player, GetTeamName(team));
+                case TeamOrders.EnemyFlagReturned:
+                    return mod.Message(mod.stringkeys.order_flag_returned_enemy, player, GetTeamName(team));
+                case TeamOrders.EnemyFlagCaptured:
+                    return mod.Message(mod.stringkeys.order_flag_captured_enemy, player, GetTeamName(team));
+            }
+        } else {
+            // General team messages
+            switch(order){
+                case TeamOrders.OurFlagReturned:
+                    return mod.Message(mod.stringkeys.order_flag_returned_timeout_friendly);
+                case TeamOrders.EnemyFlagReturned:
+                    return mod.Message(mod.stringkeys.order_flag_returned_timeout_enemy, GetTeamName(team));
+            }
+           
         }
+        
         return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
     }
 }
@@ -7608,9 +7886,11 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
                 parent: this.rootWidget,
                 position: [((teamId - 1) * this.teamScoreSpacing) - this.teamScoreSpacing * 0.5, this.teamScorePaddingTop],
                 size: this.teamWidgetSize,
-                team: team
+                team: team,
+                reversePulse: (teamId - 1) % 2 == 0
             };
             this.teamScoreTickers.set(teamId, new ScoreTicker(tickerParams));
+            this.teamScoreTickers.get(teamId)?.pulse();
         }
 
         // Center flag bar positions

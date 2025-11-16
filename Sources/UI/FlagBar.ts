@@ -107,7 +107,7 @@ class FlagBar {
             if (!flag) continue;
 
             // Flag picked up - stop throb, solid appearance
-            const unsubTaken = flag.events.on('flagTaken', () => {
+            const unsubTaken = flag.events.on('flagTaken', (data) => {
                 if (icon.isPulsing) {
                     icon.StopThrob();
                 }
@@ -159,12 +159,7 @@ class FlagBar {
             }
         }
 
-        const textColor = VectorClampToRange(
-            GetTeamColorLight(team), 
-            0, 
-            1
-        );
-
+        const textColor = GetTeamColorLight(team);
         const midColor = VectorClampToRange(
             Math2.Vec3.FromVector(teamColor).Add(new Math2.Vec3(0.15, 0.15, 0.15)).ToVector(),
             0, 
@@ -186,12 +181,7 @@ class FlagBar {
     
     private createFlagIcon(team: mod.Team, teamId: number): FlagIcon {
         const teamColor = GetTeamColorById(teamId);
-
-        const textColor = VectorClampToRange(
-            GetTeamColorLight(team), 
-            0, 
-            1
-        );
+        const textColor = GetTeamColorLight(team);
         
         return new FlagIcon({
             name: `FlagBar_FlagIcon_Team${teamId}`,

@@ -2,6 +2,8 @@
 // TICKER WIDGET BASE CLASS - Base class for UI widgets with position, text, background, and brackets
 //==============================================================================================
 
+import { ParseUI } from "modlib";
+
 interface TickerWidgetParams {
     position: number[];
     size: number[];
@@ -32,6 +34,7 @@ abstract class TickerWidget {
     protected columnWidget!: mod.UIWidget;
     protected columnWidgetOutline!: mod.UIWidget;
     protected textWidget!: mod.UIWidget;
+    protected pulseGradientWidget!: mod.UIWidget;
     
     // Progress bar
     protected progressBarContainer: mod.UIWidget | undefined;
@@ -104,6 +107,18 @@ abstract class TickerWidget {
         if (this.showProgressBar) {
             this.createProgressBar();
         }
+
+        // Create gradient pulse effect
+        this.pulseGradientWidget = ParseUI({
+            type: "Container",
+            parent: this.columnWidget,
+            position: [0, 0],
+            size: [0, this.size[1]],
+            anchor: mod.UIAnchor.TopLeft,
+            bgFill: mod.UIBgFill.GradientRight,
+            bgColor: this.textColor,
+            bgAlpha: 0.6
+        })!;
         
         // Create leading indicator brackets
         this.createBrackets();
@@ -300,6 +315,59 @@ abstract class TickerWidget {
 
     StopThrob(): void {
         this.isPulsing = false;
+    }
+
+    async pulse(reverse?: boolean): Promise<void> {
+        if(this.isPulsing)
+            return;
+
+        // Set start state
+        this.isPulsing = true;
+        let startSizeVec = mod.GetUIWidgetSize(this.columnWidget);
+        let startSize: number[] = this.size;
+        let startPosition: number[] = [0,0];
+
+        // Configure gradient direction and anchor based on reverse parameter
+        if (reverse) {
+            // Right-to-left: Use left gradient anchored to the right
+            mod.SetUIWidgetBgFill(this.pulseGradientWidget, mod.UIBgFill.GradientLeft);
+            mod.SetUIWidgetAnchor(this.pulseGradientWidget, mod.UIAnchor.TopRight);
+        } else {
+            // Left-to-right: Use right gradient anchored to the left
+            mod.SetUIWidgetBgFill(this.pulseGradientWidget, mod.UIBgFill.GradientRight);
+            mod.SetUIWidgetAnchor(this.pulseGradientWidget, mod.UIAnchor.TopLeft);
+        }
+
+        mod.SetUIWidgetSize(this.pulseGradientWidget, mod.CreateVector(5, startSize[1], 0));
+        mod.SetUIWidgetPosition(this.pulseGradientWidget, mod.CreateVector(startPosition[0], startPosition[1], 0));
+
+        // Scale up gradient wipe
+        await animationManager.AnimateValue(0, startSize[0], {
+            duration: 0.25,
+            easingFunction: Easing.EaseInSine,
+            onProgress: (value, normalizedTime) => {
+                mod.SetUIWidgetPosition(this.pulseGradientWidget, ZERO_VEC);
+                mod.SetUIWidgetSize(this.pulseGradientWidget, mod.CreateVector(value, startSize[1], 0));
+            },
+        }).then(async ()=>{
+            await animationManager.AnimateValue(0, startSize[0],
+            {
+                duration: 0.25,
+                easingFunction: Easing.EaseOutSine,
+                onProgress: (value, normalizedTime) => {
+                    if (reverse) {
+                        // Right-to-left: Move left and shrink
+                        mod.SetUIWidgetPosition(this.pulseGradientWidget, mod.CreateVector(value - 4, 0, 0));
+                    } else {
+                        // Left-to-right: Move right and shrink
+                        mod.SetUIWidgetPosition(this.pulseGradientWidget, mod.CreateVector(value - 4, 0, 0));
+                    }
+                    mod.SetUIWidgetSize(this.pulseGradientWidget, mod.CreateVector(startSize[0] - value, startSize[1], 0));
+                },
+            });
+            
+            this.isPulsing = false;
+        });
     }
 
     /**

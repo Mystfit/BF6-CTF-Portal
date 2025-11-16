@@ -10,6 +10,7 @@ interface ScoreTickerParams {
     textSize?: number;
     bracketTopBottomLength?: number;
     bracketThickness?: number;
+    reversePulse?: boolean
 }
 
 class ScoreTicker extends TickerWidget {
@@ -18,16 +19,13 @@ class ScoreTicker extends TickerWidget {
     
     private currentScore: number = -1;
     private isLeading: boolean = false;
+    private reversePulse: boolean = false;
     
     constructor(params: ScoreTickerParams) {
         // Get team colors before calling super
         const teamId = mod.GetObjId(params.team);
-        const teamColor = GetTeamColorById(teamId);
-        const textColor = VectorClampToRange(
-            GetTeamColorLight(params.team), 
-            0, 
-            1
-        );
+        const teamColor = GetTeamColorDark(params.team);
+        const textColor = GetTeamColorLight(params.team);
         
         // Call parent constructor with team-specific colors
         super({
@@ -44,7 +42,7 @@ class ScoreTicker extends TickerWidget {
         
         this.team = params.team;
         this.teamId = teamId;
-        
+        this.reversePulse = params.reversePulse ?? false;
         this.refresh();
     }
     
@@ -57,7 +55,25 @@ class ScoreTicker extends TickerWidget {
         // Only update if score has changed
         if (this.currentScore !== score) {
             this.currentScore = score;
-            this.updateText(mod.Message(score));
+
+            let pulseAndUpdateText = async () => {
+                this.pulse(this.reversePulse);
+
+                // Wait until pulse reaches text widget
+                await mod.Wait(0.1625);
+                this.updateText(mod.Message(score));
+
+                // Set the text colour to white and fade back down
+                let textColor: number[] = [mod.XComponentOf(this.textColor), mod.YComponentOf(this.textColor), mod.ZComponentOf(this.textColor)];
+                await animationManager.AnimateValues([1, 1, 1], textColor, {
+                    duration: 0.3,
+                    easingFunction: Easing.EaseOutCubic,
+                    onProgress: (values, normalizedTime) => {
+                        mod.SetUITextColor(this.textWidget,  mod.CreateVector(values[0], values[1], values[2]));
+                    }
+                });
+            };
+            pulseAndUpdateText();
 
             // Show brackets only if this team is the sole leader (no ties)
             let leadingTeams = GetLeadingTeamIDs();

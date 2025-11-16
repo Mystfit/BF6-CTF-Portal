@@ -172,7 +172,7 @@ export async function OnGameModeStarted() {
     // Initialize global managers
     worldIconManager = WorldIconManager.getInstance();
     vfxManager = VFXManager.getInstance();
-    animationManager = new AnimationManager();
+    animationManager = new AnimationManager(DEBUG_MODE, TICK_RATE, ZERO_VEC);
 
     // Initialize legacy team references (still needed for backwards compatibility)
     teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
@@ -304,10 +304,14 @@ async function SecondUpdate(): Promise<void> {
         // Fix for some vehicles not trigger events
         if(VEHICLE_BLOCK_CARRIER_DRIVING){
             JSPlayer.getAllAsArray().forEach((jsPlayer: JSPlayer) => {
-                if (IsCarryingAnyFlag(jsPlayer.player)) {      
-                    if (mod.GetPlayerVehicleSeat(jsPlayer.player) === VEHICLE_DRIVER_SEAT) {
-                        if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
-                        ForceToPassengerSeat(jsPlayer.player, mod.GetVehicleFromPlayer(jsPlayer.player));
+                if(jsPlayer.player) {  
+                    if (IsCarryingAnyFlag(jsPlayer.player)) {      
+                        if(mod.GetSoldierState(jsPlayer.player, mod.SoldierStateBool.IsInVehicle)){
+                            if (mod.GetPlayerVehicleSeat(jsPlayer.player) === VEHICLE_DRIVER_SEAT) {
+                                if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
+                                ForceToPassengerSeat(jsPlayer.player, mod.GetVehicleFromPlayer(jsPlayer.player));
+                            }
+                        }
                     }
                 }
             });
@@ -531,9 +535,11 @@ export function OnPlayerEnterVehicleSeat(
 ): void {
     // If player is carrying flag and in driver seat, force to passenger
     if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {      
-        if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
-            if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
-            ForceToPassengerSeat(eventPlayer, eventVehicle);
+        if(eventPlayer) {  
+            if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
+                if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
+                ForceToPassengerSeat(eventPlayer, eventVehicle);
+            }
         }
     }
 }
@@ -644,7 +650,11 @@ function GetTeamDroppedColor(team: mod.Team): mod.Vector {
 }
 
 function GetTeamColorLight(team: mod.Team): mod.Vector {
-    return mod.Add(GetTeamColor(team), mod.CreateVector(0.5, 0.5, 0.5));
+    return VectorClampToRange(mod.Add(GetTeamColor(team), mod.CreateVector(0.65, 0.65, 0.65)), 0, 1);
+}
+
+function GetTeamColorDark(team: mod.Team): mod.Vector {
+    return VectorClampToRange(mod.Multiply(GetTeamColor(team), 0.8), 0, 1);
 }
 
 export function GetPlayersInTeam(team: mod.Team) {

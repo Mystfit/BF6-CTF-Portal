@@ -1,6 +1,6 @@
 ﻿
 import * as modlib from 'modlib';
-const VERSION = [2, 3, 1];
+const VERSION = [2, 4, 0];
 const DEBUG_MODE = false;
 const GAMEMODE_TARGET_SCORE = 10;
 const FLAG_PICKUP_DELAY = 5;
@@ -997,6 +997,121 @@ progress: number;
 }
 class AnimationManager {
 private activeAnimations: Map<number, ActiveAnimation> = new Map();
+private debugMode: boolean;
+private tickRate: number;
+private zeroVec: mod.Vector;
+constructor(
+debugMode: boolean = false,
+tickRate: number = 0.032,
+zeroVec: mod.Vector = mod.CreateVector(0, 0, 0)
+) {
+this.debugMode = debugMode;
+this.tickRate = tickRate;
+this.zeroVec = zeroVec;
+}
+private static Vec3 = class {
+x: number;
+y: number;
+z: number;
+constructor(x: number, y: number, z: number) {
+this.x = x;
+this.y = y;
+this.z = z;
+}
+static FromVector(vector: mod.Vector): InstanceType<typeof AnimationManager.Vec3> {
+let x = mod.XComponentOf(vector);
+let y = mod.YComponentOf(vector);
+let z = mod.ZComponentOf(vector);
+if (isNaN(x) || x === undefined) x = 0;
+if (isNaN(y) || y === undefined) y = 0;
+if (isNaN(z) || z === undefined) z = 0;
+return new AnimationManager.Vec3(x, y, z);
+}
+ToVector(): mod.Vector {
+return mod.CreateVector(this.x, this.y, this.z);
+}
+Add(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+return new AnimationManager.Vec3(
+this.x + other.x,
+this.y + other.y,
+this.z + other.z
+);
+}
+Subtract(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+return new AnimationManager.Vec3(
+this.x - other.x,
+this.y - other.y,
+this.z - other.z
+);
+}
+Multiply(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+return new AnimationManager.Vec3(
+this.x * other.x,
+this.y * other.y,
+this.z * other.z
+);
+}
+MultiplyScalar(scalar: number): InstanceType<typeof AnimationManager.Vec3> {
+return new AnimationManager.Vec3(
+this.x * scalar,
+this.y * scalar,
+this.z * scalar
+);
+}
+Divide(other: InstanceType<typeof AnimationManager.Vec3>): InstanceType<typeof AnimationManager.Vec3> {
+return new AnimationManager.Vec3(
+this.x / other.x,
+this.y / other.y,
+this.z / other.z
+);
+}
+DivideScalar(scalar: number): InstanceType<typeof AnimationManager.Vec3> {
+return new AnimationManager.Vec3(
+this.x / scalar,
+this.y / scalar,
+this.z / scalar
+);
+}
+Length(): number {
+return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+}
+LengthSquared(): number {
+return (this.x * this.x) + (this.y * this.y) + (this.z * this.z);
+}
+Normalize(): InstanceType<typeof AnimationManager.Vec3> {
+const len = this.Length();
+if (len < 1e-9) {
+return new AnimationManager.Vec3(0, 0, 0);
+}
+return new AnimationManager.Vec3(
+this.x / len,
+this.y / len,
+this.z / len
+);
+}
+ToString(): string {
+return `X:${this.x}, Y:${this.y}, Z:${this.z}`;
+}
+};
+private static VectorToString(v: mod.Vector): string {
+return `X: ${mod.XComponentOf(v)}, Y: ${mod.YComponentOf(v)}, Z: ${mod.ZComponentOf(v)}`;
+}
+private static VectorLength(vec: mod.Vector): number {
+const x = mod.XComponentOf(vec);
+const y = mod.YComponentOf(vec);
+const z = mod.ZComponentOf(vec);
+return Math.sqrt(x * x + y * y + z * z);
+}
+private static VectorDirectionToRotation(direction: mod.Vector): mod.Vector {
+const normalized = mod.Normalize(direction);
+const x = mod.XComponentOf(normalized);
+const y = mod.YComponentOf(normalized);
+const z = mod.ZComponentOf(normalized);
+const yaw = Math.atan2(x, -z);
+const horizontalDist = Math.sqrt(x * x + z * z);
+const pitch = Math.atan2(y, horizontalDist);
+return mod.CreateVector(pitch, yaw, 0);
+}
 async AnimateAlongPath(
 object: mod.Object,
 points: mod.Vector[],
@@ -1019,7 +1134,7 @@ let expectedPosition = points[0];
 try {
 let totalDistance = 0;
 for (let i = 0; i < points.length - 1; i++) {
-totalDistance += VectorLength(Math2.Vec3.FromVector(points[i + 1]).Subtract(Math2.Vec3.FromVector(points[i])).ToVector());
+totalDistance += AnimationManager.VectorLength(AnimationManager.Vec3.FromVector(points[i + 1]).Subtract(AnimationManager.Vec3.FromVector(points[i])).ToVector());
 }
 let totalDuration: number;
 if (options.duration !== undefined) {
@@ -1034,12 +1149,12 @@ for (let i = 0; i < points.length - 1; i++) {
 if (animation.cancelled) break;
 const startPoint = expectedPosition;
 const endPoint = points[i + 1];
-const segmentDistance = VectorLength(Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector());
+const segmentDistance = AnimationManager.VectorLength(AnimationManager.Vec3.FromVector(endPoint).Subtract(AnimationManager.Vec3.FromVector(startPoint)).ToVector());
 const segmentDuration = (segmentDistance / totalDistance) * totalDuration;
-let rotation = ZERO_VEC;
+let rotation = this.zeroVec;
 if (options.rotateToDirection) {
-rotation = VectorDirectionToRotation(
-Math2.Vec3.FromVector(endPoint).Subtract(Math2.Vec3.FromVector(startPoint)).ToVector()
+rotation = AnimationManager.VectorDirectionToRotation(
+AnimationManager.Vec3.FromVector(endPoint).Subtract(AnimationManager.Vec3.FromVector(startPoint)).ToVector()
 );
 }
 await this.AnimateBetweenPoints(
@@ -1091,9 +1206,9 @@ options: any = {}
 const objectId = mod.GetObjId(object);
 const animation = this.activeAnimations.get(objectId);
 if (!animation || animation.cancelled) return;
-const positionDelta = Math2.Vec3.FromVector(endPos).Subtract(Math2.Vec3.FromVector(startPos)).ToVector();
-const rotationDelta = options.rotation || ZERO_VEC;
-if (DEBUG_MODE) {
+const positionDelta = AnimationManager.Vec3.FromVector(endPos).Subtract(AnimationManager.Vec3.FromVector(startPos)).ToVector();
+const rotationDelta = options.rotation || this.zeroVec;
+if (this.debugMode) {
 console.log(`=== Animation Segment Debug ===`);
 console.log(`Start pos (tracked): X:${mod.XComponentOf(startPos).toFixed(6)}, Y:${mod.YComponentOf(startPos).toFixed(6)}, Z:${mod.ZComponentOf(startPos).toFixed(6)}`);
 console.log(`End pos (target): X:${mod.XComponentOf(endPos).toFixed(6)}, Y:${mod.YComponentOf(endPos).toFixed(6)}, Z:${mod.ZComponentOf(endPos).toFixed(6)}`);
@@ -1128,7 +1243,7 @@ let animationStarted = false;
 let bufferStarvationCount = 0;
 let objectId: number = -1;
 try {
-if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
+if(this.debugMode) console.log(`[AnimateAlongGeneratedPath] Starting concurrent animation with buffer size ${minBufferSize}`);
 const initialBufferSize = minBufferSize;
 for (let i = 0; i < initialBufferSize; i++) {
 const result = await generator.next();
@@ -1137,8 +1252,8 @@ generatorComplete = true;
 break;
 }
 pointBuffer.push(result.value);
-if(DEBUG_MODE) {
-console.log(`[AnimateAlongGeneratedPath] Buffered point ${i + 1}/${initialBufferSize}: ${VectorToString(result.value.position)}`);
+if(this.debugMode) {
+console.log(`[AnimateAlongGeneratedPath] Buffered point ${i + 1}/${initialBufferSize}: ${AnimationManager.VectorToString(result.value.position)}`);
 }
 }
 if (pointBuffer.length < 2) {
@@ -1146,7 +1261,7 @@ console.error("AnimateAlongGeneratedPath: Not enough points generated for animat
 return;
 }
 currentPosition = pointBuffer[0].position;
-if(DEBUG_MODE) {
+if(this.debugMode) {
 console.log(`[AnimateAlongGeneratedPath] Initial buffer filled with ${pointBuffer.length} points, starting animation`);
 }
 animationStarted = true;
@@ -1178,18 +1293,18 @@ options.onStart();
 while (pointBuffer.length > 1 || !generatorComplete) {
 if (animation.cancelled) break;
 if (pointBuffer.length <= minBufferSize && !generatorComplete) {
-if(DEBUG_MODE) {
+if(this.debugMode) {
 console.log(`[AnimateAlongGeneratedPath] Buffer low (${pointBuffer.length} points), waiting for generator...`);
 }
 bufferStarvationCount++;
 const result = await generator.next();
 if (result.done) {
 generatorComplete = true;
-if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+if(this.debugMode) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
 } else {
 pointBuffer.push(result.value);
-if(DEBUG_MODE) {
-console.log(`[AnimateAlongGeneratedPath] Added point to buffer: ${VectorToString(result.value.position)}`);
+if(this.debugMode) {
+console.log(`[AnimateAlongGeneratedPath] Added point to buffer: ${AnimationManager.VectorToString(result.value.position)}`);
 }
 }
 continue;
@@ -1198,14 +1313,14 @@ if (!generatorComplete && pointBuffer.length < initialBufferSize * 2) {
 const result = await generator.next();
 if (result.done) {
 generatorComplete = true;
-if(DEBUG_MODE) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
+if(this.debugMode) console.log(`[AnimateAlongGeneratedPath] Generator completed`);
 } else {
 pointBuffer.push(result.value);
 }
 }
 const shouldStopConsuming = generatorComplete && pointBuffer.length <= minBufferSize + 2;
 if (shouldStopConsuming) {
-if(DEBUG_MODE) {
+if(this.debugMode) {
 console.log(`[AnimateAlongGeneratedPath] Stopping animation consumption, ${pointBuffer.length} points remaining in buffer`);
 }
 break;
@@ -1213,20 +1328,20 @@ break;
 if (pointBuffer.length > 1) {
 const startPoint = pointBuffer.shift()!;
 const endPoint = pointBuffer[0];
-const segmentDistance = VectorLength(
-Math2.Vec3.FromVector(endPoint.position)
-.Subtract(Math2.Vec3.FromVector(startPoint.position))
+const segmentDistance = AnimationManager.VectorLength(
+AnimationManager.Vec3.FromVector(endPoint.position)
+.Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
 .ToVector()
 );
 const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
-if(DEBUG_MODE) {
-console.log(`[AnimateAlongGeneratedPath] Animating segment ${segmentIndex}: ${VectorToString(startPoint.position)} -> ${VectorToString(endPoint.position)} (${segmentDistance.toFixed(2)} units, ${segmentDuration.toFixed(3)}s, buffer: ${pointBuffer.length})`);
+if(this.debugMode) {
+console.log(`[AnimateAlongGeneratedPath] Animating segment ${segmentIndex}: ${AnimationManager.VectorToString(startPoint.position)} -> ${AnimationManager.VectorToString(endPoint.position)} (${segmentDistance.toFixed(2)} units, ${segmentDuration.toFixed(3)}s, buffer: ${pointBuffer.length})`);
 }
-let rotation = ZERO_VEC;
+let rotation = this.zeroVec;
 if (options.rotateToDirection) {
-rotation = VectorDirectionToRotation(
-Math2.Vec3.FromVector(endPoint.position)
-.Subtract(Math2.Vec3.FromVector(startPoint.position))
+rotation = AnimationManager.VectorDirectionToRotation(
+AnimationManager.Vec3.FromVector(endPoint.position)
+.Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
 .ToVector()
 );
 } else if(options.rotation){
@@ -1250,24 +1365,24 @@ options.onSegmentComplete(segmentIndex);
 }
 }
 if (pointBuffer.length > 0) {
-if(DEBUG_MODE) {
+if(this.debugMode) {
 console.log(`[AnimateAlongGeneratedPath] Animating through ${pointBuffer.length} remaining buffered points`);
 }
 while (pointBuffer.length > 0) {
 const startPoint = pointBuffer.shift()!;
 if (pointBuffer.length > 0) {
 const endPoint = pointBuffer[0];
-const segmentDistance = VectorLength(
-Math2.Vec3.FromVector(endPoint.position)
-.Subtract(Math2.Vec3.FromVector(startPoint.position))
+const segmentDistance = AnimationManager.VectorLength(
+AnimationManager.Vec3.FromVector(endPoint.position)
+.Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
 .ToVector()
 );
 const segmentDuration = options.speed ? segmentDistance / options.speed : 0.1;
-let rotation = ZERO_VEC;
+let rotation = this.zeroVec;
 if (options.rotateToDirection) {
-rotation = VectorDirectionToRotation(
-Math2.Vec3.FromVector(endPoint.position)
-.Subtract(Math2.Vec3.FromVector(startPoint.position))
+rotation = AnimationManager.VectorDirectionToRotation(
+AnimationManager.Vec3.FromVector(endPoint.position)
+.Subtract(AnimationManager.Vec3.FromVector(startPoint.position))
 .ToVector()
 );
 } else if(options.rotation){
@@ -1286,21 +1401,21 @@ if (options.onProgress) {
 options.onProgress(1.0, currentPosition);
 }
 } else {
-if(DEBUG_MODE) {
-console.log(`[AnimateAlongGeneratedPath] Reached final point: ${VectorToString(startPoint.position)}`);
+if(this.debugMode) {
+console.log(`[AnimateAlongGeneratedPath] Reached final point: ${AnimationManager.VectorToString(startPoint.position)}`);
 }
-const finalDistance = VectorLength(
-Math2.Vec3.FromVector(startPoint.position)
-.Subtract(Math2.Vec3.FromVector(currentPosition))
+const finalDistance = AnimationManager.VectorLength(
+AnimationManager.Vec3.FromVector(startPoint.position)
+.Subtract(AnimationManager.Vec3.FromVector(currentPosition))
 .ToVector()
 );
 if (finalDistance > 0.1) {
 const finalDuration = options.speed ? finalDistance / options.speed : 0.1;
-let finalRotation = ZERO_VEC;
+let finalRotation = this.zeroVec;
 if (options.rotateToDirection) {
-finalRotation = VectorDirectionToRotation(
-Math2.Vec3.FromVector(startPoint.position)
-.Subtract(Math2.Vec3.FromVector(currentPosition))
+finalRotation = AnimationManager.VectorDirectionToRotation(
+AnimationManager.Vec3.FromVector(startPoint.position)
+.Subtract(AnimationManager.Vec3.FromVector(currentPosition))
 .ToVector()
 );
 } else if(options.rotation){
@@ -1318,7 +1433,7 @@ currentPosition = startPoint.position;
 }
 }
 }
-if(DEBUG_MODE) {
+if(this.debugMode) {
 console.log(`[AnimateAlongGeneratedPath] Animation complete. Segments: ${segmentIndex}, Buffer starvation events: ${bufferStarvationCount}`);
 if (bufferStarvationCount > 0) {
 console.log(`[AnimateAlongGeneratedPath] WARNING: Buffer was starved ${bufferStarvationCount} times. Consider increasing minBufferSize or reducing animation speed.`);
@@ -1422,7 +1537,7 @@ console.error("AnimateValues: startValues and endValues must have the same lengt
 return;
 }
 const easingFn = options.easingFunction || Easing.Linear;
-const tickRate = options.tickRate || TICK_RATE;
+const tickRate = options.tickRate || this.tickRate;
 try {
 if (options.onStart) {
 options.onStart();
@@ -1663,7 +1778,7 @@ mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_aut
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
 worldIconManager = WorldIconManager.getInstance();
 vfxManager = VFXManager.getInstance();
-animationManager = new AnimationManager();
+animationManager = new AnimationManager(DEBUG_MODE, TICK_RATE, ZERO_VEC);
 teamNeutral = mod.GetTeam(TeamID.TEAM_NEUTRAL);
 team1 = mod.GetTeam(TeamID.TEAM_1);
 team2 = mod.GetTeam(TeamID.TEAM_2);
@@ -1746,10 +1861,14 @@ flag.SlowUpdate(timeDelta);
 }
 if(VEHICLE_BLOCK_CARRIER_DRIVING){
 JSPlayer.getAllAsArray().forEach((jsPlayer: JSPlayer) => {
+if(jsPlayer.player) {
 if (IsCarryingAnyFlag(jsPlayer.player)) {
+if(mod.GetSoldierState(jsPlayer.player, mod.SoldierStateBool.IsInVehicle)){
 if (mod.GetPlayerVehicleSeat(jsPlayer.player) === VEHICLE_DRIVER_SEAT) {
 if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
 ForceToPassengerSeat(jsPlayer.player, mod.GetVehicleFromPlayer(jsPlayer.player));
+}
+}
 }
 }
 });
@@ -1895,9 +2014,11 @@ eventVehicle: mod.Vehicle,
 eventSeat: mod.Object
 ): void {
 if (IsCarryingAnyFlag(eventPlayer) && VEHICLE_BLOCK_CARRIER_DRIVING) {
+if(eventPlayer) {
 if (mod.GetPlayerVehicleSeat(eventPlayer) === VEHICLE_DRIVER_SEAT) {
 if (DEBUG_MODE) console.log("Flag carrier in driver seat, forcing to passenger");
 ForceToPassengerSeat(eventPlayer, eventVehicle);
+}
 }
 }
 }
@@ -1971,7 +2092,10 @@ function GetTeamDroppedColor(team: mod.Team): mod.Vector {
 return GetTeamColorById(mod.GetObjId(team) );
 }
 function GetTeamColorLight(team: mod.Team): mod.Vector {
-return mod.Add(GetTeamColor(team), mod.CreateVector(0.5, 0.5, 0.5));
+return VectorClampToRange(mod.Add(GetTeamColor(team), mod.CreateVector(0.65, 0.65, 0.65)), 0, 1);
+}
+function GetTeamColorDark(team: mod.Team): mod.Vector {
+return VectorClampToRange(mod.Multiply(GetTeamColor(team), 0.8), 0, 1);
 }
 export function GetPlayersInTeam(team: mod.Team) {
 const allPlayers = mod.AllPlayers();
@@ -2133,7 +2257,7 @@ mod.PlayVO(capturingTeamVO, mod.VoiceOverEvents2D.ObjectiveCaptured, vo_flag ?? 
 }
 }
 GetCarriedFlags(scoringPlayer).forEach((flag:Flag) => {
-flag.events.emit("flagCaptured", {flag});
+flag.events.emit("flagCaptured", {flag: flag, player: scoringPlayer});
 flag.ResetFlag();
 });
 if (currentScore >= GAMEMODE_TARGET_SCORE) {
@@ -2178,7 +2302,7 @@ previousCarrier: mod.Player | null;
 };
 'flagReturned': {
 flag: Flag;
-wasAutoReturned: boolean;
+player: mod.Player | undefined
 };
 'flagAtHome': {
 flag: Flag;
@@ -2191,6 +2315,7 @@ isDropped: boolean;
 };
 'flagCaptured': {
 flag: Flag;
+player: mod.Player;
 };
 }
 class Flag {
@@ -2673,13 +2798,13 @@ this.canBePickedUp = true;
 this.lastCarrier = null;
 }
 }
-ReturnFlag(): void {
+ReturnFlag(player?:mod.Player): void {
 if(DEBUG_MODE)
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
 this.PlayFlagReturnedSFX();
 this.events.emit('flagReturned', {
 flag: this,
-wasAutoReturned: false
+player: player
 });
 this.ResetFlag();
 }
@@ -2719,7 +2844,7 @@ console.log(`Flag auto return. Number of times returned ${this.numFlagTimesPicke
 this.PlayFlagReturnedSFX();
 this.events.emit('flagReturned', {
 flag: this,
-wasAutoReturned: true
+player: undefined
 });
 this.ResetFlag();
 }
@@ -2940,7 +3065,7 @@ if(flag.isDropped){
 if(DEBUG_MODE)
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned, GetTeamName(flag.team)));
 flag.PlayFlagReturnedSFX();
-flag.ReturnFlag();
+flag.ReturnFlag(player);
 } else if(flag.isAtHome) {
 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.flag_friendly_at_home), player);
 }
@@ -3495,6 +3620,7 @@ refresh(): void;
 close(): void;
 isOpen(): boolean;
 }
+import { ParseUI } from "modlib";
 interface TickerWidgetParams {
 position: number[];
 size: number[];
@@ -3522,6 +3648,7 @@ protected bgAlpha: number;
 protected columnWidget!: mod.UIWidget;
 protected columnWidgetOutline!: mod.UIWidget;
 protected textWidget!: mod.UIWidget;
+protected pulseGradientWidget!: mod.UIWidget;
 protected progressBarContainer: mod.UIWidget | undefined;
 protected progressValue: number;
 protected progressDirection: 'left' | 'right';
@@ -3573,6 +3700,16 @@ this.createTextWidget();
 if (this.showProgressBar) {
 this.createProgressBar();
 }
+this.pulseGradientWidget = ParseUI({
+type: "Container",
+parent: this.columnWidget,
+position: [0, 0],
+size: [0, this.size[1]],
+anchor: mod.UIAnchor.TopLeft,
+bgFill: mod.UIBgFill.GradientRight,
+bgColor: this.textColor,
+bgAlpha: 0.6
+})!;
 this.createBrackets();
 }
 protected createTextWidget(): void {
@@ -3712,6 +3849,46 @@ await mod.Wait(TICK_RATE);
 StopThrob(): void {
 this.isPulsing = false;
 }
+async pulse(reverse?: boolean): Promise<void> {
+if(this.isPulsing)
+return;
+this.isPulsing = true;
+let startSizeVec = mod.GetUIWidgetSize(this.columnWidget);
+let startSize: number[] = this.size;
+let startPosition: number[] = [0,0];
+if (reverse) {
+mod.SetUIWidgetBgFill(this.pulseGradientWidget, mod.UIBgFill.GradientLeft);
+mod.SetUIWidgetAnchor(this.pulseGradientWidget, mod.UIAnchor.TopRight);
+} else {
+mod.SetUIWidgetBgFill(this.pulseGradientWidget, mod.UIBgFill.GradientRight);
+mod.SetUIWidgetAnchor(this.pulseGradientWidget, mod.UIAnchor.TopLeft);
+}
+mod.SetUIWidgetSize(this.pulseGradientWidget, mod.CreateVector(5, startSize[1], 0));
+mod.SetUIWidgetPosition(this.pulseGradientWidget, mod.CreateVector(startPosition[0], startPosition[1], 0));
+await animationManager.AnimateValue(0, startSize[0], {
+duration: 0.25,
+easingFunction: Easing.EaseInSine,
+onProgress: (value, normalizedTime) => {
+mod.SetUIWidgetPosition(this.pulseGradientWidget, ZERO_VEC);
+mod.SetUIWidgetSize(this.pulseGradientWidget, mod.CreateVector(value, startSize[1], 0));
+},
+}).then(async ()=>{
+await animationManager.AnimateValue(0, startSize[0],
+{
+duration: 0.25,
+easingFunction: Easing.EaseOutSine,
+onProgress: (value, normalizedTime) => {
+if (reverse) {
+mod.SetUIWidgetPosition(this.pulseGradientWidget, mod.CreateVector(value - 4, 0, 0));
+} else {
+mod.SetUIWidgetPosition(this.pulseGradientWidget, mod.CreateVector(value - 4, 0, 0));
+}
+mod.SetUIWidgetSize(this.pulseGradientWidget, mod.CreateVector(startSize[0] - value, startSize[1], 0));
+},
+});
+this.isPulsing = false;
+});
+}
 public destroy(): void {
 if (this.leftBracketTop) mod.DeleteUIWidget(this.leftBracketTop);
 if (this.leftBracketSide) mod.DeleteUIWidget(this.leftBracketSide);
@@ -3734,20 +3911,18 @@ parent: mod.UIWidget;
 textSize?: number;
 bracketTopBottomLength?: number;
 bracketThickness?: number;
+reversePulse?: boolean
 }
 class ScoreTicker extends TickerWidget {
 readonly team: mod.Team;
 readonly teamId: number;
 private currentScore: number = -1;
 private isLeading: boolean = false;
+private reversePulse: boolean = false;
 constructor(params: ScoreTickerParams) {
 const teamId = mod.GetObjId(params.team);
-const teamColor = GetTeamColorById(teamId);
-const textColor = VectorClampToRange(
-GetTeamColorLight(params.team),
-0,
-1
-);
+const teamColor = GetTeamColorDark(params.team);
+const textColor = GetTeamColorLight(params.team);
 super({
 position: params.position,
 size: params.size,
@@ -3761,13 +3936,27 @@ bgAlpha: 0.75
 });
 this.team = params.team;
 this.teamId = teamId;
+this.reversePulse = params.reversePulse ?? false;
 this.refresh();
 }
 public updateScore(): void {
 const score = teamScores.get(this.teamId) ?? 0;
 if (this.currentScore !== score) {
 this.currentScore = score;
+let pulseAndUpdateText = async () => {
+this.pulse(this.reversePulse);
+await mod.Wait(0.1625);
 this.updateText(mod.Message(score));
+let textColor: number[] = [mod.XComponentOf(this.textColor), mod.YComponentOf(this.textColor), mod.ZComponentOf(this.textColor)];
+await animationManager.AnimateValues([1, 1, 1], textColor, {
+duration: 0.3,
+easingFunction: Easing.EaseOutCubic,
+onProgress: (values, normalizedTime) => {
+mod.SetUITextColor(this.textWidget, mod.CreateVector(values[0], values[1], values[2]));
+}
+});
+};
+pulseAndUpdateText();
 let leadingTeams = GetLeadingTeamIDs();
 console.log(`Leading teams: ${leadingTeams.join(", ")}`);
 if(leadingTeams.length === 1 && leadingTeams.includes(this.teamId)){
@@ -3958,7 +4147,7 @@ const flagPairs = [
 ];
 for (const { flag, icon } of flagPairs) {
 if (!flag) continue;
-const unsubTaken = flag.events.on('flagTaken', () => {
+const unsubTaken = flag.events.on('flagTaken', (data) => {
 if (icon.isPulsing) {
 icon.StopThrob();
 }
@@ -3998,11 +4187,7 @@ class FlagBarTicker extends TickerWidget {
 refresh(): void {
 }
 }
-const textColor = VectorClampToRange(
-GetTeamColorLight(team),
-0,
-1
-);
+const textColor = GetTeamColorLight(team);
 const midColor = VectorClampToRange(
 Math2.Vec3.FromVector(teamColor).Add(new Math2.Vec3(0.15, 0.15, 0.15)).ToVector(),
 0,
@@ -4023,11 +4208,7 @@ progressDirection: isLeftSide ? 'right' : 'left'
 }
 private createFlagIcon(team: mod.Team, teamId: number): FlagIcon {
 const teamColor = GetTeamColorById(teamId);
-const textColor = VectorClampToRange(
-GetTeamColorLight(team),
-0,
-1
-);
+const textColor = GetTeamColorLight(team);
 return new FlagIcon({
 name: `FlagBar_FlagIcon_Team${teamId}`,
 position: mod.CreateVector(0, 0, 0),
@@ -4428,7 +4609,7 @@ private isAnimating: boolean = false;
 private isTextVisible: boolean = false;
 private collapseTimeoutTime: number | null = null;
 private readonly normalHeight: number = 30;
-private readonly minimizedHeight: number = 4;
+private readonly minimizedHeight: number = 0;
 private readonly expandDuration: number = 0.4;
 private readonly collapseDuration: number = 0.3;
 private readonly visibleDuration: number = 5.0;
@@ -4453,7 +4634,7 @@ bgAlpha: 0.75
 this.team = team;
 this.teamId = mod.GetObjId(team);
 this.lastOrder = TeamOrders.TeamIdentify;
-this.updateText(this.TeamOrderToMessage(this.lastOrder));
+this.updateText(this.TeamOrderToMessage(this.lastOrder, this.team));
 this.updateWidgetSizes(this.minimizedHeight);
 const textWidget = (this as any).textWidget as mod.UIWidget;
 if (textWidget) {
@@ -4475,6 +4656,10 @@ if (this.isAnimating) return;
 this.collapseTimeoutTime = null;
 this.isAnimating = true;
 const startHeight = this.currentHeight;
+let startColorVec = mod.GetUIWidgetBgColor(this.columnWidget);
+let startColor:number[] = [mod.XComponentOf(startColorVec), mod.YComponentOf(startColorVec), mod.ZComponentOf(startColorVec)];
+let endColorVec = VectorClampToRange(mod.Add(startColorVec, mod.CreateVector(0.75, 0.75, 0.75)), 0, 1);
+let endColor:number[] = [mod.XComponentOf(endColorVec), mod.YComponentOf(endColorVec), mod.ZComponentOf(endColorVec)];
 await animationManager.AnimateValue(startHeight, this.normalHeight, {
 duration: this.expandDuration,
 easingFunction: Easing.EaseOutCubic,
@@ -4485,12 +4670,11 @@ const textWidget = (this as any).textWidget as mod.UIWidget;
 mod.SetUIWidgetVisible(textWidget, true);
 this.isTextVisible = true;
 }
-},
-onComplete: () => {
+}
+}).then(async () => {
 this.isExpanded = true;
 this.isAnimating = false;
 this.startCollapseTimer();
-}
 });
 }
 private async collapseBar(): Promise<void> {
@@ -4538,11 +4722,11 @@ this.handleFlagDropped(data.flag, data.position, data.previousCarrier);
 });
 this.eventUnsubscribers.push(unsubDropped);
 const unsubReturned = flag.events.on('flagReturned', (data) => {
-this.handleFlagReturned(data.flag, data.wasAutoReturned);
+this.handleFlagReturned(data.flag, data.player);
 });
 this.eventUnsubscribers.push(unsubReturned);
 const unsubCaptured = flag.events.on("flagCaptured", (data) => {
-this.handleFlagCaptured(data.flag);
+this.handleFlagCaptured(data.flag, data.player);
 });
 this.eventUnsubscribers.push(unsubCaptured);
 }
@@ -4550,35 +4734,46 @@ this.eventUnsubscribers.push(unsubCaptured);
 private handleFlagTaken(flag: Flag, player: mod.Player, wasAtHome: boolean): void {
 const playerTeamId = mod.GetObjId(mod.GetTeam(player));
 if (flag.teamId === this.teamId) {
-this.SetTeamOrder(TeamOrders.OurFlagTaken);
+this.SetTeamOrder(TeamOrders.OurFlagTaken, this.team, player);
 } else if (playerTeamId === this.teamId) {
-this.SetTeamOrder(TeamOrders.EnemyFlagTaken);
+this.SetTeamOrder(TeamOrders.EnemyFlagTaken, mod.GetTeam(player), player);
 }
 }
 private handleFlagDropped(flag: Flag, position: mod.Vector, previousCarrier: mod.Player | null): void {
+if(!previousCarrier)
+return;
 if (flag.teamId === this.teamId) {
-this.SetTeamOrder(TeamOrders.OurFlagDropped);
+this.SetTeamOrder(TeamOrders.OurFlagDropped, this.team, previousCarrier);
 } else {
 if (previousCarrier) {
-const carrierTeamId = mod.GetObjId(mod.GetTeam(previousCarrier));
+let otherTeam = mod.GetTeam(previousCarrier);
+const carrierTeamId = mod.GetObjId(otherTeam);
 if (carrierTeamId === this.teamId) {
-this.SetTeamOrder(TeamOrders.EnemyFlagDropped);
+this.SetTeamOrder(TeamOrders.EnemyFlagDropped, otherTeam, previousCarrier);
 }
 }
 }
 }
-private handleFlagReturned(flag: Flag, wasAutoReturned: boolean): void {
+private handleFlagReturned(flag: Flag, player: mod.Player | undefined): void {
+if(player){
 if (flag.teamId === this.teamId) {
-this.SetTeamOrder(TeamOrders.OurFlagReturned);
+this.SetTeamOrder(TeamOrders.OurFlagReturned, this.team, player);
 } else {
-this.SetTeamOrder(TeamOrders.EnemyFlagReturned);
+this.SetTeamOrder(TeamOrders.EnemyFlagReturned, mod.GetTeam(player), player);
 }
-}
-private handleFlagCaptured(flag: Flag): void {
+} else {
 if (flag.teamId === this.teamId) {
-this.SetTeamOrder(TeamOrders.OurFlagCaptured);
+this.SetTeamOrder(TeamOrders.OurFlagReturned, this.team, player);
 } else {
-this.SetTeamOrder(TeamOrders.EnemyFlagCaptured);
+this.SetTeamOrder(TeamOrders.EnemyFlagReturned, flag.team, player);
+}
+}
+}
+private handleFlagCaptured(flag: Flag, player: mod.Player): void {
+if (flag.teamId === this.teamId) {
+this.SetTeamOrder(TeamOrders.OurFlagCaptured, this.team, player);
+} else {
+this.SetTeamOrder(TeamOrders.EnemyFlagCaptured, mod.GetTeam(player), player);
 }
 }
 refresh(): void {
@@ -4591,35 +4786,42 @@ unsubscribe();
 this.eventUnsubscribers = [];
 super.destroy();
 }
-SetTeamOrder(teamOrder: TeamOrders): void {
+SetTeamOrder(teamOrder: TeamOrders, team:mod.Team, player?:mod.Player): void {
 this.lastOrder = teamOrder;
-this.updateText(this.TeamOrderToMessage(teamOrder));
+this.updateText(this.TeamOrderToMessage(teamOrder, team, player));
 if (!this.isExpanded && !this.isAnimating) {
 this.expandBar();
 } else if (this.isExpanded) {
 this.startCollapseTimer();
 }
 }
-TeamOrderToMessage(order:TeamOrders): mod.Message {
+TeamOrderToMessage(order:TeamOrders, team: mod.Team, player?:mod.Player): mod.Message {
+if(player){
 switch(order){
 case TeamOrders.OurFlagTaken:
-return mod.Message(mod.stringkeys.order_flag_taken, mod.stringkeys.order_friendly);
+return mod.Message(mod.stringkeys.order_flag_taken_friendly, player);
 case TeamOrders.OurFlagDropped:
-return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_friendly);
+return mod.Message(mod.stringkeys.order_flag_dropped_friendly, player);
 case TeamOrders.OurFlagReturned:
-return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_friendly);
+return mod.Message(mod.stringkeys.order_flag_returned_friendly, player);
 case TeamOrders.OurFlagCaptured:
-return mod.Message(mod.stringkeys.order_flag_captured_friendly);
+return mod.Message(mod.stringkeys.order_flag_captured_friendly, player);
 case TeamOrders.EnemyFlagTaken:
-return mod.Message(mod.stringkeys.order_flag_taken, mod.stringkeys.order_enemy);
+return mod.Message(mod.stringkeys.order_flag_taken_enemy, player, GetTeamName(team));
 case TeamOrders.EnemyFlagDropped:
-return mod.Message(mod.stringkeys.order_flag_dropped, mod.stringkeys.order_enemy);
+return mod.Message(mod.stringkeys.order_flag_dropped_enemy, player, GetTeamName(team));
 case TeamOrders.EnemyFlagReturned:
-return mod.Message(mod.stringkeys.order_flag_returned, mod.stringkeys.order_enemy);
+return mod.Message(mod.stringkeys.order_flag_returned_enemy, player, GetTeamName(team));
 case TeamOrders.EnemyFlagCaptured:
-return mod.Message(mod.stringkeys.order_flag_captured_enemy);
-case TeamOrders.TeamIdentify:
-return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
+return mod.Message(mod.stringkeys.order_flag_captured_enemy, player, GetTeamName(team));
+}
+} else {
+switch(order){
+case TeamOrders.OurFlagReturned:
+return mod.Message(mod.stringkeys.order_flag_returned_timeout_friendly);
+case TeamOrders.EnemyFlagReturned:
+return mod.Message(mod.stringkeys.order_flag_returned_timeout_enemy, GetTeamName(team));
+}
 }
 return mod.Message(mod.stringkeys.order_team_identifier, GetTeamName(this.team));
 }
@@ -4838,9 +5040,11 @@ let tickerParams: ScoreTickerParams = {
 parent: this.rootWidget,
 position: [((teamId - 1) * this.teamScoreSpacing) - this.teamScoreSpacing * 0.5, this.teamScorePaddingTop],
 size: this.teamWidgetSize,
-team: team
+team: team,
+reversePulse: (teamId - 1) % 2 == 0
 };
 this.teamScoreTickers.set(teamId, new ScoreTicker(tickerParams));
+this.teamScoreTickers.get(teamId)?.pulse();
 }
 const barWidth = this.teamScoreSpacing - this.teamWidgetSize[0] - this.flagBarWidthPadding;
 const barPosX = 0;

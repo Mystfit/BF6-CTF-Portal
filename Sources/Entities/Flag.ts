@@ -23,7 +23,7 @@ interface FlagEventMap {
     /** Emitted when a flag is returned to its home position */
     'flagReturned': { 
         flag: Flag;
-        wasAutoReturned: boolean;  // True if auto-returned due to timeout
+        player: mod.Player | undefined    // Player that returned the flag. Null if auto returned
     };
     
     /** Emitted when a flag reaches its home position (same as return, but separate for clarity) */
@@ -40,6 +40,7 @@ interface FlagEventMap {
     };
     'flagCaptured': {
         flag: Flag;
+        player: mod.Player;
     };
 }
 
@@ -713,7 +714,7 @@ class Flag {
         }
     }
 
-    ReturnFlag(): void {
+    ReturnFlag(player?:mod.Player): void {
         if(DEBUG_MODE)
             mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned));
         this.PlayFlagReturnedSFX();
@@ -721,7 +722,7 @@ class Flag {
         // Emit flag returned event (before reset)
         this.events.emit('flagReturned', {
             flag: this,
-            wasAutoReturned: false  // Manual return
+            player: player
         });
         
         this.ResetFlag();
@@ -777,7 +778,7 @@ class Flag {
             // Emit flag returned event with auto-return flag
             this.events.emit('flagReturned', {
                 flag: this,
-                wasAutoReturned: true
+                player: undefined
             });
 
             
@@ -1094,7 +1095,7 @@ function HandleFlagInteraction(
             if(DEBUG_MODE)
                 mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.team_flag_returned, GetTeamName(flag.team)));
             flag.PlayFlagReturnedSFX();
-            flag.ReturnFlag();
+            flag.ReturnFlag(player);
         } else if(flag.isAtHome) {
             mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.flag_friendly_at_home), player);
         }

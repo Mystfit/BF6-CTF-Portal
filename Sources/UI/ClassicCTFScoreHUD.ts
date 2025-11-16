@@ -63,9 +63,11 @@ class ClassicCTFScoreHUD implements BaseScoreboardHUD{
                 parent: this.rootWidget,
                 position: [((teamId - 1) * this.teamScoreSpacing) - this.teamScoreSpacing * 0.5, this.teamScorePaddingTop],
                 size: this.teamWidgetSize,
-                team: team
+                team: team,
+                reversePulse: (teamId - 1) % 2 == 0
             };
             this.teamScoreTickers.set(teamId, new ScoreTicker(tickerParams));
+            this.teamScoreTickers.get(teamId)?.pulse();
         }
 
         // Center flag bar positions
