@@ -91,7 +91,7 @@ const FLAG_FOLLOW_SAMPLES = 20;
 const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
 const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
 const FLAG_FOLLOW_MODE = false;                                     // Flag follows the player.
-const FLAG_TERRAIN_FIX_PROTECTION = true;                           // FIXES TERRAIN RAYCAST BUG: Flag will not drop under the player's Y position when thrown
+const FLAG_TERRAIN_FIX_PROTECTION = false;                          // FIXES TERRAIN RAYCAST BUG: Flag will not drop under the player's Y position when thrown
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
 const SOLDIER_HEIGHT = 2;                                           // Full soldier height
 
