@@ -27,10 +27,10 @@ const FLAG_FOLLOW_DISTANCE = 3;
 const FLAG_FOLLOW_POSITION_SMOOTHING = 0.5;
 const FLAG_FOLLOW_ROTATION_SMOOTHING = 0.5;
 const FLAG_FOLLOW_SAMPLES = 20;
-const FLAG_TERRAIN_RAYCAST_SUPPORT = false;
+const FLAG_TERRAIN_RAYCAST_SUPPORT = true;
 const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;
 const FLAG_FOLLOW_MODE = false;
-const FLAG_TERRAIN_FIX_PROTECTION = true;
+const FLAG_TERRAIN_FIX_PROTECTION = false;
 const SOLDIER_HALF_HEIGHT = 0.75;
 const SOLDIER_HEIGHT = 2;
 const SPAWN_VALIDATION_DIRECTIONS = 4;
@@ -1774,8 +1774,8 @@ console.log(`InitializeUIHierarchy: UI hierarchy initialized (Global + ${teams.s
 }
 export async function OnGameModeStarted() {
 console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
-mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_author));
-mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
+mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.version_author));
+mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.version_started, VERSION[0], VERSION[1], VERSION[2]));
 worldIconManager = WorldIconManager.getInstance();
 vfxManager = VFXManager.getInstance();
 animationManager = new AnimationManager(DEBUG_MODE, TICK_RATE, ZERO_VEC);
@@ -2025,7 +2025,7 @@ ForceToPassengerSeat(eventPlayer, eventVehicle);
 export function OnGameModeEnding(): void {
 gameStarted = false;
 console.log("CTF: Game ending");
-mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_ending))
+mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.round_ending))
 }
 async function ForceToPassengerSeat(player: mod.Player, vehicle: mod.Vehicle): Promise<void> {
 const seatCount = mod.GetVehicleSeatCount(vehicle);
@@ -3721,7 +3721,7 @@ size: [this.size[0], 25],
 anchor: mod.UIAnchor.Center,
 textAnchor: mod.UIAnchor.Center,
 textSize: this.textSize,
-textLabel: "",
+textLabel: mod.stringkeys.empty_string,
 textColor: this.textColor,
 bgAlpha: 0,
 })!;

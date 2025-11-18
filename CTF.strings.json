@@ -35,9 +35,9 @@
     "flag_friendly_at_home": "Your flag is safe at the base",
     "carrier_weapons_restricted": "Carrier weapons restricted",
     "carrier_weapons_restored": "Carrier weapons restored",
-    "ctf_version_started": "Capture the Flag v{}.{}.{}",
-    "ctf_version_author": "By Mystfit",
-    "ctf_initialized": "CTF: Game initialized and started",
+    "version_started": "Capture the Flag v{}.{}.{}",
+    "version_author": "By Mystfit",
+    "initialized": "CTF: Game initialized and started",
     "player_already_holding_flag": "You can't hold more than one flag at once!",
     "player_missing": "Player doesn't exist",
     "player_joined": "Player joined: {}",
@@ -51,7 +51,7 @@
     "player_died": "Player {} died",
     "carrier_enter_vehicle": "DEBUG: Flag carrier entered vehicle",
     "carrier_driver_seat": "DEBUG: Flag carrier in driver seat, forcing to passenger",
-    "ctf_ending": "CTF: Game ending",
+    "round_ending": "CTF: Game ending",
     "team_scored": "Team {} scored! Score: {} - {}",
     "forced_to_seat": "You can't drive whilst carrying a flag",
     "no_passenger_seats": "No passenger seats available",
@@ -98,6 +98,7 @@
     "order_flag_captured_friendly": "{} captured our flag",
     "order_flag_captured_enemy": "{} captured the {} flag",
     "order_friendly": "Friendly",
-    "order_enemy": "Enemy"
+    "order_enemy": "Enemy",
+    "empty_string": ""
 }
 

@@ -166,8 +166,8 @@ function InitializeUIHierarchy(): void {
 
 export async function OnGameModeStarted() {
     console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_author));
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.version_author));
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.version_started, VERSION[0], VERSION[1], VERSION[2]));
 
     // Initialize global managers
     worldIconManager = WorldIconManager.getInstance();
@@ -547,7 +547,7 @@ export function OnPlayerEnterVehicleSeat(
 export function OnGameModeEnding(): void {
     gameStarted = false;
     console.log("CTF: Game ending");
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_ending))
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.round_ending))
 }
 
 

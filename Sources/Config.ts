@@ -43,7 +43,7 @@
 // This file contains all configuration constants that need to be loaded before other modules
 //==============================================================================================
 
-const VERSION = [2, 4, 0];
+const VERSION = [2, 4, 1];
 
 const DEBUG_MODE = false;                                            // Print extra debug messages
 
@@ -88,7 +88,7 @@ const FLAG_FOLLOW_DISTANCE = 3;                                     // Distance 
 const FLAG_FOLLOW_POSITION_SMOOTHING = 0.5;                         // Exponential smoothing factor for position (0-1, lower = smoother)
 const FLAG_FOLLOW_ROTATION_SMOOTHING = 0.5;                         // Exponential smoothing factor for rotation (0-1, lower = smoother)
 const FLAG_FOLLOW_SAMPLES = 20;
-const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
+const FLAG_TERRAIN_RAYCAST_SUPPORT = true;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
 const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
 const FLAG_FOLLOW_MODE = false;                                     // Flag follows the player.
 const FLAG_TERRAIN_FIX_PROTECTION = false;                          // FIXES TERRAIN RAYCAST BUG: Flag will not drop under the player's Y position when thrown

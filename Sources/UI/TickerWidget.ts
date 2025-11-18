@@ -136,7 +136,7 @@ abstract class TickerWidget {
             anchor: mod.UIAnchor.Center,
             textAnchor: mod.UIAnchor.Center,
             textSize: this.textSize,
-            textLabel: "",
+            textLabel: mod.stringkeys.empty_string,
             textColor: this.textColor,
             bgAlpha: 0,
         })!;

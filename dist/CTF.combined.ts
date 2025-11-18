@@ -92,10 +92,10 @@ const FLAG_FOLLOW_DISTANCE = 3;                                     // Distance 
 const FLAG_FOLLOW_POSITION_SMOOTHING = 0.5;                         // Exponential smoothing factor for position (0-1, lower = smoother)
 const FLAG_FOLLOW_ROTATION_SMOOTHING = 0.5;                         // Exponential smoothing factor for rotation (0-1, lower = smoother)
 const FLAG_FOLLOW_SAMPLES = 20;
-const FLAG_TERRAIN_RAYCAST_SUPPORT = false;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
+const FLAG_TERRAIN_RAYCAST_SUPPORT = true;                         // TODO: Temp hack until terrain raycasts fixed. Do we support raycasts against terrain?
 const FLAG_PROP = mod.RuntimeSpawn_Common.MCOM;                     // Prop representing a flag at a spawner and when dropped
 const FLAG_FOLLOW_MODE = false;                                     // Flag follows the player.
-const FLAG_TERRAIN_FIX_PROTECTION = true;                           // FIXES TERRAIN RAYCAST BUG: Flag will not drop under the player's Y position when thrown
+const FLAG_TERRAIN_FIX_PROTECTION = false;                          // FIXES TERRAIN RAYCAST BUG: Flag will not drop under the player's Y position when thrown
 const SOLDIER_HALF_HEIGHT = 0.75;                                   // Midpoint of a soldier used for raycasts
 const SOLDIER_HEIGHT = 2;                                           // Full soldier height
 
@@ -3007,8 +3007,8 @@ function InitializeUIHierarchy(): void {
 
 export async function OnGameModeStarted() {
     console.log(`CTF Game Mode v${VERSION[0]}.${VERSION[1]}.${VERSION[2]} Started`);
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_author));
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_version_started, VERSION[0], VERSION[1], VERSION[2]));
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.version_author));
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.version_started, VERSION[0], VERSION[1], VERSION[2]));
 
     // Initialize global managers
     worldIconManager = WorldIconManager.getInstance();
@@ -3388,7 +3388,7 @@ export function OnPlayerEnterVehicleSeat(
 export function OnGameModeEnding(): void {
     gameStarted = false;
     console.log("CTF: Game ending");
-    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.ctf_ending))
+    mod.DisplayHighlightedWorldLogMessage(mod.Message(mod.stringkeys.round_ending))
 }
 
 
@@ -5880,7 +5880,7 @@ abstract class TickerWidget {
             anchor: mod.UIAnchor.Center,
             textAnchor: mod.UIAnchor.Center,
             textSize: this.textSize,
-            textLabel: "",
+            textLabel: mod.stringkeys.empty_string,
             textColor: this.textColor,
             bgAlpha: 0,
         })!;
